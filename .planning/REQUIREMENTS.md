@@ -84,11 +84,11 @@
 | ORCHS-01 | Phase 3 | Pending |
 | ORCHS-02 | Phase 3 | Pending |
 | ORCHS-03 | Phase 3 | Pending |
-| SCHED-01 | Phase 4 | Pending |
-| DASH-01 | Phase 5 | Pending |
-| DASH-02 | Phase 5 | Pending |
-| DASH-03 | Phase 5 | Pending |
-| DASH-04 | Phase 5 | Pending |
+| SCHED-01 | Phase 5 | Pending |
+| DASH-01 | Phase 4 | Pending |
+| DASH-02 | Phase 4 | Pending |
+| DASH-03 | Phase 4 | Pending |
+| DASH-04 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 16 total
@@ -97,4 +97,4 @@
 
 ---
 *Requirements defined: 2026-02-24*
-*Last updated: 2026-02-24 after initial definition*
+*Last updated: 2026-02-24 after roadmap creation*
