@@ -44,7 +44,11 @@ Plans:
   2. All 20 KPIs (Revenue Growth YoY, CAGR, Gross Profit Margin, Operating Margin, Net Profit Margin, EBITDA Margin, ROE, ROA, Current Ratio, Quick Ratio, Cash Ratio, Working Capital, Debt-to-Equity, Debt-to-EBITDA, Interest Coverage, Debt-to-Assets, Asset Turnover, Inventory Turnover, DSO, Cash Conversion Cycle) are present as columns in `kpis.parquet`
   3. Companies with genuinely missing data have NaN rather than wrong values; no division-by-zero exceptions occur; outliers are preserved as-is
   4. Running the processor twice on the same raw data produces identical output (idempotent)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — XBRL normalizer: CONCEPT_MAP (22 fields) + extract_concept() + normalize_xbrl()
+- [ ] 02-02-PLAN.md — Cleaning + 20 KPI engine + atomic Parquet writer + process() entry point + end-to-end verification
 
 ### Phase 3: Orchestration & Batch
 **Goal**: The FinancialAgent coordinates the full ETL pipeline per ticker with staleness detection, and can batch-process all 20 base companies in one command
