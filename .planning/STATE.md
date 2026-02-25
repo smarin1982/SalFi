@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 
 ## Current Position
 
-Phase: 2 of 5 (Transformation & KPIs) — In Progress
-Plan: 1 of N in current phase — COMPLETE
-Status: Phase 2 in progress — Plan 02-01 complete (XBRL normalization layer)
-Last activity: 2026-02-25 — Plan 02-01 complete: processor.py CONCEPT_MAP (22 fields), extract_concept(), normalize_xbrl() verified on AAPL + BRK.B
+Phase: 2 of 5 (Transformation & KPIs) — COMPLETE
+Plan: 2 of 2 in current phase — COMPLETE
+Status: Phase 2 complete — processor.py fully built; AAPL + BRK.B Parquet files written
+Last activity: 2026-02-25 — Plan 02-02 complete: safe_divide, clean_financials, calculate_kpis (20 KPIs), save_parquet, process() verified on AAPL (20 FY) + BRK.B (19 FY)
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -28,13 +28,14 @@ Progress: [███░░░░░░░] 25%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Data Extraction | 2/2 | 7 min | 4 min |
-| 2. Transformation & KPIs | 1/N | 5 min | 5 min |
+| 2. Transformation & KPIs | 2/2 | 10 min | 5 min |
 
 **Recent Trend:**
 - Last 5 plans: 2 min, 5 min, 5 min
 - Trend: stable
 
 *Updated after each plan completion*
+| Phase 02 P02 | 5 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -56,6 +57,8 @@ Recent decisions affecting current work:
 - [01-02]: Direct httpx.get() for companyfacts endpoint — guarantees verbatim JSON storage vs. edgartools ORM
 - [Phase 02-01]: shares_outstanding added as 22nd CONCEPT_MAP field — plan inconsistency (21 fields listed, 22 asserted); needed for EPS KPI
 - [Phase 02-01]: fiscal_year derived from end-date year not fy field — fy is filing year, comparative entries all share fy of filing year
+- [Phase 02]: safe_divide uses denominator.replace(0, np.nan) — never produces inf
+- [Phase 02]: save_parquet unlinks before rename on Windows (NTFS atomic rename requirement)
 
 ### Pending Todos
 
@@ -69,5 +72,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 02-01-PLAN.md — processor.py XBRL normalization layer: CONCEPT_MAP (22 fields), extract_concept(), normalize_xbrl() verified on AAPL (20 FY) and BRK.B (19 FY)
+Stopped at: Completed 02-02-PLAN.md — processor.py complete: safe_divide, clean_financials, calculate_kpis (20 KPIs), save_parquet, process(); AAPL (20 FY) and BRK.B (19 FY) Parquet files written and verified idempotent
 Resume file: None
