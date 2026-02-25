@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 
 ## Current Position
 
-Phase: 1 of 5 (Data Extraction) — COMPLETE
-Plan: 2 of 2 in current phase — COMPLETE
-Status: Phase 1 complete, ready for Phase 2
-Last activity: 2026-02-25 — Plan 01-02 complete: scraper.py implemented, AAPL + BRK.B facts downloaded
+Phase: 2 of 5 (Transformation & KPIs) — In Progress
+Plan: 1 of N in current phase — COMPLETE
+Status: Phase 2 in progress — Plan 02-01 complete (XBRL normalization layer)
+Last activity: 2026-02-25 — Plan 02-01 complete: processor.py CONCEPT_MAP (22 fields), extract_concept(), normalize_xbrl() verified on AAPL + BRK.B
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -28,10 +28,11 @@ Progress: [██░░░░░░░░] 20%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Data Extraction | 2/2 | 7 min | 4 min |
+| 2. Transformation & KPIs | 1/N | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 5 min
-- Trend: -
+- Last 5 plans: 2 min, 5 min, 5 min
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -53,6 +54,8 @@ Recent decisions affecting current work:
 - [01-02]: set_rate_limit() removed in edgartools 5.x — use os.environ["EDGAR_RATE_LIMIT_PER_SEC"] = "8" before set_identity()
 - [01-02]: BRK.B resolved via "BRK-B" key in SEC tickers.json — SEC uses dash, not dot; resolve_cik() fallback handles transparently
 - [01-02]: Direct httpx.get() for companyfacts endpoint — guarantees verbatim JSON storage vs. edgartools ORM
+- [Phase 02-01]: shares_outstanding added as 22nd CONCEPT_MAP field — plan inconsistency (21 fields listed, 22 asserted); needed for EPS KPI
+- [Phase 02-01]: fiscal_year derived from end-date year not fy field — fy is filing year, comparative entries all share fy of filing year
 
 ### Pending Todos
 
@@ -66,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 01-02-PLAN.md — scraper.py implemented, AAPL (17 FY) + BRK.B (16 FY) facts downloaded, all XTRCT requirements verified
+Stopped at: Completed 02-01-PLAN.md — processor.py XBRL normalization layer: CONCEPT_MAP (22 fields), extract_concept(), normalize_xbrl() verified on AAPL (20 FY) and BRK.B (19 FY)
 Resume file: None

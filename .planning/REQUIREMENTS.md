@@ -14,7 +14,7 @@
 
 ### Transformation (XFORM)
 
-- [ ] **XFORM-01**: El sistema normaliza conceptos XBRL usando un CONCEPT_MAP con listas de prioridad (7+ nombres de concepto por campo) para garantizar cobertura de todas las empresas del Top 20
+- [x] **XFORM-01**: El sistema normaliza conceptos XBRL usando un CONCEPT_MAP con listas de prioridad (7+ nombres de concepto por campo) para garantizar cobertura de todas las empresas del Top 20
 - [ ] **XFORM-02**: El sistema trata valores faltantes usando media/mediana móvil, preserva outliers como datos reales y mantiene valores nominales sin ajuste por inflación
 - [ ] **XFORM-03**: El sistema calcula automáticamente los 20 KPIs financieros para cada empresa/año: Revenue Growth (YoY), CAGR (10Y), Gross Profit Margin, Operating Margin, Net Profit Margin, EBITDA Margin, ROE, ROA, Current Ratio, Quick Ratio, Cash Ratio, Working Capital, Debt-to-Equity, Debt-to-EBITDA, Interest Coverage, Debt-to-Assets, Asset Turnover, Inventory Turnover, DSO, Cash Conversion Cycle
 - [ ] **XFORM-04**: El sistema almacena datos limpios y KPIs calculados en formato Parquet en `/data/clean/{TICKER}/` (financials.parquet + kpis.parquet)
@@ -77,7 +77,7 @@
 | XTRCT-02 | Phase 1 | Complete (01-01) |
 | XTRCT-03 | Phase 1 | Complete |
 | XTRCT-04 | Phase 1 | Complete |
-| XFORM-01 | Phase 2 | Pending |
+| XFORM-01 | Phase 2 | Complete |
 | XFORM-02 | Phase 2 | Pending |
 | XFORM-03 | Phase 2 | Pending |
 | XFORM-04 | Phase 2 | Pending |
