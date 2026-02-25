@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Bootstrap project dependencies (.env, requirements.txt, data/ directories)
+- [x] 01-01-PLAN.md — Bootstrap project dependencies (.env, requirements.txt, data/ directories)
 - [ ] 01-02-PLAN.md — Implement scraper.py with ticker→CIK resolution, rate limiting, and raw facts.json persistence
 
 ### Phase 2: Transformation & KPIs
@@ -85,7 +85,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Extraction | 0/2 | Not started | - |
+| 1. Data Extraction | 1/2 | In progress | - |
 | 2. Transformation & KPIs | 0/TBD | Not started | - |
 | 3. Orchestration & Batch | 0/TBD | Not started | - |
 | 4. Dashboard | 0/TBD | Not started | - |

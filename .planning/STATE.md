@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 1 of 5 (Data Extraction)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-24 — Roadmap created, ready for Phase 1 planning
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-25 — Plan 01-01 complete: bootstrap dependencies, .env, data/ scaffold
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 2 min
+- Total execution time: 0.03 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1. Data Extraction | 1/2 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: -
+- Last 5 plans: 2 min
 - Trend: -
 
 *Updated after each plan completion*
@@ -47,6 +47,9 @@ Recent decisions affecting current work:
 - [Setup]: Streamlit + Plotly for dashboard — local, interactive, fast to build
 - [Setup]: Values nominal (no inflation adjustment) — direct comparability with SEC official reports
 - [Setup]: Outliers preserved as real data — no artificial smoothing
+- [01-01]: edgartools imported as `edgar` in Python code (pip name differs from import name)
+- [01-01]: EDGAR_IDENTITY format is "Name email@domain" per SEC User-Agent policy
+- [01-01]: data/clean/ added now to avoid deviation in Plan 02 (Phase 2 Parquet output path)
 
 ### Pending Todos
 
@@ -59,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-24
-Stopped at: Roadmap created — all 5 phases defined, 16/16 v1 requirements mapped
+Last session: 2026-02-25
+Stopped at: Completed 01-01-PLAN.md — bootstrap complete, ready for 01-02 (scraper.py)
 Resume file: None
