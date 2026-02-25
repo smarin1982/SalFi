@@ -257,3 +257,178 @@ def normalize_xbrl(facts: dict, ticker: str) -> pd.DataFrame:
     col_order = ["ticker", "fiscal_year"] + list(CONCEPT_MAP.keys())
     df = df[[c for c in col_order if c in df.columns]]
     return df.sort_values("fiscal_year").reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# XFORM-02: Missing value treatment
+# ---------------------------------------------------------------------------
+
+def safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+    """
+    Divide two Series safely. Returns NaN where denominator is 0 or NaN.
+    Never produces inf or raises ZeroDivisionError.
+    Uses denominator.replace(0, np.nan) to convert zeros to NaN before division.
+    """
+    return numerator / denominator.replace(0, np.nan)
+
+
+def clean_financials(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Apply rolling median fill for isolated NaN gaps (1-2 consecutive years).
+    Preserves outliers as-is (no capping or clipping — XFORM-02: outliers = real data).
+    No inflation adjustment (XFORM-02: nominal values only).
+    Structural NaN (entire field missing, e.g. BRK.B current_assets) remains NaN.
+
+    Rolling fill rule: window=3, centered, min_periods=1.
+    Only fills NaN positions; does not modify existing values.
+    """
+    df = df.sort_values("fiscal_year").copy()
+    numeric_cols = [c for c in df.columns if c not in ("ticker", "fiscal_year")]
+
+    for col in numeric_cols:
+        s = df[col].astype(float)
+        nan_mask = s.isna()
+        # Only fill if there is at least one non-NaN value to interpolate from
+        if nan_mask.any() and not nan_mask.all():
+            rolling_fill = s.rolling(window=3, min_periods=1, center=True).median()
+            s = s.where(~nan_mask, other=rolling_fill)
+            df[col] = s
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# XFORM-03: 20 KPI calculations
+# ---------------------------------------------------------------------------
+
+def calculate_kpis(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate all 20 KPIs from normalized financials DataFrame.
+    Returns new DataFrame with ticker, fiscal_year, and 20 KPI columns.
+
+    Rules:
+    - Missing inputs propagate as NaN (do not substitute 0 for missing balance sheet items)
+    - No division-by-zero: all ratio KPIs use safe_divide()
+    - Average-based KPIs use .shift(1) for prior-year values; NaN for earliest year is correct
+    - Outliers preserved as-is (XFORM-02)
+    - df must be sorted by fiscal_year ascending before calling (clean_financials ensures this)
+    """
+    d = df.set_index("fiscal_year").copy()
+    kpis = pd.DataFrame(index=d.index)
+    kpis.index.name = "fiscal_year"
+
+    # Helper: get column as Series, returning all-NaN Series if column missing
+    def col(name: str) -> pd.Series:
+        if name in d.columns:
+            return d[name].astype(float)
+        return pd.Series(np.nan, index=d.index, dtype=float)
+
+    rev    = col("revenue")
+    ni     = col("net_income")
+    ebit   = col("operating_income")
+    da     = col("depreciation_amortization")
+    gp     = col("gross_profit")
+    eq     = col("total_equity")
+    assets = col("total_assets")
+    ca     = col("current_assets")
+    cl     = col("current_liabilities")
+    cash   = col("cash")
+    sti    = col("short_term_investments")
+    recv   = col("receivables")
+    inv    = col("inventory")
+    ltd    = col("long_term_debt")
+    std    = col("short_term_debt")
+    liab   = col("total_liabilities")
+    ie     = col("interest_expense")
+    ap     = col("accounts_payable")
+    cogs   = col("cogs")
+
+    # EBITDA: EBIT + D&A. If D&A is NaN, EBITDA is NaN (do NOT use fillna(0) — understates EBITDA)
+    ebitda = ebit + da
+
+    # Total debt: STD + LTD. If BOTH are NaN, total_debt = NaN. If only one is NaN, treat as 0.
+    total_debt = ltd.fillna(0) + std.fillna(0)
+    total_debt = total_debt.where(ltd.notna() | std.notna(), other=np.nan)
+
+    # --- KPI 1: Revenue Growth YoY ---
+    kpis["revenue_growth_yoy"] = rev.pct_change()
+
+    # --- KPI 2: Revenue CAGR 10Y ---
+    def cagr_10y(s: pd.Series) -> pd.Series:
+        result = pd.Series(np.nan, index=s.index, dtype=float)
+        for yr in s.index:
+            yr_minus_10 = yr - 10
+            if (yr_minus_10 in s.index
+                    and pd.notna(s[yr])
+                    and pd.notna(s[yr_minus_10])
+                    and s[yr_minus_10] != 0):
+                result[yr] = (s[yr] / s[yr_minus_10]) ** (1 / 10) - 1
+        return result
+    kpis["revenue_cagr_10y"] = cagr_10y(rev)
+
+    # --- KPI 3: Gross Profit Margin ---
+    kpis["gross_profit_margin"] = safe_divide(gp, rev)
+
+    # --- KPI 4: Operating Margin (EBIT / Revenue) ---
+    kpis["operating_margin"] = safe_divide(ebit, rev)
+
+    # --- KPI 5: Net Profit Margin ---
+    kpis["net_profit_margin"] = safe_divide(ni, rev)
+
+    # --- KPI 6: EBITDA Margin ---
+    kpis["ebitda_margin"] = safe_divide(ebitda, rev)
+
+    # --- KPI 7: ROE (Net Income / Total Equity) ---
+    kpis["roe"] = safe_divide(ni, eq)
+
+    # --- KPI 8: ROA (Net Income / Total Assets) ---
+    kpis["roa"] = safe_divide(ni, assets)
+
+    # --- KPI 9: Current Ratio ---
+    kpis["current_ratio"] = safe_divide(ca, cl)
+
+    # --- KPI 10: Quick Ratio ((Cash + STI + Receivables) / CL) ---
+    quick_assets = cash + sti.fillna(0) + recv.fillna(0)
+    kpis["quick_ratio"] = safe_divide(quick_assets, cl)
+
+    # --- KPI 11: Cash Ratio ---
+    kpis["cash_ratio"] = safe_divide(cash, cl)
+
+    # --- KPI 12: Working Capital ---
+    kpis["working_capital"] = ca - cl
+
+    # --- KPI 13: Debt-to-Equity ---
+    kpis["debt_to_equity"] = safe_divide(liab, eq)
+
+    # --- KPI 14: Debt-to-EBITDA ((STD + LTD) / EBITDA) ---
+    kpis["debt_to_ebitda"] = safe_divide(total_debt, ebitda)
+
+    # --- KPI 15: Interest Coverage (EBIT / Interest Expense) ---
+    kpis["interest_coverage"] = safe_divide(ebit, ie)
+
+    # --- KPI 16: Debt-to-Assets ---
+    kpis["debt_to_assets"] = safe_divide(total_debt, assets)
+
+    # --- KPI 17: Asset Turnover (Revenue / Avg Total Assets) ---
+    avg_assets = (assets + assets.shift(1)) / 2
+    kpis["asset_turnover"] = safe_divide(rev, avg_assets)
+
+    # --- KPI 18: Inventory Turnover (COGS / Avg Inventory) ---
+    avg_inv = (inv + inv.shift(1)) / 2
+    kpis["inventory_turnover"] = safe_divide(cogs, avg_inv)
+
+    # --- KPI 19: DSO (Avg Receivables / Revenue * 365) ---
+    avg_recv = (recv + recv.shift(1)) / 2
+    kpis["dso"] = safe_divide(avg_recv, rev) * 365
+
+    # --- KPI 20: Cash Conversion Cycle (DIO + DSO - DPO) ---
+    avg_inv2 = (inv + inv.shift(1)) / 2
+    avg_ap   = (ap + ap.shift(1)) / 2
+    dio = safe_divide(avg_inv2, cogs) * 365
+    dso = safe_divide(avg_recv, rev) * 365
+    dpo = safe_divide(avg_ap, cogs) * 365
+    kpis["cash_conversion_cycle"] = dio + dso - dpo
+
+    kpis = kpis.reset_index()
+    kpis.insert(0, "ticker", df["ticker"].iloc[0])
+    return kpis
