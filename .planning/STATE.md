@@ -5,32 +5,32 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Un analista debe poder comparar la salud financiera de cualquier empresa del S&P 500 en segundos — sin hacer scraping manual ni esperar cargas — con 10 años de historia y 20 KPIs calculados automáticamente.
-**Current focus:** Phase 1 — Data Extraction
+**Current focus:** Phase 2 — Data Transformation
 
 ## Current Position
 
-Phase: 1 of 5 (Data Extraction)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-25 — Plan 01-01 complete: bootstrap dependencies, .env, data/ scaffold
+Phase: 1 of 5 (Data Extraction) — COMPLETE
+Plan: 2 of 2 in current phase — COMPLETE
+Status: Phase 1 complete, ready for Phase 2
+Last activity: 2026-02-25 — Plan 01-02 complete: scraper.py implemented, AAPL + BRK.B facts downloaded
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 2 min
-- Total execution time: 0.03 hours
+- Total plans completed: 2
+- Average duration: 4 min
+- Total execution time: 0.12 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Data Extraction | 1/2 | 2 min | 2 min |
+| 1. Data Extraction | 2/2 | 7 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min
+- Last 5 plans: 2 min, 5 min
 - Trend: -
 
 *Updated after each plan completion*
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - [01-01]: edgartools imported as `edgar` in Python code (pip name differs from import name)
 - [01-01]: EDGAR_IDENTITY format is "Name email@domain" per SEC User-Agent policy
 - [01-01]: data/clean/ added now to avoid deviation in Plan 02 (Phase 2 Parquet output path)
+- [01-02]: set_rate_limit() removed in edgartools 5.x — use os.environ["EDGAR_RATE_LIMIT_PER_SEC"] = "8" before set_identity()
+- [01-02]: BRK.B resolved via "BRK-B" key in SEC tickers.json — SEC uses dash, not dot; resolve_cik() fallback handles transparently
+- [01-02]: Direct httpx.get() for companyfacts endpoint — guarantees verbatim JSON storage vs. edgartools ORM
 
 ### Pending Todos
 
@@ -63,5 +66,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 01-01-PLAN.md — bootstrap complete, ready for 01-02 (scraper.py)
+Stopped at: Completed 01-02-PLAN.md — scraper.py implemented, AAPL (17 FY) + BRK.B (16 FY) facts downloaded, all XTRCT requirements verified
 Resume file: None

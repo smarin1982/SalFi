@@ -9,8 +9,8 @@
 
 - [x] **XTRCT-01**: El sistema descarga el JSON oficial de la SEC con mapeo Ticker→CIK al iniciar, permitiendo resolución inmediata de cualquier ticker
 - [x] **XTRCT-02**: El sistema implementa un rate-limiter de máximo 10 peticiones/segundo con header User-Agent correcto conforme a políticas de la SEC
-- [ ] **XTRCT-03**: El sistema extrae formularios 10-K de los últimos 10 años por CIK usando edgartools, accediendo a los endpoints XBRL de la SEC
-- [ ] **XTRCT-04**: El sistema almacena los datos crudos (facts.json) en `/data/raw/{TICKER}/` como checkpoint antes de cualquier transformación
+- [x] **XTRCT-03**: El sistema extrae formularios 10-K de los últimos 10 años por CIK usando edgartools, accediendo a los endpoints XBRL de la SEC
+- [x] **XTRCT-04**: El sistema almacena los datos crudos (facts.json) en `/data/raw/{TICKER}/` como checkpoint antes de cualquier transformación
 
 ### Transformation (XFORM)
 
@@ -75,8 +75,8 @@
 |-------------|-------|--------|
 | XTRCT-01 | Phase 1 | Complete (01-01) |
 | XTRCT-02 | Phase 1 | Complete (01-01) |
-| XTRCT-03 | Phase 1 | Pending |
-| XTRCT-04 | Phase 1 | Pending |
+| XTRCT-03 | Phase 1 | Complete |
+| XTRCT-04 | Phase 1 | Complete |
 | XFORM-01 | Phase 2 | Pending |
 | XFORM-02 | Phase 2 | Pending |
 | XFORM-03 | Phase 2 | Pending |
