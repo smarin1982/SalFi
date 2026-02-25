@@ -432,3 +432,127 @@ def calculate_kpis(df: pd.DataFrame) -> pd.DataFrame:
     kpis = kpis.reset_index()
     kpis.insert(0, "ticker", df["ticker"].iloc[0])
     return kpis
+
+
+# ---------------------------------------------------------------------------
+# XFORM-04: Atomic Parquet write
+# ---------------------------------------------------------------------------
+
+def save_parquet(df: pd.DataFrame, output_path: Path) -> None:
+    """
+    Write DataFrame to Parquet atomically.
+    Writes to {output_path}.tmp first, renames to final path on success.
+    If process crashes after write but before rename, .tmp is left (safe — rename is atomic on NTFS).
+    Always uses engine='pyarrow' for byte-identical idempotency.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = output_path.with_suffix(".parquet.tmp")
+    df.to_parquet(tmp_path, index=False, engine="pyarrow")
+    # On Windows, rename to existing file requires explicit unlink first
+    if output_path.exists():
+        output_path.unlink()
+    tmp_path.rename(output_path)
+    logger.debug(f"Parquet written: {output_path} ({output_path.stat().st_size // 1024} KB)")
+
+
+# ---------------------------------------------------------------------------
+# Top-level entry point — XFORM-01 through XFORM-04 orchestrated
+# ---------------------------------------------------------------------------
+
+def process(ticker: str, data_dir: "Path | str" = "data") -> dict:
+    """
+    Main entry point for Phase 2. Idempotent: safe to run multiple times.
+
+    Reads:   data/raw/{TICKER}/facts.json  (produced by Phase 1 scraper.py)
+    Writes:  data/clean/{TICKER}/financials.parquet
+             data/clean/{TICKER}/kpis.parquet
+
+    Returns status dict:
+      {ticker, fiscal_years, fields_extracted, fields_missing, kpi_columns}
+
+    Raises FileNotFoundError if facts.json does not exist.
+    Raises ValueError if facts.json contains no us-gaap data.
+    """
+    data_dir = Path(data_dir)
+    ticker = ticker.upper()
+    raw_path = data_dir / "raw" / ticker / "facts.json"
+
+    if not raw_path.exists():
+        raise FileNotFoundError(
+            f"facts.json not found for {ticker}: {raw_path}\n"
+            f"Run scraper.py first: python scraper.py {ticker}"
+        )
+
+    logger.info(f"Processing {ticker} from {raw_path}")
+    facts = json.loads(raw_path.read_text(encoding="utf-8"))
+
+    df_norm  = normalize_xbrl(facts, ticker)
+    df_clean = clean_financials(df_norm)
+    df_kpis  = calculate_kpis(df_clean)
+
+    clean_dir = data_dir / "clean" / ticker
+    save_parquet(df_clean, clean_dir / "financials.parquet")
+    save_parquet(df_kpis,  clean_dir / "kpis.parquet")
+
+    numeric_cols = [c for c in df_clean.columns if c not in ("ticker", "fiscal_year")]
+    fields_extracted = [c for c in numeric_cols if df_clean[c].notna().any()]
+    fields_missing   = [c for c in numeric_cols if df_clean[c].isna().all()]
+
+    result = {
+        "ticker": ticker,
+        "fiscal_years": sorted(df_clean["fiscal_year"].tolist()),
+        "fields_extracted": fields_extracted,
+        "fields_missing": fields_missing,
+        "kpi_columns": [c for c in df_kpis.columns if c not in ("ticker", "fiscal_year")],
+    }
+
+    logger.info(
+        f"{ticker}: {len(result['fiscal_years'])} fiscal years "
+        f"({result['fiscal_years'][0]}–{result['fiscal_years'][-1]}), "
+        f"{len(fields_extracted)} fields extracted, "
+        f"{len(fields_missing)} fields missing (NaN)"
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# CLI: python processor.py TICKER [TICKER2 ...]
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import sys
+    import logging
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    if len(sys.argv) < 2:
+        print("Usage: python processor.py TICKER [TICKER2 ...]")
+        print("Examples:")
+        print("  python processor.py AAPL")
+        print("  python processor.py AAPL BRK.B MSFT")
+        sys.exit(1)
+
+    tickers = [t.upper() for t in sys.argv[1:]]
+    data_dir = Path(__file__).parent / "data"
+    errors = []
+
+    for tick in tickers:
+        try:
+            result = process(tick, data_dir)
+            print(f"[OK] {tick}: {len(result['fiscal_years'])} FY "
+                  f"({result['fiscal_years'][0]}–{result['fiscal_years'][-1]}), "
+                  f"{len(result['fields_extracted'])} fields, "
+                  f"{len(result['kpi_columns'])} KPIs")
+            if result["fields_missing"]:
+                print(f"     Missing (NaN): {', '.join(result['fields_missing'])}")
+        except (FileNotFoundError, ValueError) as e:
+            print(f"[ERROR] {tick}: {e}")
+            errors.append(tick)
+
+    if errors:
+        print(f"\nFailed tickers: {errors}")
+        sys.exit(1)
