@@ -59,7 +59,12 @@ Plans:
   2. Calling `FinancialAgent(ticker).run()` on a ticker whose data is current for this quarter skips all SEC network requests and completes immediately
   3. Running the batch initializer produces clean Parquet files for all 20 base companies (AAPL, MSFT, NVDA, AMZN, META, GOOGL, GOOG, BRK.B, TSLA, LLY, AVGO, JPM, V, UNH, XOM, MA, JNJ, WMT, PG, HD)
   4. Adding a new KPI to `KPI_REGISTRY` does not require changes to the scraper, agent, or dashboard code
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — KPI_REGISTRY refactor in processor.py (TDD: registry iteration + per-KPI error isolation)
+- [ ] 03-02-PLAN.md — FinancialAgent class with run() + needs_update() staleness detection + metadata.parquet
+- [ ] 03-03-PLAN.md — run_batch() function + CLI entry point + full 20-ticker batch verification
 
 ### Phase 4: Dashboard
 **Goal**: The Streamlit dashboard lets an analyst visually compare any combination of S&P 500 companies across all 20 KPIs over up to 10 years, and add new companies on demand
