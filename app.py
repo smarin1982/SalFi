@@ -217,8 +217,257 @@ def format_delta(delta_pct: float | None) -> str | None:
     return f"{delta_pct * 100:+.1f}%"
 
 
-# ── Placeholder for rendering and layout (filled in Plan 04-02) ──────────────
-# The app renders its UI in Plan 04-02. This file is valid to import as-is.
+# ── Session state initialization ─────────────────────────────────────────────
+if "loaded_tickers" not in st.session_state:
+    st.session_state.loaded_tickers = ["HD", "PG"]
 
-if __name__ == "__main__":
-    st.info("Run with: streamlit run app.py")
+# ── Page header ───────────────────────────────────────────────────────────────
+st.title("S&P 500 KPI Dashboard")
+st.caption("Datos oficiales 10-K · SEC EDGAR · Años fiscales 2007–2025")
+
+# Company selector — horizontal radio at top (Bloomberg-style tabs feel)
+company_mode = st.radio(
+    label="Compañía",
+    options=["HD", "PG", "Comparativo"],
+    horizontal=True,
+    index=0,
+    label_visibility="collapsed",
+)
+st.divider()
+
+# ── Sidebar ──────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## Filtros")
+
+    # Year range slider (DASH-02)
+    year_range: tuple[int, int] = st.slider(
+        "Rango de años",
+        min_value=2007,
+        max_value=2025,
+        value=(2015, 2025),
+        step=1,
+        help="Restringe todos los gráficos al rango seleccionado",
+    )
+
+    st.markdown("---")
+    st.markdown("## KPIs (máx. 5)")
+
+    # KPI selection: one expander per category, per-group multiselect
+    # Global 5-KPI enforcement: recalculate `remaining` after each group
+    selected_kpis: list[str] = []
+    for group_name, group_keys in KPI_GROUPS.items():
+        remaining = MAX_KPIS - len(selected_kpis)
+        expanded = group_name == "Rentabilidad"  # Default open
+        with st.expander(group_name, expanded=expanded):
+            group_selected = st.multiselect(
+                label=group_name,
+                options=group_keys,
+                default=[],
+                format_func=lambda k: KPI_META[k]["label"],
+                label_visibility="collapsed",
+                max_selections=min(remaining, len(group_keys)),
+                key=f"kpi_{group_name}",
+            )
+            selected_kpis.extend(group_selected)
+
+    if len(selected_kpis) == 0:
+        st.caption("Selecciona al menos un KPI para ver los datos.")
+
+    st.markdown("---")
+    st.markdown("## Agregar compañía")
+
+    # Dynamic ticker input (DASH-03)
+    new_ticker_input = st.text_input(
+        "Ticker S&P 500",
+        placeholder="Ej: AAPL",
+        key="new_ticker_input",
+    ).upper().strip()
+    if st.button("Cargar", key="load_ticker_btn") and new_ticker_input:
+        if new_ticker_input in st.session_state.loaded_tickers:
+            st.info(f"{new_ticker_input} ya está cargado.")
+        else:
+            with st.spinner(f"Ejecutando ETL para {new_ticker_input}…"):
+                try:
+                    import agent as financial_agent
+                    fa = financial_agent.FinancialAgent(new_ticker_input)
+                    fa.run()
+                    st.session_state.loaded_tickers.append(new_ticker_input)
+                    st.cache_data.clear()  # Invalidate so new parquet is read
+                    st.success(f"✓ {new_ticker_input} cargado correctamente.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Error al cargar {new_ticker_input}: {exc}")
+
+
+# ── Chart builders ────────────────────────────────────────────────────────────
+
+def build_trend_figure(
+    df: pd.DataFrame,
+    kpi: str,
+    year_range: tuple[int, int],
+    ticker: str,
+) -> go.Figure:
+    """Single-company Plotly trend chart. Bloomberg-minimal chrome."""
+    meta = KPI_META[kpi]
+    filtered = df[
+        (df["fiscal_year"] >= year_range[0]) & (df["fiscal_year"] <= year_range[1])
+    ].copy()
+    color = COMPANY_COLORS.get(ticker, "#4a4a4a")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=filtered["fiscal_year"],
+        y=filtered[kpi],
+        mode="lines+markers",
+        line=dict(color=color, width=2.5),
+        marker=dict(size=5),
+        hovertemplate=f"%{{x}}: %{{y:{meta['tick_format']}}}<extra></extra>",
+    ))
+    fig.update_layout(
+        template="plotly_white",
+        margin=dict(l=0, r=0, t=10, b=0),
+        showlegend=False,
+        hovermode="x unified",
+        height=200,
+    )
+    fig.update_xaxes(showgrid=False, tickformat="d", dtick=2)
+    fig.update_yaxes(showgrid=True, gridcolor="#f0f0f0", zeroline=False, tickformat=meta["tick_format"])
+    return fig
+
+
+def build_comparativo_figure(
+    df_hd: pd.DataFrame,
+    df_pg: pd.DataFrame,
+    kpi: str,
+    year_range: tuple[int, int],
+) -> go.Figure:
+    """Two-company overlay — HD and PG as separate traces on same figure (DASH-01 Comparativo mode)."""
+    meta = KPI_META[kpi]
+    fig = go.Figure()
+    for ticker, df in [("HD", df_hd), ("PG", df_pg)]:
+        d = df[
+            (df["fiscal_year"] >= year_range[0]) & (df["fiscal_year"] <= year_range[1])
+        ]
+        fig.add_trace(go.Scatter(
+            x=d["fiscal_year"],
+            y=d[kpi],
+            name=ticker,
+            mode="lines+markers",
+            line=dict(color=COMPANY_COLORS[ticker], width=2.5),
+            marker=dict(size=5),
+            hovertemplate=f"{ticker} %{{x}}: %{{y:{meta['tick_format']}}}<extra></extra>",
+        ))
+    fig.update_layout(
+        template="plotly_white",
+        title=dict(text=meta["label"], font=dict(size=14, color="#333")),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        hovermode="x unified",
+        margin=dict(l=0, r=0, t=50, b=0),
+        height=260,
+    )
+    fig.update_xaxes(showgrid=False, tickformat="d", dtick=2)
+    fig.update_yaxes(showgrid=True, gridcolor="#f0f0f0", zeroline=False, tickformat=meta["tick_format"])
+    return fig
+
+
+def render_kpi_card(
+    kpi: str,
+    df: pd.DataFrame,
+    year_range: tuple[int, int],
+    ticker: str,
+) -> None:
+    """
+    Executive Card = headline label + big number (latest) + delta pill (YoY %) + Plotly trend chart.
+    Uses st.metric for headline/number/delta, then st.plotly_chart for trend.
+    """
+    meta = KPI_META[kpi]
+    col_data = df[kpi].dropna() if kpi in df.columns else pd.Series(dtype=float)
+
+    # Filter to year_range for display
+    df_filtered = df[
+        (df["fiscal_year"] >= year_range[0]) & (df["fiscal_year"] <= year_range[1])
+    ]
+    col_filtered = df_filtered[kpi].dropna() if kpi in df_filtered.columns else pd.Series(dtype=float)
+
+    latest_val = col_filtered.iloc[-1] if not col_filtered.empty else None
+    prior_val = col_filtered.iloc[-2] if len(col_filtered) >= 2 else None
+
+    if latest_val is not None and prior_val is not None and prior_val != 0:
+        delta_pct = (latest_val - prior_val) / abs(prior_val)
+    else:
+        delta_pct = None
+
+    # Big Number and Delta Pill via st.metric
+    st.metric(
+        label=f"**{meta['label']}**",
+        value=format_kpi(latest_val, meta["format"]),
+        delta=format_delta(delta_pct),
+        delta_color="normal",  # green=positive, red=negative
+        border=True,
+    )
+
+    # Historical Trend via Plotly (NOT st.metric sparkline — use Plotly for Bloomberg aesthetic)
+    if not col_data.empty:
+        fig = build_trend_figure(df, kpi, year_range, ticker)
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    else:
+        st.caption("Sin datos disponibles.")
+
+
+# ── Main canvas ───────────────────────────────────────────────────────────────
+if not selected_kpis:
+    st.info("Selecciona KPIs en la barra lateral para comenzar el análisis.")
+else:
+    n = len(selected_kpis)
+
+    if company_mode == "Comparativo":
+        # Comparativo mode: overlay HD + PG on same figure per KPI
+        df_hd = load_kpis("HD")
+        df_pg = load_kpis("PG")
+        if df_hd.empty or df_pg.empty:
+            st.error("No se encontraron datos de HD o PG. Ejecuta el ETL primero.")
+        else:
+            # Same dynamic grid as single-company mode
+            if n == 5:
+                # 2+3 layout: two separate row calls
+                row1 = st.columns(2, gap="medium")
+                for i in range(2):
+                    with row1[i]:
+                        fig = build_comparativo_figure(df_hd, df_pg, selected_kpis[i], year_range)
+                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                row2 = st.columns(3, gap="medium")
+                for i in range(3):
+                    with row2[i]:
+                        fig = build_comparativo_figure(df_hd, df_pg, selected_kpis[2 + i], year_range)
+                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+            else:
+                cols = st.columns(n if n <= 4 else 4, gap="medium")
+                for i, kpi in enumerate(selected_kpis):
+                    with cols[i % len(cols)]:
+                        fig = build_comparativo_figure(df_hd, df_pg, kpi, year_range)
+                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    else:
+        # Single-company mode: HD or PG
+        ticker = company_mode  # "HD" or "PG"
+        df = load_kpis(ticker)
+        if df.empty:
+            st.error(f"No se encontraron datos para {ticker}. Ejecuta el ETL primero.")
+        else:
+            if n == 1:
+                render_kpi_card(selected_kpis[0], df, year_range, ticker)
+            elif n == 5:
+                # 2+3 layout: two row calls
+                row1 = st.columns(2, gap="medium")
+                for i in range(2):
+                    with row1[i]:
+                        render_kpi_card(selected_kpis[i], df, year_range, ticker)
+                row2 = st.columns(3, gap="medium")
+                for i in range(3):
+                    with row2[i]:
+                        render_kpi_card(selected_kpis[2 + i], df, year_range, ticker)
+            else:
+                # 2, 3, or 4 KPIs: n equal columns
+                cols = st.columns(n, gap="medium")
+                for i, kpi in enumerate(selected_kpis):
+                    with cols[i]:
+                        render_kpi_card(kpi, df, year_range, ticker)
