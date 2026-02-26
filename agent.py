@@ -202,3 +202,98 @@ class FinancialAgent:
         logger.info(f"[{self.ticker}] Done (success): {len(result['fiscal_years'])} FY, "
                     f"{len(result['kpi_columns'])} KPIs")
         return {"status": "success", "ticker": self.ticker, **result}
+
+
+# ---------------------------------------------------------------------------
+# Batch runner — ORCHS-03
+# ---------------------------------------------------------------------------
+
+def run_batch(
+    tickers: list[str] = None,
+    force_refresh: bool = False,
+    data_dir: Path = DATA_DIR,
+) -> dict:
+    """
+    Run ETL for all tickers sequentially. Returns summary dict.
+    Sequential (not parallel) to respect 8 req/s SEC rate limit in scraper.py.
+    Per-ticker errors are caught and recorded; batch continues on failure.
+    metadata.parquet is updated per-ticker immediately after success (enables resumability).
+
+    GOOG and GOOGL share the same CIK (Alphabet Inc.) — both produce identical Parquet files.
+    This is correct financial data: both are valid dashboard tickers. Accept the duplication.
+
+    Args:
+        tickers:       List of ticker strings. Defaults to BASE_TICKERS (20 companies).
+        force_refresh: If True, re-downloads facts.json even if current-quarter.
+        data_dir:      Root data directory. Defaults to DATA_DIR.
+
+    Returns:
+        {"success": [...], "skipped": [...], "failed": [...]}
+    """
+    if tickers is None:
+        tickers = BASE_TICKERS
+
+    results: dict[str, list] = {"success": [], "skipped": [], "failed": []}
+    total = len(tickers)
+
+    for i, ticker in enumerate(tqdm(tickers, desc="Batch ETL"), start=1):
+        logger.info(f"[{i}/{total}] Processing {ticker}...")
+        agent = FinancialAgent(ticker, data_dir)
+        try:
+            result = agent.run(force_refresh=force_refresh)
+            if result["status"] == "skipped_scrape":
+                results["skipped"].append(ticker)
+                logger.info(f"[{i}/{total}] {ticker}: skipped (current-quarter)")
+            else:
+                results["success"].append(ticker)
+                logger.info(f"[{i}/{total}] {ticker}: success "
+                             f"({len(result['fiscal_years'])} FY)")
+        except Exception as e:
+            logger.error(f"[{i}/{total}] {ticker}: FAILED — {e}")
+            _update_metadata_error(ticker, str(e), data_dir)
+            results["failed"].append(ticker)
+
+    # Final summary
+    logger.info(
+        f"Batch complete — "
+        f"success: {len(results['success'])}, "
+        f"skipped: {len(results['skipped'])}, "
+        f"failed: {len(results['failed'])}"
+    )
+    if results["failed"]:
+        logger.warning(f"Failed tickers: {results['failed']}")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# Usage:
+#   python agent.py                          # run all 20 base tickers
+#   python agent.py --force                  # force re-download all
+#   python agent.py AAPL MSFT               # run specific tickers
+#   python agent.py AAPL MSFT --force       # force specific tickers
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import sys
+
+    args = sys.argv[1:]
+    force = "--force" in args
+    ticker_args = [a for a in args if not a.startswith("--")]
+
+    tickers_to_run = [t.upper() for t in ticker_args] if ticker_args else BASE_TICKERS
+
+    logger.info(f"Starting batch ETL for {len(tickers_to_run)} tickers "
+                f"(force_refresh={force})")
+    summary = run_batch(tickers=tickers_to_run, force_refresh=force)
+
+    success_n = len(summary["success"])
+    skipped_n = len(summary["skipped"])
+    failed_n  = len(summary["failed"])
+
+    print(f"\nBatch complete: {success_n} success, {skipped_n} skipped, {failed_n} failed")
+    if summary["failed"]:
+        print(f"Failed: {summary['failed']}")
+        sys.exit(1)
+    sys.exit(0)
