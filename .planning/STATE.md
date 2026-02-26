@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Un analista debe poder comparar la salud financiera de cualquier empresa del S&P 500 en segundos — sin hacer scraping manual ni esperar cargas — con 10 años de historia y 20 KPIs calculados automáticamente.
-**Current focus:** Phase 4 — Dashboard
+**Current focus:** Phase 5 — Scheduling
 
 ## Current Position
 
-Phase: 4 of 5 (Dashboard) — IN PROGRESS
-Plan: 2 of 4 in current phase — COMPLETE
-Status: Phase 4 Plan 2 complete — full Streamlit dashboard UI: sidebar KPI picker (5 expander groups, global 5-cap), year slider, Executive Cards (st.metric + Plotly), Comparativo overlay, dynamic ticker (DASH-01/02/03)
-Last activity: 2026-02-26 — Plan 04-02 complete: render_kpi_card(), build_comparativo_figure(), dynamic grid layout (1/2/3/4/5 KPIs), width="stretch" on all Plotly charts
+Phase: 4 of 5 (Dashboard) — COMPLETE
+Plan: 3 of 4 in current phase — COMPLETE
+Status: Phase 4 complete — human-verified dashboard: Executive Cards, Comparativo dual-trace, year-range filter, 2+3 grid layout, global 5-KPI cap, sub-second cache switching (DASH-01/02/03/04 all confirmed)
+Last activity: 2026-02-26 — Plan 04-03 complete: human visual verification approved, all 6 browser tests passed
 
-Progress: [█████████░] 80%
+Progress: [██████████] 100% (Phase 4 complete)
 
 ## Performance Metrics
 
@@ -30,7 +30,7 @@ Progress: [█████████░] 80%
 | 1. Data Extraction | 2/2 | 7 min | 4 min |
 | 2. Transformation & KPIs | 2/2 | 10 min | 5 min |
 | 3. Orchestration & Batch | 3/3 | ~15 min | 5 min |
-| 4. Dashboard | 2/4 | 5 min | 2.5 min |
+| 4. Dashboard | 3/4 | 10 min | 3.3 min |
 
 **Recent Trend:**
 - Last 5 plans: 2 min, 5 min, 5 min, 3 min, 2 min
@@ -42,6 +42,7 @@ Progress: [█████████░] 80%
 | Phase 03 P02 | 5 | 2 tasks | 2 files |
 | Phase 04 P01 | 3 | 2 tasks | 2 files |
 | Phase 04 P02 | 2 | 2 tasks | 1 files |
+| Phase 04 P03 | 5 | 2 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,7 @@ Recent decisions affecting current work:
 - [Phase 04-02]: remaining = MAX_KPIS - len(selected_kpis) recalculated per expander group — global 5-KPI cap across all groups
 - [Phase 04-02]: st.cache_data.clear() after FinancialAgent.run() — new parquet immediately readable without TTL wait
 - [Phase 04-02]: agent module imported lazily inside button handler — no ETL initialization on page load
+- [Phase 04-03]: Human approval required before Phase 4 marked complete — dashboard is CFO-facing and must be visually verified in a real browser
 
 ### Pending Todos
 
@@ -93,5 +95,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 04-02-PLAN.md (full dashboard UI)
+Stopped at: Completed 04-03-PLAN.md (human verification — Phase 4 complete)
 Resume file: None
