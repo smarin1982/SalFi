@@ -62,8 +62,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — KPI_REGISTRY refactor in processor.py (TDD: registry iteration + per-KPI error isolation)
-- [ ] 03-02-PLAN.md — FinancialAgent class with run() + needs_update() staleness detection + metadata.parquet
+- [x] 03-01-PLAN.md — KPI_REGISTRY refactor in processor.py (TDD: registry iteration + per-KPI error isolation)
+- [x] 03-02-PLAN.md — FinancialAgent class with run() + needs_update() staleness detection + metadata.parquet
 - [ ] 03-03-PLAN.md — run_batch() function + CLI entry point + full 20-ticker batch verification
 
 ### Phase 4: Dashboard
@@ -96,6 +96,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Data Extraction | 2/2 | Complete    | 2026-02-25 |
 | 2. Transformation & KPIs | 2/2 | Complete    | 2026-02-25 |
-| 3. Orchestration & Batch | 1/3 | In Progress|  |
+| 3. Orchestration & Batch | 2/3 | In Progress|  |
 | 4. Dashboard | 0/TBD | Not started | - |
 | 5. Scheduling | 0/TBD | Not started | - |

@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 3 of 5 (Orchestration & Batch) — IN PROGRESS
-Plan: 1 of 3 in current phase — COMPLETE
-Status: Phase 3 Plan 1 complete — KPI_REGISTRY refactor done; 4/4 tests green; AAPL 20 FY 20 KPIs verified
-Last activity: 2026-02-26 — Plan 03-01 complete: KPI_REGISTRY dict + _col() + _cagr_10y() + per-KPI error isolation; loguru replacing stdlib logging
+Plan: 2 of 3 in current phase — COMPLETE
+Status: Phase 3 Plan 2 complete — FinancialAgent with staleness detection; AAPL skipped_scrape verified; metadata.parquet schema confirmed
+Last activity: 2026-02-26 — Plan 03-02 complete: FinancialAgent class, _same_quarter() quarter math, metadata.parquet 7-col schema, BRK.B 19 FY no errors
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
@@ -37,6 +37,7 @@ Progress: [██████░░░░] 60%
 *Updated after each plan completion*
 | Phase 02 P02 | 5 | 2 tasks | 1 files |
 | Phase 03 P01 | 8 | 2 tasks | 3 files |
+| Phase 03 P02 | 5 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,9 @@ Recent decisions affecting current work:
 - [Phase 03-01]: KPI_REGISTRY is module-level dict — adding one entry causes new KPI in kpis.parquet with no other file changes (ORCHS-01)
 - [Phase 03-01]: loguru replaces stdlib logging in processor.py — consistent with scraper.py pattern
 - [Phase 03-01]: _col() and _cagr_10y() are module-level private functions — required for lambda scope in KPI_REGISTRY
+- [Phase 03-02]: FinancialAgent.run() calls processor.process() even on skipped_scrape — picks up KPI_REGISTRY changes without re-scraping
+- [Phase 03-02]: metadata last_downloaded preserved when scraped=False — skipped run does not reset staleness clock
+- [Phase 03-02]: GOOG and GOOGL both in BASE_TICKERS; share CIK but produce separate files — both valid dashboard tickers
 
 ### Pending Todos
 
@@ -75,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-25
-Stopped at: Completed 03-01-PLAN.md — KPI_REGISTRY refactor: 20 KPIs in registry dict, per-KPI error isolation, _col()/_cagr_10y() module-level helpers, loguru logger; all 4 tests green; AAPL 20 FY 20 KPIs verified
+Last session: 2026-02-26
+Stopped at: Completed 03-02-PLAN.md — FinancialAgent orchestration: run()/needs_update(), calendar-quarter staleness, metadata.parquet, AAPL skipped_scrape, BRK.B 19 FY
 Resume file: None
