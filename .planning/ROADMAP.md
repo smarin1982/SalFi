@@ -75,7 +75,12 @@ Plans:
   2. An analyst can adjust a year-range slider to restrict the chart to any window within the available 10-year history
   3. An analyst can type any valid S&P 500 ticker into the input field and see that company's data added to all charts within the same session, without restarting the app
   4. Switching between KPIs or adjusting filters does not re-query Parquet files on disk (Streamlit cache is active)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — App foundation: requirements.txt, app.py skeleton (page_config, @st.cache_data loaders, KPI_META registry, format_kpi)
+- [ ] 04-02-PLAN.md — Full UI: sidebar controls + main canvas with Executive Cards (Plotly trend) + Comparativo overlay + dynamic layout
+- [ ] 04-03-PLAN.md — Human verification checkpoint: automated smoke checks + browser validation of all DASH requirements
 
 ### Phase 5: Scheduling
 **Goal**: The ETL pipeline runs automatically at the start of each quarter, keeping all loaded company data current without manual intervention
@@ -97,5 +102,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Data Extraction | 2/2 | Complete    | 2026-02-25 |
 | 2. Transformation & KPIs | 2/2 | Complete    | 2026-02-25 |
 | 3. Orchestration & Batch | 2/3 | Complete    | 2026-02-26 |
-| 4. Dashboard | 0/TBD | Not started | - |
+| 4. Dashboard | 0/3 | Not started | - |
 | 5. Scheduling | 0/TBD | Not started | - |
