@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 4 of 5 (Dashboard) — IN PROGRESS
-Plan: 1 of 4 in current phase — COMPLETE
-Status: Phase 4 Plan 1 complete — app.py foundation with 20-KPI metadata registry, @st.cache_data Parquet loaders, format_kpi() dispatcher, plotly_white global template
-Last activity: 2026-02-26 — Plan 04-01 complete: streamlit 1.54.0 + plotly 6.5.2 installed; app.py skeleton with KPI_META, KPI_GROUPS, load_kpis(), format_kpi()
+Plan: 2 of 4 in current phase — COMPLETE
+Status: Phase 4 Plan 2 complete — full Streamlit dashboard UI: sidebar KPI picker (5 expander groups, global 5-cap), year slider, Executive Cards (st.metric + Plotly), Comparativo overlay, dynamic ticker (DASH-01/02/03)
+Last activity: 2026-02-26 — Plan 04-02 complete: render_kpi_card(), build_comparativo_figure(), dynamic grid layout (1/2/3/4/5 KPIs), width="stretch" on all Plotly charts
 
-Progress: [████████░░] 75%
+Progress: [█████████░] 80%
 
 ## Performance Metrics
 
@@ -30,10 +30,10 @@ Progress: [████████░░] 75%
 | 1. Data Extraction | 2/2 | 7 min | 4 min |
 | 2. Transformation & KPIs | 2/2 | 10 min | 5 min |
 | 3. Orchestration & Batch | 3/3 | ~15 min | 5 min |
-| 4. Dashboard | 1/4 | 3 min | 3 min |
+| 4. Dashboard | 2/4 | 5 min | 2.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 5 min, 5 min, 3 min
+- Last 5 plans: 2 min, 5 min, 5 min, 3 min, 2 min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -41,6 +41,7 @@ Progress: [████████░░] 75%
 | Phase 03 P01 | 8 | 2 tasks | 3 files |
 | Phase 03 P02 | 5 | 2 tasks | 2 files |
 | Phase 04 P01 | 3 | 2 tasks | 2 files |
+| Phase 04 P02 | 2 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,11 @@ Recent decisions affecting current work:
 - [Phase 04-01]: pio.templates.default set at module level — all dashboard figures inherit plotly_white without per-figure parameter
 - [Phase 04-01]: load_kpis() returns empty DataFrame on missing file — caller (Plan 04-02) handles df.empty before rendering
 - [Phase 04-01]: streamlit 1.54.0 pins pandas to 2.3.3 (downgrade from 3.0.1); no pandas 3.x APIs used in dashboard code
+- [Phase 04-02]: width='stretch' used on all st.plotly_chart calls — use_container_width deprecated in Streamlit 1.40+, removed 2025-12-31
+- [Phase 04-02]: 5-KPI layout uses two separate st.columns() calls (2 then 3) — produces stacked 2+3 rows as designed
+- [Phase 04-02]: remaining = MAX_KPIS - len(selected_kpis) recalculated per expander group — global 5-KPI cap across all groups
+- [Phase 04-02]: st.cache_data.clear() after FinancialAgent.run() — new parquet immediately readable without TTL wait
+- [Phase 04-02]: agent module imported lazily inside button handler — no ETL initialization on page load
 
 ### Pending Todos
 
@@ -87,5 +93,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 04-01-PLAN.md (app.py foundation)
+Stopped at: Completed 04-02-PLAN.md (full dashboard UI)
 Resume file: None
