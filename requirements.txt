@@ -7,11 +7,10 @@ loguru>=0.7
 tqdm>=4.66
 
 # Phase 2+ (add incrementally)
-# pandas>=2.1
-# pyarrow>=16.0
-# duckdb>=1.0
-# polars>=1.0
-# numpy>=1.26
-# streamlit>=1.35
-# plotly>=5.22
-# apscheduler>=3.10,<4.0
+pandas>=3.0.1
+pyarrow>=23.0.1
+numpy>=1.26
+
+# Phase 4: Dashboard
+streamlit>=1.54.0
+plotly>=6.5.0
