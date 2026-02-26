@@ -1,0 +1,26 @@
+Smoke Check Results — Plan 04-03
+Run date: 2026-02-26
+
+CHECK 1: Syntax
+  Command: python -c "import ast; ast.parse(open('app.py').read())"
+  Result:  PASS — no syntax errors
+
+CHECK 2: Deprecated API
+  Command: grep -c "use_container_width" app.py
+  Result:  PASS — count=0, no deprecated param found
+
+CHECK 3: KPI metadata
+  Command: from app import KPI_META, KPI_GROUPS; assert total == 20 and len(KPI_META) == 20
+  Result:  PASS — 20 KPIs in KPI_META, 20 in KPI_GROUPS (2+6+4+4+4)
+
+CHECK 4: Parquet accessibility
+  Command: read HD/kpis.parquet and PG/kpis.parquet, assert len==19 each
+  Result:  PASS — HD (19, 22), PG (19, 22)
+           HD years: 2007–2025 (19 fiscal years)
+
+CHECK 5: Dashboard launch
+  Launch:  streamlit run app.py --server.headless true
+  Status:  Command ready — user must run in terminal (not launched by agent to avoid blocking)
+
+All automated pre-checks: PASS
+Next step: human visual verification at http://localhost:8501
