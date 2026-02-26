@@ -34,7 +34,7 @@
 - [ ] **DASH-01**: El dashboard muestra gráficos de líneas comparativos (Streamlit + Plotly) que permiten seleccionar múltiples empresas simultáneamente para cualquier KPI del catálogo de 20
 - [ ] **DASH-02**: El dashboard incluye filtro temporal (slider o selector) para ajustar la ventana de análisis dentro de los 10 años disponibles
 - [ ] **DASH-03**: El dashboard incluye un campo de texto donde el usuario ingresa cualquier ticker del S&P 500, el sistema resuelve el CIK, dispara el ETL y agrega la empresa al análisis de forma inmediata
-- [ ] **DASH-04**: El dashboard implementa `@st.cache_data` en todas las consultas a Parquet para evitar re-queries en cada interacción del usuario
+- [x] **DASH-04**: El dashboard implementa `@st.cache_data` en todas las consultas a Parquet para evitar re-queries en cada interacción del usuario
 
 ## v2 Requirements
 
@@ -88,7 +88,7 @@
 | DASH-01 | Phase 4 | Pending |
 | DASH-02 | Phase 4 | Pending |
 | DASH-03 | Phase 4 | Pending |
-| DASH-04 | Phase 4 | Pending |
+| DASH-04 | Phase 4 | Complete (04-01) |
 
 **Coverage:**
 - v1 requirements: 16 total
@@ -97,4 +97,4 @@
 
 ---
 *Requirements defined: 2026-02-24*
-*Last updated: 2026-02-25 after 01-01 completion (XTRCT-01, XTRCT-02 marked complete)*
+*Last updated: 2026-02-26 after 04-01 completion (DASH-04 marked complete)*

@@ -78,7 +78,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — App foundation: requirements.txt, app.py skeleton (page_config, @st.cache_data loaders, KPI_META registry, format_kpi)
+- [x] 04-01-PLAN.md — App foundation: requirements.txt, app.py skeleton (page_config, @st.cache_data loaders, KPI_META registry, format_kpi)
 - [ ] 04-02-PLAN.md — Full UI: sidebar controls + main canvas with Executive Cards (Plotly trend) + Comparativo overlay + dynamic layout
 - [ ] 04-03-PLAN.md — Human verification checkpoint: automated smoke checks + browser validation of all DASH requirements
 
@@ -102,5 +102,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Data Extraction | 2/2 | Complete    | 2026-02-25 |
 | 2. Transformation & KPIs | 2/2 | Complete    | 2026-02-25 |
 | 3. Orchestration & Batch | 2/3 | Complete    | 2026-02-26 |
-| 4. Dashboard | 0/3 | Not started | - |
+| 4. Dashboard | 1/3 | In Progress | - |
 | 5. Scheduling | 0/TBD | Not started | - |

@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Un analista debe poder comparar la salud financiera de cualquier empresa del S&P 500 en segundos — sin hacer scraping manual ni esperar cargas — con 10 años de historia y 20 KPIs calculados automáticamente.
-**Current focus:** Phase 3 — Orchestration & Batch
+**Current focus:** Phase 4 — Dashboard
 
 ## Current Position
 
-Phase: 3 of 5 (Orchestration & Batch) — IN PROGRESS
-Plan: 2 of 3 in current phase — COMPLETE
-Status: Phase 3 Plan 2 complete — FinancialAgent with staleness detection; AAPL skipped_scrape verified; metadata.parquet schema confirmed
-Last activity: 2026-02-26 — Plan 03-02 complete: FinancialAgent class, _same_quarter() quarter math, metadata.parquet 7-col schema, BRK.B 19 FY no errors
+Phase: 4 of 5 (Dashboard) — IN PROGRESS
+Plan: 1 of 4 in current phase — COMPLETE
+Status: Phase 4 Plan 1 complete — app.py foundation with 20-KPI metadata registry, @st.cache_data Parquet loaders, format_kpi() dispatcher, plotly_white global template
+Last activity: 2026-02-26 — Plan 04-01 complete: streamlit 1.54.0 + plotly 6.5.2 installed; app.py skeleton with KPI_META, KPI_GROUPS, load_kpis(), format_kpi()
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 7
 - Average duration: 4 min
-- Total execution time: 0.12 hours
+- Total execution time: 0.14 hours
 
 **By Phase:**
 
@@ -29,15 +29,18 @@ Progress: [███████░░░] 70%
 |-------|-------|-------|----------|
 | 1. Data Extraction | 2/2 | 7 min | 4 min |
 | 2. Transformation & KPIs | 2/2 | 10 min | 5 min |
+| 3. Orchestration & Batch | 3/3 | ~15 min | 5 min |
+| 4. Dashboard | 1/4 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 5 min, 5 min
+- Last 5 plans: 2 min, 5 min, 5 min, 3 min
 - Trend: stable
 
 *Updated after each plan completion*
 | Phase 02 P02 | 5 | 2 tasks | 1 files |
 | Phase 03 P01 | 8 | 2 tasks | 3 files |
 | Phase 03 P02 | 5 | 2 tasks | 2 files |
+| Phase 04 P01 | 3 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +70,10 @@ Recent decisions affecting current work:
 - [Phase 03-02]: FinancialAgent.run() calls processor.process() even on skipped_scrape — picks up KPI_REGISTRY changes without re-scraping
 - [Phase 03-02]: metadata last_downloaded preserved when scraped=False — skipped run does not reset staleness clock
 - [Phase 03-02]: GOOG and GOOGL both in BASE_TICKERS; share CIK but produce separate files — both valid dashboard tickers
+- [Phase 04-01]: format_kpi() percentage: no cap on values >100% (HD ROE legitimately 222.9%); negative values get "-" prefix naturally
+- [Phase 04-01]: pio.templates.default set at module level — all dashboard figures inherit plotly_white without per-figure parameter
+- [Phase 04-01]: load_kpis() returns empty DataFrame on missing file — caller (Plan 04-02) handles df.empty before rendering
+- [Phase 04-01]: streamlit 1.54.0 pins pandas to 2.3.3 (downgrade from 3.0.1); no pandas 3.x APIs used in dashboard code
 
 ### Pending Todos
 
@@ -80,5 +87,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: 03-03-PLAN.md loaded, context exhausted before Task 1 began — resume from Task 1 (append run_batch() to agent.py)
+Stopped at: Completed 04-01-PLAN.md (app.py foundation)
 Resume file: None
