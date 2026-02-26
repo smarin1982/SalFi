@@ -21,7 +21,7 @@
 
 ### Orchestration (ORCHS)
 
-- [ ] **ORCHS-01**: El sistema implementa una clase `FinancialAgent` extensible que orquesta extracción + transformación para un ticker, con `KPI_REGISTRY` para agregar KPIs sin cambios estructurales
+- [x] **ORCHS-01**: El sistema implementa una clase `FinancialAgent` extensible que orquesta extracción + transformación para un ticker, con `KPI_REGISTRY` para agregar KPIs sin cambios estructurales
 - [ ] **ORCHS-02**: El sistema detecta si los datos de un ticker ya son del trimestre actual (`needs_update()`) y omite el re-scraping si están vigentes
 - [ ] **ORCHS-03**: El sistema ejecuta automáticamente el ETL para el batch de 20 empresas base del S&P 500 (AAPL, MSFT, NVDA, AMZN, META, GOOGL, GOOG, BRK.B, TSLA, LLY, AVGO, JPM, V, UNH, XOM, MA, JNJ, WMT, PG, HD) en la inicialización
 
@@ -81,7 +81,7 @@
 | XFORM-02 | Phase 2 | Complete |
 | XFORM-03 | Phase 2 | Complete |
 | XFORM-04 | Phase 2 | Complete |
-| ORCHS-01 | Phase 3 | Pending |
+| ORCHS-01 | Phase 3 | Complete |
 | ORCHS-02 | Phase 3 | Pending |
 | ORCHS-03 | Phase 3 | Pending |
 | SCHED-01 | Phase 5 | Pending |

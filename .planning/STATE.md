@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Un analista debe poder comparar la salud financiera de cualquier empresa del S&P 500 en segundos — sin hacer scraping manual ni esperar cargas — con 10 años de historia y 20 KPIs calculados automáticamente.
-**Current focus:** Phase 2 — Data Transformation
+**Current focus:** Phase 3 — Orchestration & Batch
 
 ## Current Position
 
-Phase: 2 of 5 (Transformation & KPIs) — COMPLETE
-Plan: 2 of 2 in current phase — COMPLETE
-Status: Phase 2 complete — processor.py fully built; AAPL + BRK.B Parquet files written
-Last activity: 2026-02-25 — Plan 02-02 complete: safe_divide, clean_financials, calculate_kpis (20 KPIs), save_parquet, process() verified on AAPL (20 FY) + BRK.B (19 FY)
+Phase: 3 of 5 (Orchestration & Batch) — IN PROGRESS
+Plan: 1 of 3 in current phase — COMPLETE
+Status: Phase 3 Plan 1 complete — KPI_REGISTRY refactor done; 4/4 tests green; AAPL 20 FY 20 KPIs verified
+Last activity: 2026-02-26 — Plan 03-01 complete: KPI_REGISTRY dict + _col() + _cagr_10y() + per-KPI error isolation; loguru replacing stdlib logging
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -36,6 +36,7 @@ Progress: [█████░░░░░] 50%
 
 *Updated after each plan completion*
 | Phase 02 P02 | 5 | 2 tasks | 1 files |
+| Phase 03 P01 | 8 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -59,6 +60,9 @@ Recent decisions affecting current work:
 - [Phase 02-01]: fiscal_year derived from end-date year not fy field — fy is filing year, comparative entries all share fy of filing year
 - [Phase 02]: safe_divide uses denominator.replace(0, np.nan) — never produces inf
 - [Phase 02]: save_parquet unlinks before rename on Windows (NTFS atomic rename requirement)
+- [Phase 03-01]: KPI_REGISTRY is module-level dict — adding one entry causes new KPI in kpis.parquet with no other file changes (ORCHS-01)
+- [Phase 03-01]: loguru replaces stdlib logging in processor.py — consistent with scraper.py pattern
+- [Phase 03-01]: _col() and _cagr_10y() are module-level private functions — required for lambda scope in KPI_REGISTRY
 
 ### Pending Todos
 
@@ -72,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 02-02-PLAN.md — processor.py complete: safe_divide, clean_financials, calculate_kpis (20 KPIs), save_parquet, process(); AAPL (20 FY) and BRK.B (19 FY) Parquet files written and verified idempotent
+Stopped at: Completed 03-01-PLAN.md — KPI_REGISTRY refactor: 20 KPIs in registry dict, per-KPI error isolation, _col()/_cagr_10y() module-level helpers, loguru logger; all 4 tests green; AAPL 20 FY 20 KPIs verified
 Resume file: None
