@@ -44,6 +44,7 @@ Progress: [████████░░] 80% (Phase 5 in progress — 1/2 plan
 | Phase 04 P02 | 2 | 2 tasks | 1 files |
 | Phase 04 P03 | 5 | 2 tasks | 0 files |
 | Phase 05 P01 | 8 | 3 tasks | 3 files |
+| Phase 05 P02 | 8 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Recent decisions affecting current work:
 - [Phase 05-01]: No conda activate in scheduler.bat — Task Scheduler sterile sessions do not run conda init; absolute C:\Users\Seb\miniconda3\python.exe used instead
 - [Phase 05-01]: StartBoundary=2026-04-01 — Jan 1 2026 already past; using past StartBoundary with StartWhenAvailable=true would trigger immediately on registration
 - [Phase 05-01]: wmic os get localdatetime for YYYYMMDD log filename — %DATE% format varies by Windows locale; wmic produces locale-independent 14-digit datetime string
+- [Phase 05-scheduling]: schtasks called via powershell.exe -Command to avoid bash path expansion treating /create as a Unix path
 
 ### Pending Todos
 
