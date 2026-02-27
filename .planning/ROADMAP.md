@@ -93,7 +93,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Create scheduler.bat, quarterly_etl_task.xml, and register_task.bat infrastructure files
+- [x] 05-01-PLAN.md — Create scheduler.bat, quarterly_etl_task.xml, and register_task.bat infrastructure files
 - [ ] 05-02-PLAN.md — Register task via schtasks CLI, trigger test run, human verify log output and Task Scheduler GUI
 
 ## Progress
@@ -107,4 +107,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Transformation & KPIs | 2/2 | Complete    | 2026-02-25 |
 | 3. Orchestration & Batch | 2/3 | Complete    | 2026-02-26 |
 | 4. Dashboard | 3/3 | Complete   | 2026-02-26 |
-| 5. Scheduling | 0/2 | Not started | - |
+| 5. Scheduling | 1/2 | In progress | - |

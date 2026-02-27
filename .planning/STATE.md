@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 
 ## Current Position
 
-Phase: 4 of 5 (Dashboard) — COMPLETE
-Plan: 3 of 4 in current phase — COMPLETE
-Status: Phase 4 complete — human-verified dashboard: Executive Cards, Comparativo dual-trace, year-range filter, 2+3 grid layout, global 5-KPI cap, sub-second cache switching (DASH-01/02/03/04 all confirmed)
-Last activity: 2026-02-26 — Plan 04-03 complete: human visual verification approved, all 6 browser tests passed
+Phase: 5 of 5 (Scheduling) — IN PROGRESS
+Plan: 1 of 2 in current phase — COMPLETE
+Status: Phase 5 Plan 01 complete — scheduler.bat, quarterly_etl_task.xml, register_task.bat created; Task Scheduler infrastructure ready for registration in Plan 02
+Last activity: 2026-02-27 — Plan 05-01 complete: scheduler.bat (absolute Python path, log capture, exit code propagation), quarterly_etl_task.xml (Jan/Apr/Jul/Oct quarterly trigger, StartWhenAvailable=true), register_task.bat (schtasks /create /XML, /F flag)
 
-Progress: [██████████] 100% (Phase 4 complete)
+Progress: [████████░░] 80% (Phase 5 in progress — 1/2 plans done)
 
 ## Performance Metrics
 
@@ -43,6 +43,7 @@ Progress: [██████████] 100% (Phase 4 complete)
 | Phase 04 P01 | 3 | 2 tasks | 2 files |
 | Phase 04 P02 | 2 | 2 tasks | 1 files |
 | Phase 04 P03 | 5 | 2 tasks | 0 files |
+| Phase 05 P01 | 8 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,10 @@ Recent decisions affecting current work:
 - [Phase 04-02]: st.cache_data.clear() after FinancialAgent.run() — new parquet immediately readable without TTL wait
 - [Phase 04-02]: agent module imported lazily inside button handler — no ETL initialization on page load
 - [Phase 04-03]: Human approval required before Phase 4 marked complete — dashboard is CFO-facing and must be visually verified in a real browser
+- [Phase 05-01]: InteractiveToken logon type used in task XML — required to access C:\Users\Seb\miniconda3\ and .env; S4U/Password create non-interactive sessions that fail
+- [Phase 05-01]: No conda activate in scheduler.bat — Task Scheduler sterile sessions do not run conda init; absolute C:\Users\Seb\miniconda3\python.exe used instead
+- [Phase 05-01]: StartBoundary=2026-04-01 — Jan 1 2026 already past; using past StartBoundary with StartWhenAvailable=true would trigger immediately on registration
+- [Phase 05-01]: wmic os get localdatetime for YYYYMMDD log filename — %DATE% format varies by Windows locale; wmic produces locale-independent 14-digit datetime string
 
 ### Pending Todos
 
@@ -94,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-26
-Stopped at: Completed 04-03-PLAN.md (human verification — Phase 4 complete)
+Last session: 2026-02-27
+Stopped at: Completed 05-01-PLAN.md (scheduler infrastructure files created)
 Resume file: None
