@@ -226,9 +226,10 @@ st.title("S&P 500 KPI Dashboard")
 st.caption("Datos oficiales 10-K · SEC EDGAR · Años fiscales 2007–2025")
 
 # Company selector — horizontal radio at top (Bloomberg-style tabs feel)
+# Options are dynamic: all loaded tickers + "Comparativo"
 company_mode = st.radio(
     label="Compañía",
-    options=["HD", "PG", "Comparativo"],
+    options=st.session_state.loaded_tickers + ["Comparativo"],
     horizontal=True,
     index=0,
     label_visibility="collapsed",
@@ -335,15 +336,19 @@ def build_trend_figure(
 
 
 def build_comparativo_figure(
-    df_hd: pd.DataFrame,
-    df_pg: pd.DataFrame,
+    dfs: dict[str, pd.DataFrame],
     kpi: str,
     year_range: tuple[int, int],
 ) -> go.Figure:
-    """Two-company overlay — HD and PG as separate traces on same figure (DASH-01 Comparativo mode)."""
+    """Multi-company overlay — one trace per loaded ticker on same figure (DASH-01 Comparativo mode)."""
+    # Extended color palette for additional tickers beyond HD/PG
+    _EXTRA_COLORS = ["#c0392b", "#8e44ad", "#e67e22", "#16a085", "#2c3e50"]
     meta = KPI_META[kpi]
     fig = go.Figure()
-    for ticker, df in [("HD", df_hd), ("PG", df_pg)]:
+    tickers = list(dfs.keys())
+    for idx, ticker in enumerate(tickers):
+        df = dfs[ticker]
+        color = COMPANY_COLORS.get(ticker, _EXTRA_COLORS[idx % len(_EXTRA_COLORS)])
         d = df[
             (df["fiscal_year"] >= year_range[0]) & (df["fiscal_year"] <= year_range[1])
         ]
@@ -352,7 +357,7 @@ def build_comparativo_figure(
             y=d[kpi],
             name=ticker,
             mode="lines+markers",
-            line=dict(color=COMPANY_COLORS[ticker], width=2.5),
+            line=dict(color=color, width=2.5),
             marker=dict(size=5),
             hovertemplate=f"{ticker} %{{x}}: %{{y:{meta['tick_format']}}}<extra></extra>",
         ))
@@ -421,11 +426,11 @@ else:
     n = len(selected_kpis)
 
     if company_mode == "Comparativo":
-        # Comparativo mode: overlay HD + PG on same figure per KPI
-        df_hd = load_kpis("HD")
-        df_pg = load_kpis("PG")
-        if df_hd.empty or df_pg.empty:
-            st.error("No se encontraron datos de HD o PG. Ejecuta el ETL primero.")
+        # Comparativo mode: overlay all loaded tickers on same figure per KPI
+        dfs_comp = {t: load_kpis(t) for t in st.session_state.loaded_tickers}
+        dfs_comp = {t: df for t, df in dfs_comp.items() if not df.empty}
+        if not dfs_comp:
+            st.error("No se encontraron datos. Ejecuta el ETL primero.")
         else:
             # Same dynamic grid as single-company mode
             if n == 5:
@@ -433,18 +438,18 @@ else:
                 row1 = st.columns(2, gap="medium")
                 for i in range(2):
                     with row1[i]:
-                        fig = build_comparativo_figure(df_hd, df_pg, selected_kpis[i], year_range)
+                        fig = build_comparativo_figure(dfs_comp, selected_kpis[i], year_range)
                         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
                 row2 = st.columns(3, gap="medium")
                 for i in range(3):
                     with row2[i]:
-                        fig = build_comparativo_figure(df_hd, df_pg, selected_kpis[2 + i], year_range)
+                        fig = build_comparativo_figure(dfs_comp, selected_kpis[2 + i], year_range)
                         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
             else:
                 cols = st.columns(n if n <= 4 else 4, gap="medium")
                 for i, kpi in enumerate(selected_kpis):
                     with cols[i % len(cols)]:
-                        fig = build_comparativo_figure(df_hd, df_pg, kpi, year_range)
+                        fig = build_comparativo_figure(dfs_comp, kpi, year_range)
                         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     else:
         # Single-company mode: HD or PG
