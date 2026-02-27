@@ -1,0 +1,674 @@
+[20260227155545.755000+060] Starting quarterly ETL 
+2026-02-27 15:55:59.471 | DEBUG    | scraper:_init_edgar:56 - edgartools initialized — identity: Seb Analyst 752615f59034781aeb... rate_limit: 8 req/s
+2026-02-27 15:55:59.479 | INFO     | __main__:<module>:287 - Starting batch ETL for 20 tickers (force_refresh=False)
+Batch ETL:   0%|          | 0/20 [00:00<?, ?it/s]2026-02-27 15:55:59.484 | INFO     | __main__:run_batch:240 - [1/20] Processing AAPL...
+2026-02-27 15:55:59.485 | INFO     | __main__:run:187 - [AAPL] Starting ETL run (force_refresh=False)
+2026-02-27 15:55:59.996 | DEBUG    | __main__:needs_update:169 - AAPL: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:55:59.997 | INFO     | __main__:run:190 - [AAPL] Current-quarter data found — skipping scrape
+2026-02-27 15:55:59.999 | INFO     | processor:process:443 - Processing AAPL from C:\Users\Seb\AI 2026\data\raw\AAPL\facts.json
+2026-02-27 15:56:00.433 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 9 fiscal years
+2026-02-27 15:56:00.442 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 19 fiscal years
+2026-02-27 15:56:00.446 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 19 fiscal years
+2026-02-27 15:56:00.450 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 19 fiscal years
+2026-02-27 15:56:00.457 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 19 fiscal years
+2026-02-27 15:56:00.459 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 13 fiscal years
+2026-02-27 15:56:00.462 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 11 fiscal years
+2026-02-27 15:56:00.463 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:00.465 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 18 fiscal years
+2026-02-27 15:56:00.466 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 20 fiscal years
+2026-02-27 15:56:00.468 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 18 fiscal years
+2026-02-27 15:56:00.470 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:00.472 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 20 fiscal years
+2026-02-27 15:56:00.473 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'AvailableForSaleSecuritiesCurrent', 11 fiscal years
+2026-02-27 15:56:00.475 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 18 fiscal years
+2026-02-27 15:56:00.476 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 18 fiscal years
+2026-02-27 15:56:00.477 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 12 fiscal years
+2026-02-27 15:56:00.481 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 12 fiscal years
+2026-02-27 15:56:00.483 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 18 fiscal years
+2026-02-27 15:56:00.485 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:00.490 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 18 fiscal years
+2026-02-27 15:56:00.495 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 13 fiscal years
+2026-02-27 15:56:00.825 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\AAPL\financials.parquet (17 KB)
+2026-02-27 15:56:00.884 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\AAPL\kpis.parquet (15 KB)
+2026-02-27 15:56:00.900 | INFO     | processor:process:466 - AAPL: 20 fiscal years (2006–2025), 21 fields extracted, 1 fields missing (NaN)
+2026-02-27 15:56:01.013 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for AAPL (scraped=False)
+2026-02-27 15:56:01.013 | INFO     | __main__:run:194 - [AAPL] Done (skipped_scrape): 20 FY
+2026-02-27 15:56:01.014 | INFO     | __main__:run_batch:246 - [1/20] AAPL: skipped (current-quarter)
+Batch ETL:   5%|5         | 1/20 [00:01<00:29,  1.53s/it]2026-02-27 15:56:01.014 | INFO     | __main__:run_batch:240 - [2/20] Processing MSFT...
+2026-02-27 15:56:01.014 | INFO     | __main__:run:187 - [MSFT] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:01.036 | DEBUG    | __main__:needs_update:169 - MSFT: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:01.036 | INFO     | __main__:run:190 - [MSFT] Current-quarter data found — skipping scrape
+2026-02-27 15:56:01.037 | INFO     | processor:process:443 - Processing MSFT from C:\Users\Seb\AI 2026\data\raw\MSFT\facts.json
+2026-02-27 15:56:01.576 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 10 fiscal years
+2026-02-27 15:56:01.584 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 18 fiscal years
+2026-02-27 15:56:01.586 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 10 fiscal years
+2026-02-27 15:56:01.592 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 18 fiscal years
+2026-02-27 15:56:01.601 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 18 fiscal years
+2026-02-27 15:56:01.603 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 17 fiscal years
+2026-02-27 15:56:01.605 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'Depreciation', 18 fiscal years
+2026-02-27 15:56:01.606 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 17 fiscal years
+2026-02-27 15:56:01.607 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 16 fiscal years
+2026-02-27 15:56:01.608 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 18 fiscal years
+2026-02-27 15:56:01.609 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 17 fiscal years
+2026-02-27 15:56:01.609 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 17 fiscal years
+2026-02-27 15:56:01.611 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 19 fiscal years
+2026-02-27 15:56:01.612 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'ShortTermInvestments', 8 fiscal years
+2026-02-27 15:56:01.613 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 17 fiscal years
+2026-02-27 15:56:01.614 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 17 fiscal years
+2026-02-27 15:56:01.616 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 17 fiscal years
+2026-02-27 15:56:01.617 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 14 fiscal years
+2026-02-27 15:56:01.619 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 17 fiscal years
+2026-02-27 15:56:01.620 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:01.621 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 16 fiscal years
+2026-02-27 15:56:01.625 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 18 fiscal years
+2026-02-27 15:56:01.756 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\MSFT\financials.parquet (17 KB)
+2026-02-27 15:56:01.774 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\MSFT\kpis.parquet (15 KB)
+2026-02-27 15:56:01.780 | INFO     | processor:process:466 - MSFT: 19 fiscal years (2007–2025), 21 fields extracted, 1 fields missing (NaN)
+2026-02-27 15:56:01.819 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for MSFT (scraped=False)
+2026-02-27 15:56:01.820 | INFO     | __main__:run:194 - [MSFT] Done (skipped_scrape): 19 FY
+2026-02-27 15:56:01.820 | INFO     | __main__:run_batch:246 - [2/20] MSFT: skipped (current-quarter)
+Batch ETL:  10%|#         | 2/20 [00:02<00:19,  1.10s/it]2026-02-27 15:56:01.821 | INFO     | __main__:run_batch:240 - [3/20] Processing NVDA...
+2026-02-27 15:56:01.821 | INFO     | __main__:run:187 - [NVDA] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:01.842 | DEBUG    | __main__:needs_update:169 - NVDA: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:01.843 | INFO     | __main__:run:190 - [NVDA] Current-quarter data found — skipping scrape
+2026-02-27 15:56:01.843 | INFO     | processor:process:443 - Processing NVDA from C:\Users\Seb\AI 2026\data\raw\NVDA\facts.json
+2026-02-27 15:56:02.293 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 6 fiscal years
+2026-02-27 15:56:02.310 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 19 fiscal years
+2026-02-27 15:56:02.316 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 5 fiscal years
+2026-02-27 15:56:02.325 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 19 fiscal years
+2026-02-27 15:56:02.334 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 19 fiscal years
+2026-02-27 15:56:02.338 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 17 fiscal years
+2026-02-27 15:56:02.340 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 7 fiscal years
+2026-02-27 15:56:02.341 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:02.342 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 12 fiscal years
+2026-02-27 15:56:02.343 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 20 fiscal years
+2026-02-27 15:56:02.344 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 18 fiscal years
+2026-02-27 15:56:02.345 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:02.346 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 20 fiscal years
+2026-02-27 15:56:02.347 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'MarketableSecuritiesCurrent', 17 fiscal years
+2026-02-27 15:56:02.348 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 18 fiscal years
+2026-02-27 15:56:02.350 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 18 fiscal years
+2026-02-27 15:56:02.351 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 7 fiscal years
+2026-02-27 15:56:02.352 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 7 fiscal years
+2026-02-27 15:56:02.354 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 18 fiscal years
+2026-02-27 15:56:02.354 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:02.358 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 19 fiscal years
+2026-02-27 15:56:02.359 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 3 fiscal years
+C:\Users\Seb\AI 2026\processor.py:324: FutureWarning: The default fill_method='pad' in Series.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  "revenue_growth_yoy":      lambda d: _col(d, "revenue").pct_change(),
+2026-02-27 15:56:02.626 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\NVDA\financials.parquet (17 KB)
+2026-02-27 15:56:02.687 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\NVDA\kpis.parquet (15 KB)
+2026-02-27 15:56:02.696 | INFO     | processor:process:466 - NVDA: 20 fiscal years (2007–2026), 21 fields extracted, 1 fields missing (NaN)
+2026-02-27 15:56:02.750 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for NVDA (scraped=False)
+2026-02-27 15:56:02.751 | INFO     | __main__:run:194 - [NVDA] Done (skipped_scrape): 20 FY
+2026-02-27 15:56:02.752 | INFO     | __main__:run_batch:246 - [3/20] NVDA: skipped (current-quarter)
+Batch ETL:  15%|#5        | 3/20 [00:03<00:17,  1.03s/it]2026-02-27 15:56:02.752 | INFO     | __main__:run_batch:240 - [4/20] Processing AMZN...
+2026-02-27 15:56:02.753 | INFO     | __main__:run:187 - [AMZN] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:02.786 | DEBUG    | __main__:needs_update:169 - AMZN: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:02.786 | INFO     | __main__:run:190 - [AMZN] Current-quarter data found — skipping scrape
+2026-02-27 15:56:02.787 | INFO     | processor:process:443 - Processing AMZN from C:\Users\Seb\AI 2026\data\raw\AMZN\facts.json
+2026-02-27 15:56:03.249 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 10 fiscal years
+2026-02-27 15:56:03.252 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 3 fiscal years
+2026-02-27 15:56:03.258 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 19 fiscal years
+2026-02-27 15:56:03.272 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 19 fiscal years
+2026-02-27 15:56:03.288 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 19 fiscal years
+2026-02-27 15:56:03.294 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 17 fiscal years
+2026-02-27 15:56:03.303 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 18 fiscal years
+2026-02-27 15:56:03.305 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:03.307 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'LiabilitiesAndStockholdersEquity', 18 fiscal years
+2026-02-27 15:56:03.308 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 20 fiscal years
+2026-02-27 15:56:03.310 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 18 fiscal years
+2026-02-27 15:56:03.311 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:03.313 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 20 fiscal years
+2026-02-27 15:56:03.315 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'MarketableSecuritiesCurrent', 18 fiscal years
+2026-02-27 15:56:03.317 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 18 fiscal years
+2026-02-27 15:56:03.319 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 18 fiscal years
+2026-02-27 15:56:03.322 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 18 fiscal years
+2026-02-27 15:56:03.324 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 15 fiscal years
+2026-02-27 15:56:03.326 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 18 fiscal years
+2026-02-27 15:56:03.327 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:03.333 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 19 fiscal years
+2026-02-27 15:56:03.339 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 10 fiscal years
+2026-02-27 15:56:03.603 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\AMZN\financials.parquet (17 KB)
+2026-02-27 15:56:03.723 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\AMZN\kpis.parquet (15 KB)
+2026-02-27 15:56:03.736 | INFO     | processor:process:466 - AMZN: 20 fiscal years (2006–2025), 21 fields extracted, 1 fields missing (NaN)
+2026-02-27 15:56:03.778 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for AMZN (scraped=False)
+2026-02-27 15:56:03.779 | INFO     | __main__:run:194 - [AMZN] Done (skipped_scrape): 20 FY
+2026-02-27 15:56:03.779 | INFO     | __main__:run_batch:246 - [4/20] AMZN: skipped (current-quarter)
+Batch ETL:  20%|##        | 4/20 [00:04<00:16,  1.03s/it]2026-02-27 15:56:03.779 | INFO     | __main__:run_batch:240 - [5/20] Processing META...
+2026-02-27 15:56:03.780 | INFO     | __main__:run:187 - [META] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:03.814 | DEBUG    | __main__:needs_update:169 - META: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:03.815 | INFO     | __main__:run:190 - [META] Current-quarter data found — skipping scrape
+2026-02-27 15:56:03.816 | INFO     | processor:process:443 - Processing META from C:\Users\Seb\AI 2026\data\raw\META\facts.json
+2026-02-27 15:56:04.074 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 10 fiscal years
+2026-02-27 15:56:04.075 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:04.077 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfRevenue', 16 fiscal years
+2026-02-27 15:56:04.080 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 16 fiscal years
+2026-02-27 15:56:04.083 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 16 fiscal years
+2026-02-27 15:56:04.086 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 13 fiscal years
+2026-02-27 15:56:04.089 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 16 fiscal years
+2026-02-27 15:56:04.090 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 15 fiscal years
+2026-02-27 15:56:04.091 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 15 fiscal years
+2026-02-27 15:56:04.092 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 15 fiscal years
+2026-02-27 15:56:04.093 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 15 fiscal years
+2026-02-27 15:56:04.094 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 15 fiscal years
+2026-02-27 15:56:04.095 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 17 fiscal years
+2026-02-27 15:56:04.096 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'MarketableSecuritiesCurrent', 12 fiscal years
+2026-02-27 15:56:04.097 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 15 fiscal years
+2026-02-27 15:56:04.098 | WARNING  | processor:extract_concept:215 - Field 'inventory': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:04.098 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 8 fiscal years
+2026-02-27 15:56:04.099 | WARNING  | processor:extract_concept:215 - Field 'short_term_debt': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:04.100 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 10 fiscal years
+2026-02-27 15:56:04.101 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:04.104 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 16 fiscal years
+2026-02-27 15:56:04.108 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 16 fiscal years
+2026-02-27 15:56:04.287 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\META\financials.parquet (16 KB)
+2026-02-27 15:56:04.318 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\META\kpis.parquet (15 KB)
+2026-02-27 15:56:04.329 | INFO     | processor:process:466 - META: 17 fiscal years (2009–2025), 18 fields extracted, 4 fields missing (NaN)
+2026-02-27 15:56:04.387 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for META (scraped=False)
+2026-02-27 15:56:04.388 | INFO     | __main__:run:194 - [META] Done (skipped_scrape): 17 FY
+2026-02-27 15:56:04.389 | INFO     | __main__:run_batch:246 - [5/20] META: skipped (current-quarter)
+Batch ETL:  25%|##5       | 5/20 [00:04<00:13,  1.14it/s]2026-02-27 15:56:04.391 | INFO     | __main__:run_batch:240 - [6/20] Processing GOOGL...
+2026-02-27 15:56:04.392 | INFO     | __main__:run:187 - [GOOGL] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:04.435 | DEBUG    | __main__:needs_update:169 - GOOGL: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:04.436 | INFO     | __main__:run:190 - [GOOGL] Current-quarter data found — skipping scrape
+2026-02-27 15:56:04.438 | INFO     | processor:process:443 - Processing GOOGL from C:\Users\Seb\AI 2026\data\raw\GOOGL\facts.json
+2026-02-27 15:56:04.817 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 9 fiscal years
+2026-02-27 15:56:04.821 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:04.825 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfRevenue', 13 fiscal years
+2026-02-27 15:56:04.831 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 13 fiscal years
+2026-02-27 15:56:04.836 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 13 fiscal years
+2026-02-27 15:56:04.842 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 11 fiscal years
+2026-02-27 15:56:04.844 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'Depreciation', 5 fiscal years
+2026-02-27 15:56:04.847 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 12 fiscal years
+2026-02-27 15:56:04.849 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 11 fiscal years
+2026-02-27 15:56:04.851 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 14 fiscal years
+2026-02-27 15:56:04.852 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 12 fiscal years
+2026-02-27 15:56:04.855 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 12 fiscal years
+2026-02-27 15:56:04.856 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 14 fiscal years
+2026-02-27 15:56:04.858 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'AvailableForSaleSecuritiesCurrent', 4 fiscal years
+2026-02-27 15:56:04.859 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 12 fiscal years
+2026-02-27 15:56:04.861 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 8 fiscal years
+2026-02-27 15:56:04.862 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 9 fiscal years
+2026-02-27 15:56:04.864 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 7 fiscal years
+2026-02-27 15:56:04.865 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 12 fiscal years
+2026-02-27 15:56:04.867 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:04.873 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 13 fiscal years
+2026-02-27 15:56:04.877 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 13 fiscal years
+2026-02-27 15:56:05.172 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\GOOGL\financials.parquet (16 KB)
+2026-02-27 15:56:05.203 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\GOOGL\kpis.parquet (15 KB)
+2026-02-27 15:56:05.214 | INFO     | processor:process:466 - GOOGL: 14 fiscal years (2012–2025), 20 fields extracted, 2 fields missing (NaN)
+2026-02-27 15:56:05.253 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for GOOGL (scraped=False)
+2026-02-27 15:56:05.253 | INFO     | __main__:run:194 - [GOOGL] Done (skipped_scrape): 14 FY
+2026-02-27 15:56:05.254 | INFO     | __main__:run_batch:246 - [6/20] GOOGL: skipped (current-quarter)
+Batch ETL:  30%|###       | 6/20 [00:05<00:12,  1.15it/s]2026-02-27 15:56:05.254 | INFO     | __main__:run_batch:240 - [7/20] Processing GOOG...
+2026-02-27 15:56:05.254 | INFO     | __main__:run:187 - [GOOG] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:05.284 | DEBUG    | __main__:needs_update:169 - GOOG: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:05.284 | INFO     | __main__:run:190 - [GOOG] Current-quarter data found — skipping scrape
+2026-02-27 15:56:05.286 | INFO     | processor:process:443 - Processing GOOG from C:\Users\Seb\AI 2026\data\raw\GOOG\facts.json
+2026-02-27 15:56:05.572 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 9 fiscal years
+2026-02-27 15:56:05.574 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:05.579 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfRevenue', 13 fiscal years
+2026-02-27 15:56:05.589 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 13 fiscal years
+2026-02-27 15:56:05.604 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 13 fiscal years
+2026-02-27 15:56:05.609 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 11 fiscal years
+2026-02-27 15:56:05.612 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'Depreciation', 5 fiscal years
+2026-02-27 15:56:05.615 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 12 fiscal years
+2026-02-27 15:56:05.618 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 11 fiscal years
+2026-02-27 15:56:05.623 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 14 fiscal years
+2026-02-27 15:56:05.625 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 12 fiscal years
+2026-02-27 15:56:05.626 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 12 fiscal years
+2026-02-27 15:56:05.627 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 14 fiscal years
+2026-02-27 15:56:05.636 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'AvailableForSaleSecuritiesCurrent', 4 fiscal years
+2026-02-27 15:56:05.639 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 12 fiscal years
+2026-02-27 15:56:05.640 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 8 fiscal years
+2026-02-27 15:56:05.642 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 9 fiscal years
+2026-02-27 15:56:05.643 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 7 fiscal years
+2026-02-27 15:56:05.646 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 12 fiscal years
+2026-02-27 15:56:05.650 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:05.679 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 13 fiscal years
+2026-02-27 15:56:05.691 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 13 fiscal years
+2026-02-27 15:56:05.893 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\GOOG\financials.parquet (16 KB)
+2026-02-27 15:56:05.962 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\GOOG\kpis.parquet (15 KB)
+2026-02-27 15:56:06.009 | INFO     | processor:process:466 - GOOG: 14 fiscal years (2012–2025), 20 fields extracted, 2 fields missing (NaN)
+2026-02-27 15:56:06.085 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for GOOG (scraped=False)
+2026-02-27 15:56:06.085 | INFO     | __main__:run:194 - [GOOG] Done (skipped_scrape): 14 FY
+2026-02-27 15:56:06.086 | INFO     | __main__:run_batch:246 - [7/20] GOOG: skipped (current-quarter)
+Batch ETL:  35%|###5      | 7/20 [00:06<00:11,  1.16it/s]2026-02-27 15:56:06.086 | INFO     | __main__:run_batch:240 - [8/20] Processing BRK.B...
+2026-02-27 15:56:06.087 | INFO     | __main__:run:187 - [BRK.B] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:06.112 | DEBUG    | __main__:needs_update:169 - BRK.B: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:06.113 | INFO     | __main__:run:190 - [BRK.B] Current-quarter data found — skipping scrape
+2026-02-27 15:56:06.114 | INFO     | processor:process:443 - Processing BRK.B from C:\Users\Seb\AI 2026\data\raw\BRK.B\facts.json
+2026-02-27 15:56:06.429 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 7 fiscal years
+2026-02-27 15:56:06.433 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.434 | WARNING  | processor:extract_concept:215 - Field 'cogs': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.436 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 4 fiscal years
+2026-02-27 15:56:06.450 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 18 fiscal years
+2026-02-27 15:56:06.454 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 12 fiscal years
+2026-02-27 15:56:06.460 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 14 fiscal years
+2026-02-27 15:56:06.462 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 17 fiscal years
+2026-02-27 15:56:06.464 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 16 fiscal years
+2026-02-27 15:56:06.466 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 17 fiscal years
+2026-02-27 15:56:06.468 | WARNING  | processor:extract_concept:215 - Field 'current_assets': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.469 | WARNING  | processor:extract_concept:215 - Field 'current_liabilities': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.471 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 12 fiscal years
+2026-02-27 15:56:06.473 | WARNING  | processor:extract_concept:215 - Field 'short_term_investments': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.474 | WARNING  | processor:extract_concept:215 - Field 'receivables': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.475 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 16 fiscal years
+2026-02-27 15:56:06.476 | WARNING  | processor:extract_concept:215 - Field 'long_term_debt': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.476 | WARNING  | processor:extract_concept:215 - Field 'short_term_debt': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.477 | WARNING  | processor:extract_concept:215 - Field 'accounts_payable': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.478 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:06.483 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 14 fiscal years
+2026-02-27 15:56:06.491 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 18 fiscal years
+2026-02-27 15:56:06.804 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\BRK.B\financials.parquet (15 KB)
+2026-02-27 15:56:06.845 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\BRK.B\kpis.parquet (13 KB)
+2026-02-27 15:56:06.870 | INFO     | processor:process:466 - BRK.B: 19 fiscal years (2006–2024), 12 fields extracted, 10 fields missing (NaN)
+2026-02-27 15:56:06.912 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for BRK.B (scraped=False)
+2026-02-27 15:56:06.912 | INFO     | __main__:run:194 - [BRK.B] Done (skipped_scrape): 19 FY
+2026-02-27 15:56:06.913 | INFO     | __main__:run_batch:246 - [8/20] BRK.B: skipped (current-quarter)
+Batch ETL:  40%|####      | 8/20 [00:07<00:10,  1.18it/s]2026-02-27 15:56:06.913 | INFO     | __main__:run_batch:240 - [9/20] Processing TSLA...
+2026-02-27 15:56:06.914 | INFO     | __main__:run:187 - [TSLA] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:06.944 | DEBUG    | __main__:needs_update:169 - TSLA: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:06.944 | INFO     | __main__:run:190 - [TSLA] Current-quarter data found — skipping scrape
+2026-02-27 15:56:06.945 | INFO     | processor:process:443 - Processing TSLA from C:\Users\Seb\AI 2026\data\raw\TSLA\facts.json
+2026-02-27 15:56:07.344 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 6 fiscal years
+2026-02-27 15:56:07.360 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 17 fiscal years
+2026-02-27 15:56:07.366 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfRevenue', 17 fiscal years
+2026-02-27 15:56:07.373 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 17 fiscal years
+2026-02-27 15:56:07.385 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 17 fiscal years
+2026-02-27 15:56:07.390 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 15 fiscal years
+2026-02-27 15:56:07.395 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 8 fiscal years
+2026-02-27 15:56:07.398 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 16 fiscal years
+2026-02-27 15:56:07.401 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 16 fiscal years
+2026-02-27 15:56:07.403 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 18 fiscal years
+2026-02-27 15:56:07.405 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 16 fiscal years
+2026-02-27 15:56:07.406 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 16 fiscal years
+2026-02-27 15:56:07.408 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 18 fiscal years
+2026-02-27 15:56:07.410 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'ShortTermInvestments', 5 fiscal years
+2026-02-27 15:56:07.411 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 16 fiscal years
+2026-02-27 15:56:07.413 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 16 fiscal years
+2026-02-27 15:56:07.415 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 4 fiscal years
+2026-02-27 15:56:07.416 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 2 fiscal years
+2026-02-27 15:56:07.417 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 16 fiscal years
+2026-02-27 15:56:07.419 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:07.423 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 15 fiscal years
+2026-02-27 15:56:07.428 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 17 fiscal years
+2026-02-27 15:56:07.734 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\TSLA\financials.parquet (16 KB)
+2026-02-27 15:56:07.761 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\TSLA\kpis.parquet (15 KB)
+2026-02-27 15:56:07.772 | INFO     | processor:process:466 - TSLA: 18 fiscal years (2008–2025), 21 fields extracted, 1 fields missing (NaN)
+2026-02-27 15:56:07.815 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for TSLA (scraped=False)
+2026-02-27 15:56:07.815 | INFO     | __main__:run:194 - [TSLA] Done (skipped_scrape): 18 FY
+2026-02-27 15:56:07.816 | INFO     | __main__:run_batch:246 - [9/20] TSLA: skipped (current-quarter)
+Batch ETL:  45%|####5     | 9/20 [00:08<00:09,  1.16it/s]2026-02-27 15:56:07.816 | INFO     | __main__:run_batch:240 - [10/20] Processing LLY...
+2026-02-27 15:56:07.816 | INFO     | __main__:run:187 - [LLY] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:07.846 | DEBUG    | __main__:needs_update:169 - LLY: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:07.846 | INFO     | __main__:run:190 - [LLY] Current-quarter data found — skipping scrape
+2026-02-27 15:56:07.847 | INFO     | processor:process:443 - Processing LLY from C:\Users\Seb\AI 2026\data\raw\LLY\facts.json
+2026-02-27 15:56:08.316 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'Revenues', 19 fiscal years
+2026-02-27 15:56:08.318 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:08.321 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 10 fiscal years
+2026-02-27 15:56:08.324 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest', 16 fiscal years
+2026-02-27 15:56:08.330 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 19 fiscal years
+2026-02-27 15:56:08.335 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 16 fiscal years
+2026-02-27 15:56:08.338 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 19 fiscal years
+2026-02-27 15:56:08.339 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:08.340 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'LiabilitiesAndStockholdersEquity', 18 fiscal years
+2026-02-27 15:56:08.341 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 16 fiscal years
+2026-02-27 15:56:08.342 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 18 fiscal years
+2026-02-27 15:56:08.343 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:08.344 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 20 fiscal years
+2026-02-27 15:56:08.344 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'ShortTermInvestments', 17 fiscal years
+2026-02-27 15:56:08.345 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 18 fiscal years
+2026-02-27 15:56:08.347 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 18 fiscal years
+2026-02-27 15:56:08.348 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 18 fiscal years
+2026-02-27 15:56:08.349 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 5 fiscal years
+2026-02-27 15:56:08.351 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 18 fiscal years
+2026-02-27 15:56:08.352 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:08.355 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 19 fiscal years
+2026-02-27 15:56:08.355 | WARNING  | processor:extract_concept:215 - Field 'capex': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:08.563 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\LLY\financials.parquet (16 KB)
+2026-02-27 15:56:08.632 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\LLY\kpis.parquet (16 KB)
+2026-02-27 15:56:08.656 | INFO     | processor:process:466 - LLY: 20 fiscal years (2006–2025), 19 fields extracted, 3 fields missing (NaN)
+2026-02-27 15:56:08.754 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for LLY (scraped=False)
+2026-02-27 15:56:08.755 | INFO     | __main__:run:194 - [LLY] Done (skipped_scrape): 20 FY
+2026-02-27 15:56:08.755 | INFO     | __main__:run_batch:246 - [10/20] LLY: skipped (current-quarter)
+Batch ETL:  50%|#####     | 10/20 [00:09<00:08,  1.13it/s]2026-02-27 15:56:08.757 | INFO     | __main__:run_batch:240 - [11/20] Processing AVGO...
+2026-02-27 15:56:08.757 | INFO     | __main__:run:187 - [AVGO] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:08.807 | DEBUG    | __main__:needs_update:169 - AVGO: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:08.808 | INFO     | __main__:run:190 - [AVGO] Current-quarter data found — skipping scrape
+2026-02-27 15:56:08.810 | INFO     | processor:process:443 - Processing AVGO from C:\Users\Seb\AI 2026\data\raw\AVGO\facts.json
+2026-02-27 15:56:09.123 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 9 fiscal years
+2026-02-27 15:56:09.128 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 10 fiscal years
+2026-02-27 15:56:09.130 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 3 fiscal years
+2026-02-27 15:56:09.138 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 10 fiscal years
+2026-02-27 15:56:09.141 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 6 fiscal years
+2026-02-27 15:56:09.144 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 9 fiscal years
+2026-02-27 15:56:09.148 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'Depreciation', 10 fiscal years
+2026-02-27 15:56:09.150 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 9 fiscal years
+2026-02-27 15:56:09.152 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 9 fiscal years
+2026-02-27 15:56:09.154 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 3 fiscal years
+2026-02-27 15:56:09.156 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 9 fiscal years
+2026-02-27 15:56:09.158 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 9 fiscal years
+2026-02-27 15:56:09.159 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 11 fiscal years
+2026-02-27 15:56:09.161 | WARNING  | processor:extract_concept:215 - Field 'short_term_investments': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:09.162 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 9 fiscal years
+2026-02-27 15:56:09.163 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 9 fiscal years
+2026-02-27 15:56:09.165 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 5 fiscal years
+2026-02-27 15:56:09.166 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 9 fiscal years
+2026-02-27 15:56:09.168 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 9 fiscal years
+2026-02-27 15:56:09.169 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:09.172 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 10 fiscal years
+2026-02-27 15:56:09.177 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 10 fiscal years
+2026-02-27 15:56:09.505 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\AVGO\financials.parquet (15 KB)
+2026-02-27 15:56:09.572 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\AVGO\kpis.parquet (14 KB)
+2026-02-27 15:56:09.600 | INFO     | processor:process:466 - AVGO: 11 fiscal years (2015–2025), 20 fields extracted, 2 fields missing (NaN)
+2026-02-27 15:56:09.678 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for AVGO (scraped=False)
+2026-02-27 15:56:09.678 | INFO     | __main__:run:194 - [AVGO] Done (skipped_scrape): 11 FY
+2026-02-27 15:56:09.679 | INFO     | __main__:run_batch:246 - [11/20] AVGO: skipped (current-quarter)
+Batch ETL:  55%|#####5    | 11/20 [00:10<00:08,  1.11it/s]2026-02-27 15:56:09.681 | INFO     | __main__:run_batch:240 - [12/20] Processing JPM...
+2026-02-27 15:56:09.682 | INFO     | __main__:run:187 - [JPM] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:09.734 | DEBUG    | __main__:needs_update:169 - JPM: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:09.735 | INFO     | __main__:run:190 - [JPM] Current-quarter data found — skipping scrape
+2026-02-27 15:56:09.737 | INFO     | processor:process:443 - Processing JPM from C:\Users\Seb\AI 2026\data\raw\JPM\facts.json
+2026-02-27 15:56:10.864 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'Revenues', 19 fiscal years
+2026-02-27 15:56:10.866 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.867 | WARNING  | processor:extract_concept:215 - Field 'cogs': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.877 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest', 17 fiscal years
+2026-02-27 15:56:10.881 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 19 fiscal years
+2026-02-27 15:56:10.885 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 17 fiscal years
+2026-02-27 15:56:10.887 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'AmortizationOfIntangibleAssets', 12 fiscal years
+2026-02-27 15:56:10.888 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:10.889 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 18 fiscal years
+2026-02-27 15:56:10.890 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 18 fiscal years
+2026-02-27 15:56:10.890 | WARNING  | processor:extract_concept:215 - Field 'current_assets': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.891 | WARNING  | processor:extract_concept:215 - Field 'current_liabilities': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.891 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 4 fiscal years
+2026-02-27 15:56:10.892 | WARNING  | processor:extract_concept:215 - Field 'short_term_investments': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.892 | WARNING  | processor:extract_concept:215 - Field 'receivables': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.893 | WARNING  | processor:extract_concept:215 - Field 'inventory': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.893 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebt', 6 fiscal years
+2026-02-27 15:56:10.894 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'CommercialPaper', 9 fiscal years
+2026-02-27 15:56:10.895 | WARNING  | processor:extract_concept:215 - Field 'accounts_payable': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.895 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:10.898 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 19 fiscal years
+2026-02-27 15:56:10.900 | WARNING  | processor:extract_concept:215 - Field 'capex': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:11.075 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\JPM\financials.parquet (15 KB)
+2026-02-27 15:56:11.106 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\JPM\kpis.parquet (14 KB)
+2026-02-27 15:56:11.119 | INFO     | processor:process:466 - JPM: 19 fiscal years (2007–2025), 12 fields extracted, 10 fields missing (NaN)
+2026-02-27 15:56:11.173 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for JPM (scraped=False)
+2026-02-27 15:56:11.173 | INFO     | __main__:run:194 - [JPM] Done (skipped_scrape): 19 FY
+2026-02-27 15:56:11.174 | INFO     | __main__:run_batch:246 - [12/20] JPM: skipped (current-quarter)
+Batch ETL:  60%|######    | 12/20 [00:11<00:08,  1.08s/it]2026-02-27 15:56:11.174 | INFO     | __main__:run_batch:240 - [13/20] Processing V...
+2026-02-27 15:56:11.174 | INFO     | __main__:run:187 - [V] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:11.203 | DEBUG    | __main__:needs_update:169 - V: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:11.204 | INFO     | __main__:run:190 - [V] Current-quarter data found — skipping scrape
+2026-02-27 15:56:11.204 | INFO     | processor:process:443 - Processing V from C:\Users\Seb\AI 2026\data\raw\V\facts.json
+2026-02-27 15:56:11.779 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 7 fiscal years
+2026-02-27 15:56:11.783 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:11.784 | WARNING  | processor:extract_concept:215 - Field 'cogs': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:11.793 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 19 fiscal years
+2026-02-27 15:56:11.803 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 19 fiscal years
+2026-02-27 15:56:11.807 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 6 fiscal years
+2026-02-27 15:56:11.813 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationAndAmortization', 19 fiscal years
+2026-02-27 15:56:11.815 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:11.817 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 18 fiscal years
+2026-02-27 15:56:11.820 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 6 fiscal years
+2026-02-27 15:56:11.822 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 18 fiscal years
+2026-02-27 15:56:11.824 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:11.825 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 20 fiscal years
+2026-02-27 15:56:11.827 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'AvailableForSaleSecuritiesCurrent', 11 fiscal years
+2026-02-27 15:56:11.829 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 18 fiscal years
+2026-02-27 15:56:11.830 | WARNING  | processor:extract_concept:215 - Field 'inventory': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:11.831 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 10 fiscal years
+2026-02-27 15:56:11.833 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 13 fiscal years
+2026-02-27 15:56:11.835 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 18 fiscal years
+2026-02-27 15:56:11.836 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:11.842 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 19 fiscal years
+2026-02-27 15:56:11.844 | WARNING  | processor:extract_concept:215 - Field 'capex': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:12.195 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\V\financials.parquet (16 KB)
+2026-02-27 15:56:12.278 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\V\kpis.parquet (14 KB)
+2026-02-27 15:56:12.304 | INFO     | processor:process:466 - V: 20 fiscal years (2006–2025), 17 fields extracted, 5 fields missing (NaN)
+2026-02-27 15:56:12.355 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for V (scraped=False)
+2026-02-27 15:56:12.355 | INFO     | __main__:run:194 - [V] Done (skipped_scrape): 20 FY
+2026-02-27 15:56:12.355 | INFO     | __main__:run_batch:246 - [13/20] V: skipped (current-quarter)
+Batch ETL:  65%|######5   | 13/20 [00:12<00:07,  1.11s/it]2026-02-27 15:56:12.356 | INFO     | __main__:run_batch:240 - [14/20] Processing UNH...
+2026-02-27 15:56:12.356 | INFO     | __main__:run:187 - [UNH] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:12.382 | DEBUG    | __main__:needs_update:169 - UNH: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:12.383 | INFO     | __main__:run:190 - [UNH] Current-quarter data found — skipping scrape
+2026-02-27 15:56:12.384 | INFO     | processor:process:443 - Processing UNH from C:\Users\Seb\AI 2026\data\raw\UNH\facts.json
+2026-02-27 15:56:12.854 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'Revenues', 18 fiscal years
+2026-02-27 15:56:12.856 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:12.861 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 9 fiscal years
+2026-02-27 15:56:12.876 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 18 fiscal years
+2026-02-27 15:56:12.887 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 18 fiscal years
+2026-02-27 15:56:12.895 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 18 fiscal years
+2026-02-27 15:56:12.907 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationAndAmortization', 18 fiscal years
+2026-02-27 15:56:12.910 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 17 fiscal years
+2026-02-27 15:56:12.912 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 17 fiscal years
+2026-02-27 15:56:12.916 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 9 fiscal years
+2026-02-27 15:56:12.919 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 17 fiscal years
+2026-02-27 15:56:12.921 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 17 fiscal years
+2026-02-27 15:56:12.925 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 19 fiscal years
+2026-02-27 15:56:12.927 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'ShortTermInvestments', 17 fiscal years
+2026-02-27 15:56:12.930 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 17 fiscal years
+2026-02-27 15:56:12.933 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 4 fiscal years
+2026-02-27 15:56:12.935 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 17 fiscal years
+2026-02-27 15:56:12.937 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 14 fiscal years
+2026-02-27 15:56:12.940 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableAndAccruedLiabilitiesCurrent', 17 fiscal years
+2026-02-27 15:56:12.942 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:12.951 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 18 fiscal years
+2026-02-27 15:56:12.960 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 18 fiscal years
+2026-02-27 15:56:13.277 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\UNH\financials.parquet (17 KB)
+2026-02-27 15:56:13.354 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\UNH\kpis.parquet (15 KB)
+2026-02-27 15:56:13.375 | INFO     | processor:process:466 - UNH: 19 fiscal years (2006–2024), 20 fields extracted, 2 fields missing (NaN)
+2026-02-27 15:56:13.460 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for UNH (scraped=False)
+2026-02-27 15:56:13.461 | INFO     | __main__:run:194 - [UNH] Done (skipped_scrape): 19 FY
+2026-02-27 15:56:13.461 | INFO     | __main__:run_batch:246 - [14/20] UNH: skipped (current-quarter)
+Batch ETL:  70%|#######   | 14/20 [00:13<00:06,  1.11s/it]2026-02-27 15:56:13.463 | INFO     | __main__:run_batch:240 - [15/20] Processing XOM...
+2026-02-27 15:56:13.463 | INFO     | __main__:run:187 - [XOM] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:13.508 | DEBUG    | __main__:needs_update:169 - XOM: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:13.509 | INFO     | __main__:run:190 - [XOM] Current-quarter data found — skipping scrape
+2026-02-27 15:56:13.510 | INFO     | processor:process:443 - Processing XOM from C:\Users\Seb\AI 2026\data\raw\XOM\facts.json
+2026-02-27 15:56:13.903 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 5 fiscal years
+2026-02-27 15:56:13.906 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:13.906 | WARNING  | processor:extract_concept:215 - Field 'cogs': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:13.913 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest', 17 fiscal years
+2026-02-27 15:56:13.922 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 19 fiscal years
+2026-02-27 15:56:13.933 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 19 fiscal years
+2026-02-27 15:56:13.940 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 19 fiscal years
+2026-02-27 15:56:13.942 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:13.944 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 18 fiscal years
+2026-02-27 15:56:13.948 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 18 fiscal years
+2026-02-27 15:56:13.950 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 18 fiscal years
+2026-02-27 15:56:13.952 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:13.954 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 20 fiscal years
+2026-02-27 15:56:13.957 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'MarketableSecuritiesCurrent', 3 fiscal years
+2026-02-27 15:56:13.959 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 17 fiscal years
+2026-02-27 15:56:13.962 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 2 fiscal years
+2026-02-27 15:56:13.965 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 6 fiscal years
+2026-02-27 15:56:13.967 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 17 fiscal years
+2026-02-27 15:56:13.970 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableAndAccruedLiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:13.973 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:13.980 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 17 fiscal years
+2026-02-27 15:56:14.000 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 19 fiscal years
+C:\Users\Seb\AI 2026\processor.py:324: FutureWarning: The default fill_method='pad' in Series.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  "revenue_growth_yoy":      lambda d: _col(d, "revenue").pct_change(),
+2026-02-27 15:56:14.323 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\XOM\financials.parquet (16 KB)
+2026-02-27 15:56:14.391 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\XOM\kpis.parquet (15 KB)
+2026-02-27 15:56:14.418 | INFO     | processor:process:466 - XOM: 20 fiscal years (2006–2025), 19 fields extracted, 3 fields missing (NaN)
+2026-02-27 15:56:14.491 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for XOM (scraped=False)
+2026-02-27 15:56:14.492 | INFO     | __main__:run:194 - [XOM] Done (skipped_scrape): 20 FY
+2026-02-27 15:56:14.493 | INFO     | __main__:run_batch:246 - [15/20] XOM: skipped (current-quarter)
+Batch ETL:  75%|#######5  | 15/20 [00:15<00:05,  1.09s/it]2026-02-27 15:56:14.494 | INFO     | __main__:run_batch:240 - [16/20] Processing MA...
+2026-02-27 15:56:14.494 | INFO     | __main__:run:187 - [MA] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:14.549 | DEBUG    | __main__:needs_update:169 - MA: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:14.549 | INFO     | __main__:run:190 - [MA] Current-quarter data found — skipping scrape
+2026-02-27 15:56:14.551 | INFO     | processor:process:443 - Processing MA from C:\Users\Seb\AI 2026\data\raw\MA\facts.json
+2026-02-27 15:56:15.106 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 4 fiscal years
+2026-02-27 15:56:15.108 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:15.108 | WARNING  | processor:extract_concept:215 - Field 'cogs': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:15.113 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 19 fiscal years
+2026-02-27 15:56:15.120 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 7 fiscal years
+2026-02-27 15:56:15.125 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 17 fiscal years
+2026-02-27 15:56:15.130 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationAndAmortization', 19 fiscal years
+2026-02-27 15:56:15.131 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:15.133 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 18 fiscal years
+2026-02-27 15:56:15.134 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 18 fiscal years
+2026-02-27 15:56:15.136 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 18 fiscal years
+2026-02-27 15:56:15.137 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 18 fiscal years
+2026-02-27 15:56:15.139 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 20 fiscal years
+2026-02-27 15:56:15.140 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'AvailableForSaleSecuritiesCurrent', 7 fiscal years
+2026-02-27 15:56:15.141 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 18 fiscal years
+2026-02-27 15:56:15.143 | WARNING  | processor:extract_concept:215 - Field 'inventory': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:15.143 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 15 fiscal years
+2026-02-27 15:56:15.144 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 11 fiscal years
+2026-02-27 15:56:15.146 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 18 fiscal years
+2026-02-27 15:56:15.147 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:15.152 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 19 fiscal years
+2026-02-27 15:56:15.155 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 19 fiscal years
+C:\Users\Seb\AI 2026\processor.py:324: FutureWarning: The default fill_method='pad' in Series.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  "revenue_growth_yoy":      lambda d: _col(d, "revenue").pct_change(),
+2026-02-27 15:56:15.387 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\MA\financials.parquet (16 KB)
+2026-02-27 15:56:15.449 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\MA\kpis.parquet (14 KB)
+2026-02-27 15:56:15.471 | INFO     | processor:process:466 - MA: 20 fiscal years (2006–2025), 18 fields extracted, 4 fields missing (NaN)
+2026-02-27 15:56:15.570 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for MA (scraped=False)
+2026-02-27 15:56:15.571 | INFO     | __main__:run:194 - [MA] Done (skipped_scrape): 20 FY
+2026-02-27 15:56:15.571 | INFO     | __main__:run_batch:246 - [16/20] MA: skipped (current-quarter)
+Batch ETL:  80%|########  | 16/20 [00:16<00:04,  1.08s/it]2026-02-27 15:56:15.572 | INFO     | __main__:run_batch:240 - [17/20] Processing JNJ...
+2026-02-27 15:56:15.572 | INFO     | __main__:run:187 - [JNJ] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:15.629 | DEBUG    | __main__:needs_update:169 - JNJ: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:15.630 | INFO     | __main__:run:190 - [JNJ] Current-quarter data found — skipping scrape
+2026-02-27 15:56:15.632 | INFO     | processor:process:443 - Processing JNJ from C:\Users\Seb\AI 2026\data\raw\JNJ\facts.json
+2026-02-27 15:56:16.203 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 8 fiscal years
+2026-02-27 15:56:16.221 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 16 fiscal years
+2026-02-27 15:56:16.226 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 8 fiscal years
+2026-02-27 15:56:16.235 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 5 fiscal years
+2026-02-27 15:56:16.254 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 13 fiscal years
+2026-02-27 15:56:16.262 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 14 fiscal years
+2026-02-27 15:56:16.269 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 16 fiscal years
+2026-02-27 15:56:16.272 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 15 fiscal years
+2026-02-27 15:56:16.273 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 15 fiscal years
+2026-02-27 15:56:16.275 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest', 17 fiscal years
+2026-02-27 15:56:16.276 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 15 fiscal years
+2026-02-27 15:56:16.278 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 15 fiscal years
+2026-02-27 15:56:16.282 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 17 fiscal years
+2026-02-27 15:56:16.284 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'AvailableForSaleSecuritiesCurrent', 11 fiscal years
+2026-02-27 15:56:16.287 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 15 fiscal years
+2026-02-27 15:56:16.290 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 15 fiscal years
+2026-02-27 15:56:16.291 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 15 fiscal years
+2026-02-27 15:56:16.293 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 9 fiscal years
+2026-02-27 15:56:16.294 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 15 fiscal years
+2026-02-27 15:56:16.295 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:16.304 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 16 fiscal years
+2026-02-27 15:56:16.313 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 16 fiscal years
+2026-02-27 15:56:16.597 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\JNJ\financials.parquet (16 KB)
+2026-02-27 15:56:16.659 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\JNJ\kpis.parquet (15 KB)
+2026-02-27 15:56:16.690 | INFO     | processor:process:466 - JNJ: 17 fiscal years (2006–2025), 21 fields extracted, 1 fields missing (NaN)
+2026-02-27 15:56:16.768 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for JNJ (scraped=False)
+2026-02-27 15:56:16.769 | INFO     | __main__:run:194 - [JNJ] Done (skipped_scrape): 17 FY
+2026-02-27 15:56:16.770 | INFO     | __main__:run_batch:246 - [17/20] JNJ: skipped (current-quarter)
+Batch ETL:  85%|########5 | 17/20 [00:17<00:03,  1.12s/it]2026-02-27 15:56:16.771 | INFO     | __main__:run_batch:240 - [18/20] Processing WMT...
+2026-02-27 15:56:16.772 | INFO     | __main__:run:187 - [WMT] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:16.826 | DEBUG    | __main__:needs_update:169 - WMT: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:16.827 | INFO     | __main__:run:190 - [WMT] Current-quarter data found — skipping scrape
+2026-02-27 15:56:16.829 | INFO     | processor:process:443 - Processing WMT from C:\Users\Seb\AI 2026\data\raw\WMT\facts.json
+2026-02-27 15:56:17.321 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 9 fiscal years
+2026-02-27 15:56:17.322 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:17.330 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfRevenue', 18 fiscal years
+2026-02-27 15:56:17.334 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 18 fiscal years
+2026-02-27 15:56:17.341 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 18 fiscal years
+2026-02-27 15:56:17.342 | WARNING  | processor:extract_concept:215 - Field 'interest_expense': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:17.343 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 9 fiscal years
+2026-02-27 15:56:17.344 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 17 fiscal years
+2026-02-27 15:56:17.345 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'LiabilitiesAndStockholdersEquity', 17 fiscal years
+2026-02-27 15:56:17.345 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 17 fiscal years
+2026-02-27 15:56:17.347 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 17 fiscal years
+2026-02-27 15:56:17.349 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 17 fiscal years
+2026-02-27 15:56:17.351 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 17 fiscal years
+2026-02-27 15:56:17.352 | WARNING  | processor:extract_concept:215 - Field 'short_term_investments': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:17.353 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'ReceivablesNetCurrent', 17 fiscal years
+2026-02-27 15:56:17.354 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 17 fiscal years
+2026-02-27 15:56:17.355 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 17 fiscal years
+2026-02-27 15:56:17.357 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 17 fiscal years
+2026-02-27 15:56:17.358 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 17 fiscal years
+2026-02-27 15:56:17.359 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:17.362 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 18 fiscal years
+2026-02-27 15:56:17.367 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 18 fiscal years
+2026-02-27 15:56:17.509 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\WMT\financials.parquet (16 KB)
+2026-02-27 15:56:17.544 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\WMT\kpis.parquet (15 KB)
+2026-02-27 15:56:17.558 | INFO     | processor:process:466 - WMT: 18 fiscal years (2008–2025), 18 fields extracted, 4 fields missing (NaN)
+2026-02-27 15:56:17.601 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for WMT (scraped=False)
+2026-02-27 15:56:17.601 | INFO     | __main__:run:194 - [WMT] Done (skipped_scrape): 18 FY
+2026-02-27 15:56:17.602 | INFO     | __main__:run_batch:246 - [18/20] WMT: skipped (current-quarter)
+Batch ETL:  90%|######### | 18/20 [00:18<00:02,  1.03s/it]2026-02-27 15:56:17.603 | INFO     | __main__:run_batch:240 - [19/20] Processing PG...
+2026-02-27 15:56:17.603 | INFO     | __main__:run:187 - [PG] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:17.628 | DEBUG    | __main__:needs_update:169 - PG: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:17.628 | INFO     | __main__:run:190 - [PG] Current-quarter data found — skipping scrape
+2026-02-27 15:56:17.629 | INFO     | processor:process:443 - Processing PG from C:\Users\Seb\AI 2026\data\raw\PG\facts.json
+2026-02-27 15:56:17.836 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'Revenues', 12 fiscal years
+2026-02-27 15:56:17.838 | WARNING  | processor:extract_concept:215 - Field 'gross_profit': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:17.839 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfGoodsAndServicesSold', 9 fiscal years
+2026-02-27 15:56:17.848 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 18 fiscal years
+2026-02-27 15:56:17.858 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 18 fiscal years
+2026-02-27 15:56:17.861 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 16 fiscal years
+2026-02-27 15:56:17.864 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 17 fiscal years
+2026-02-27 15:56:17.865 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 18 fiscal years
+2026-02-27 15:56:17.867 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 17 fiscal years
+2026-02-27 15:56:17.868 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest', 19 fiscal years
+2026-02-27 15:56:17.869 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 17 fiscal years
+2026-02-27 15:56:17.870 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 17 fiscal years
+2026-02-27 15:56:17.872 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 13 fiscal years
+2026-02-27 15:56:17.873 | WARNING  | processor:extract_concept:215 - Field 'short_term_investments': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:17.874 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 17 fiscal years
+2026-02-27 15:56:17.875 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 17 fiscal years
+2026-02-27 15:56:17.877 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 17 fiscal years
+2026-02-27 15:56:17.878 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 17 fiscal years
+2026-02-27 15:56:17.879 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 17 fiscal years
+2026-02-27 15:56:17.880 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:17.884 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 18 fiscal years
+2026-02-27 15:56:17.890 | DEBUG    | processor:extract_concept:208 - Field 'capex': using tag 'PaymentsToAcquirePropertyPlantAndEquipment', 18 fiscal years
+2026-02-27 15:56:18.082 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\PG\financials.parquet (16 KB)
+2026-02-27 15:56:18.117 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\PG\kpis.parquet (15 KB)
+2026-02-27 15:56:18.132 | INFO     | processor:process:466 - PG: 19 fiscal years (2007–2025), 19 fields extracted, 3 fields missing (NaN)
+2026-02-27 15:56:18.189 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for PG (scraped=False)
+2026-02-27 15:56:18.189 | INFO     | __main__:run:194 - [PG] Done (skipped_scrape): 19 FY
+2026-02-27 15:56:18.189 | INFO     | __main__:run_batch:246 - [19/20] PG: skipped (current-quarter)
+Batch ETL:  95%|#########5| 19/20 [00:18<00:00,  1.11it/s]2026-02-27 15:56:18.191 | INFO     | __main__:run_batch:240 - [20/20] Processing HD...
+2026-02-27 15:56:18.192 | INFO     | __main__:run:187 - [HD] Starting ETL run (force_refresh=False)
+2026-02-27 15:56:18.223 | DEBUG    | __main__:needs_update:169 - HD: last_downloaded=2026-02-26, current_quarter=True
+2026-02-27 15:56:18.224 | INFO     | __main__:run:190 - [HD] Current-quarter data found — skipping scrape
+2026-02-27 15:56:18.224 | INFO     | processor:process:443 - Processing HD from C:\Users\Seb\AI 2026\data\raw\HD\facts.json
+2026-02-27 15:56:18.402 | DEBUG    | processor:extract_concept:208 - Field 'revenue': using tag 'RevenueFromContractWithCustomerExcludingAssessedTax', 9 fiscal years
+2026-02-27 15:56:18.410 | DEBUG    | processor:extract_concept:208 - Field 'gross_profit': using tag 'GrossProfit', 18 fiscal years
+2026-02-27 15:56:18.413 | DEBUG    | processor:extract_concept:208 - Field 'cogs': using tag 'CostOfRevenue', 18 fiscal years
+2026-02-27 15:56:18.418 | DEBUG    | processor:extract_concept:208 - Field 'operating_income': using tag 'OperatingIncomeLoss', 18 fiscal years
+2026-02-27 15:56:18.427 | DEBUG    | processor:extract_concept:208 - Field 'net_income': using tag 'NetIncomeLoss', 18 fiscal years
+2026-02-27 15:56:18.430 | DEBUG    | processor:extract_concept:208 - Field 'interest_expense': using tag 'InterestExpense', 17 fiscal years
+2026-02-27 15:56:18.436 | DEBUG    | processor:extract_concept:208 - Field 'depreciation_amortization': using tag 'DepreciationDepletionAndAmortization', 18 fiscal years
+2026-02-27 15:56:18.438 | DEBUG    | processor:extract_concept:208 - Field 'total_assets': using tag 'Assets', 17 fiscal years
+2026-02-27 15:56:18.439 | DEBUG    | processor:extract_concept:208 - Field 'total_liabilities': using tag 'Liabilities', 17 fiscal years
+2026-02-27 15:56:18.441 | DEBUG    | processor:extract_concept:208 - Field 'total_equity': using tag 'StockholdersEquity', 19 fiscal years
+2026-02-27 15:56:18.442 | DEBUG    | processor:extract_concept:208 - Field 'current_assets': using tag 'AssetsCurrent', 17 fiscal years
+2026-02-27 15:56:18.443 | DEBUG    | processor:extract_concept:208 - Field 'current_liabilities': using tag 'LiabilitiesCurrent', 17 fiscal years
+2026-02-27 15:56:18.444 | DEBUG    | processor:extract_concept:208 - Field 'cash': using tag 'CashAndCashEquivalentsAtCarryingValue', 19 fiscal years
+2026-02-27 15:56:18.445 | DEBUG    | processor:extract_concept:208 - Field 'short_term_investments': using tag 'AvailableForSaleSecuritiesCurrent', 2 fiscal years
+2026-02-27 15:56:18.446 | DEBUG    | processor:extract_concept:208 - Field 'receivables': using tag 'AccountsReceivableNetCurrent', 17 fiscal years
+2026-02-27 15:56:18.447 | DEBUG    | processor:extract_concept:208 - Field 'inventory': using tag 'InventoryNet', 14 fiscal years
+2026-02-27 15:56:18.448 | DEBUG    | processor:extract_concept:208 - Field 'long_term_debt': using tag 'LongTermDebtNoncurrent', 2 fiscal years
+2026-02-27 15:56:18.449 | DEBUG    | processor:extract_concept:208 - Field 'short_term_debt': using tag 'LongTermDebtCurrent', 2 fiscal years
+2026-02-27 15:56:18.450 | DEBUG    | processor:extract_concept:208 - Field 'accounts_payable': using tag 'AccountsPayableCurrent', 17 fiscal years
+2026-02-27 15:56:18.451 | WARNING  | processor:extract_concept:215 - Field 'shares_outstanding': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:18.454 | DEBUG    | processor:extract_concept:208 - Field 'operating_cash_flow': using tag 'NetCashProvidedByUsedInOperatingActivities', 18 fiscal years
+2026-02-27 15:56:18.454 | WARNING  | processor:extract_concept:215 - Field 'capex': no XBRL tag found in us-gaap namespace
+2026-02-27 15:56:18.636 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\HD\financials.parquet (16 KB)
+2026-02-27 15:56:18.662 | DEBUG    | processor:save_parquet:412 - Parquet written: C:\Users\Seb\AI 2026\data\clean\HD\kpis.parquet (15 KB)
+2026-02-27 15:56:18.674 | INFO     | processor:process:466 - HD: 19 fiscal years (2007–2025), 20 fields extracted, 2 fields missing (NaN)
+2026-02-27 15:56:18.723 | DEBUG    | __main__:_update_metadata:99 - Metadata updated for HD (scraped=False)
+2026-02-27 15:56:18.723 | INFO     | __main__:run:194 - [HD] Done (skipped_scrape): 19 FY
+2026-02-27 15:56:18.724 | INFO     | __main__:run_batch:246 - [20/20] HD: skipped (current-quarter)
+Batch ETL: 100%|##########| 20/20 [00:19<00:00,  1.27it/s]Batch ETL: 100%|##########| 20/20 [00:19<00:00,  1.04it/s]
+2026-02-27 15:56:18.725 | INFO     | __main__:run_batch:257 - Batch complete — success: 0, skipped: 20, failed: 0
+
+Batch complete: 0 success, 20 skipped, 0 failed
+[20260227155545.755000+060] ETL complete. Exit code: 0 
