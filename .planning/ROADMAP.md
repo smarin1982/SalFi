@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Transformation & KPIs** - Processor that normalizes XBRL concepts, handles missing values, and calculates all 20 KPIs into clean Parquet files (completed 2026-02-25)
 - [x] **Phase 3: Orchestration & Batch** - FinancialAgent that coordinates extraction + transformation per ticker, with incremental update logic and batch processing of all 20 base companies (completed 2026-02-26)
 - [x] **Phase 4: Dashboard** - Streamlit app with multi-company KPI comparison charts, temporal filter, dynamic ticker input, and caching (completed 2026-02-26)
-- [ ] **Phase 5: Scheduling** - Quarterly ETL automation via Windows Task Scheduler
+- [x] **Phase 5: Scheduling** - Quarterly ETL automation via Windows Task Scheduler (completed 2026-02-28)
 
 ## Phase Details
 
@@ -94,7 +94,7 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — Create scheduler.bat, quarterly_etl_task.xml, and register_task.bat infrastructure files
-- [ ] 05-02-PLAN.md — Register task via schtasks CLI, trigger test run, human verify log output and Task Scheduler GUI
+- [x] 05-02-PLAN.md — Register task via schtasks CLI, trigger test run, human verify log output and Task Scheduler GUI
 
 ## Progress
 
@@ -107,4 +107,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Transformation & KPIs | 2/2 | Complete    | 2026-02-25 |
 | 3. Orchestration & Batch | 2/3 | Complete    | 2026-02-26 |
 | 4. Dashboard | 3/3 | Complete   | 2026-02-26 |
-| 5. Scheduling | 1/2 | In progress | - |
+| 5. Scheduling | 2/2 | Complete    | 2026-02-28 |

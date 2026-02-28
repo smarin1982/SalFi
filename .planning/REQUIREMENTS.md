@@ -27,7 +27,7 @@
 
 ### Scheduling (SCHED)
 
-- [ ] **SCHED-01**: El sistema ejecuta el ETL completo al inicio de cada trimestre de forma programada vía Windows Task Scheduler o APScheduler (<4.0), actualizando los datos de todas las empresas cargadas
+- [x] **SCHED-01**: El sistema ejecuta el ETL completo al inicio de cada trimestre de forma programada vía Windows Task Scheduler o APScheduler (<4.0), actualizando los datos de todas las empresas cargadas
 
 ### Dashboard (DASH)
 
@@ -84,7 +84,7 @@
 | ORCHS-01 | Phase 3 | Complete |
 | ORCHS-02 | Phase 3 | Complete |
 | ORCHS-03 | Phase 3 | Pending |
-| SCHED-01 | Phase 5 | Pending |
+| SCHED-01 | Phase 5 | Complete (05-02) |
 | DASH-01 | Phase 4 | Complete |
 | DASH-02 | Phase 4 | Complete |
 | DASH-03 | Phase 4 | Complete |
@@ -97,4 +97,4 @@
 
 ---
 *Requirements defined: 2026-02-24*
-*Last updated: 2026-02-26 after 04-01 completion (DASH-04 marked complete)*
+*Last updated: 2026-02-28 after 05-02 completion (SCHED-01 marked complete — all v1 requirements done)*
