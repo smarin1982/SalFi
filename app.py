@@ -221,12 +221,62 @@ def format_delta(delta_pct: float | None) -> str | None:
 if "loaded_tickers" not in st.session_state:
     st.session_state.loaded_tickers = ["HD", "PG"]
 
-# ── Page header ───────────────────────────────────────────────────────────────
-st.title("S&P 500 KPI Dashboard")
-st.caption("Datos oficiales 10-K · SEC EDGAR · Años fiscales 2007–2025")
+# ── Page header bar ───────────────────────────────────────────────────────────
+st.markdown("""
+<div style="
+    background: linear-gradient(90deg, #1f4e79 0%, #2d6a9f 100%);
+    padding: 1.2rem 2rem;
+    border-radius: 10px;
+    margin-bottom: 1.2rem;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+">
+    <h1 style="color: #ffffff; margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: 0.02em;">
+        S&P 500 KPI Dashboard
+    </h1>
+    <p style="color: #b8d4f0; margin: 0.3rem 0 0 0; font-size: 0.85rem; letter-spacing: 0.05em;">
+        Datos oficiales 10-K &nbsp;·&nbsp; SEC EDGAR &nbsp;·&nbsp; Años fiscales 2007–2025
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
-# Company selector — horizontal radio at top (Bloomberg-style tabs feel)
-# Options are dynamic: all loaded tickers + "Comparativo"
+# ── Ticker search — main area, below header ────────────────────────────────
+with st.container():
+    st.markdown("""
+    <p style="font-size:0.8rem; color:#666; margin-bottom:0.3rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">
+        Agregar compañía al análisis
+    </p>
+    """, unsafe_allow_html=True)
+    col_input, col_btn, col_msg = st.columns([2, 0.6, 3])
+    with col_input:
+        new_ticker_input = st.text_input(
+            "Ticker",
+            placeholder="Ej: AAPL, MSFT, TSLA…",
+            key="new_ticker_input",
+            label_visibility="collapsed",
+        ).upper().strip()
+    with col_btn:
+        load_clicked = st.button("Cargar", key="load_ticker_btn", use_container_width=True)
+    with col_msg:
+        if load_clicked and new_ticker_input:
+            if new_ticker_input in st.session_state.loaded_tickers:
+                st.info(f"{new_ticker_input} ya está cargado.")
+            else:
+                with st.spinner(f"Ejecutando ETL para {new_ticker_input}…"):
+                    try:
+                        import agent as financial_agent
+                        fa = financial_agent.FinancialAgent(new_ticker_input)
+                        fa.run()
+                        st.session_state.loaded_tickers.append(new_ticker_input)
+                        st.cache_data.clear()
+                        st.success(f"✓ {new_ticker_input} cargado.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Error: {exc}")
+
+st.divider()
+
+# Company selector — horizontal radio
 company_mode = st.radio(
     label="Compañía",
     options=st.session_state.loaded_tickers + ["Comparativo"],
@@ -238,9 +288,23 @@ st.divider()
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## Filtros")
+    # Sidebar header
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #1f4e79 0%, #2d6a9f 100%);
+        padding: 0.9rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        text-align: center;
+    ">
+        <p style="color:#ffffff; margin:0; font-size:0.75rem; letter-spacing:0.1em; text-transform:uppercase; font-weight:700;">
+            Panel de Control
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Year range slider (DASH-02)
+    st.markdown("**Rango de años**")
     year_range: tuple[int, int] = st.slider(
         "Rango de años",
         min_value=2007,
@@ -248,17 +312,32 @@ with st.sidebar:
         value=(2015, 2025),
         step=1,
         help="Restringe todos los gráficos al rango seleccionado",
+        label_visibility="collapsed",
     )
 
     st.markdown("---")
-    st.markdown("## KPIs (máx. 5)")
+
+    # KPI section title
+    st.markdown("""
+    <div style="
+        background: #f0f4f8;
+        border-left: 4px solid #1f4e79;
+        padding: 0.5rem 0.8rem;
+        border-radius: 0 6px 6px 0;
+        margin-bottom: 0.8rem;
+    ">
+        <p style="margin:0; font-size:0.8rem; font-weight:700; color:#1f4e79; letter-spacing:0.05em; text-transform:uppercase;">
+            Indicadores KPI
+        </p>
+        <p style="margin:0; font-size:0.7rem; color:#666;">Selecciona hasta 5</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     # KPI selection: one expander per category, per-group multiselect
-    # Global 5-KPI enforcement: recalculate `remaining` after each group
     selected_kpis: list[str] = []
     for group_name, group_keys in KPI_GROUPS.items():
         remaining = MAX_KPIS - len(selected_kpis)
-        expanded = group_name == "Rentabilidad"  # Default open
+        expanded = group_name == "Rentabilidad"
         with st.expander(group_name, expanded=expanded):
             group_selected = st.multiselect(
                 label=group_name,
@@ -273,31 +352,6 @@ with st.sidebar:
 
     if len(selected_kpis) == 0:
         st.caption("Selecciona al menos un KPI para ver los datos.")
-
-    st.markdown("---")
-    st.markdown("## Agregar compañía")
-
-    # Dynamic ticker input (DASH-03)
-    new_ticker_input = st.text_input(
-        "Ticker S&P 500",
-        placeholder="Ej: AAPL",
-        key="new_ticker_input",
-    ).upper().strip()
-    if st.button("Cargar", key="load_ticker_btn") and new_ticker_input:
-        if new_ticker_input in st.session_state.loaded_tickers:
-            st.info(f"{new_ticker_input} ya está cargado.")
-        else:
-            with st.spinner(f"Ejecutando ETL para {new_ticker_input}…"):
-                try:
-                    import agent as financial_agent
-                    fa = financial_agent.FinancialAgent(new_ticker_input)
-                    fa.run()
-                    st.session_state.loaded_tickers.append(new_ticker_input)
-                    st.cache_data.clear()  # Invalidate so new parquet is read
-                    st.success(f"✓ {new_ticker_input} cargado correctamente.")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Error al cargar {new_ticker_input}: {exc}")
 
 
 # ── Chart builders ────────────────────────────────────────────────────────────
