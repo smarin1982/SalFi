@@ -73,7 +73,7 @@ Each task was committed atomically:
 
 3. **Task 3: Human verification — Task Scheduler GUI + ETL log confirmed** - Approved 2026-02-28 (human-verify checkpoint)
 
-**Plan metadata:** (to be added in final commit)
+**Plan metadata:** `defd3ab` (docs: complete scheduling plan — Phase 5 done, all 5 phases complete)
 
 ## Files Created/Modified
 
