@@ -2,56 +2,34 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-24)
+See: .planning/PROJECT.md (updated 2026-03-03)
 
-**Core value:** Un analista debe poder comparar la salud financiera de cualquier empresa del S&P 500 en segundos — sin hacer scraping manual ni esperar cargas — con 10 años de historia y 20 KPIs calculados automáticamente.
-**Current focus:** PROJECT COMPLETE — All 5 phases done
+**Core value:** Un analista debe poder analizar la salud financiera de cualquier empresa — S&P 500 o LATAM — en segundos, con KPIs calculados automáticamente, red flags detectadas y un reporte ejecutivo listo para presentar.
+**Current focus:** Milestone v2.0 — LATAM Financial Analysis Pipeline (defining requirements)
 
 ## Current Position
 
-Phase: 5 of 5 (Scheduling) — COMPLETE
-Plan: 2 of 2 in current phase — COMPLETE
-Status: ALL PHASES COMPLETE — AI2026_QuarterlyETL registered in Windows Task Scheduler, test run confirmed exit code 0, human verification approved 2026-02-28. Full pipeline: scraper -> processor -> agent -> dashboard -> scheduler all verified.
-Last activity: 2026-02-28 — Plan 05-02 complete: Task AI2026_QuarterlyETL registered (Status: Ready, Next: 4/1/2026 6:00 AM), test run triggered (logs/etl_20260227.log, exit 0, all 20 tickers skipped as current-quarter), human verification approved all 3 checkpoints. SCHED-01 satisfied.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements for milestone v2.0
+Last activity: 2026-03-03 — Milestone v2.0 started
 
-Progress: [██████████] 100% (All 5 phases complete)
+Progress: [░░░░░░░░░░] 0% (0 phases complete)
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 7
+**v1.0 Velocity (reference):**
+- Total plans completed: 9
 - Average duration: 4 min
-- Total execution time: 0.14 hours
+- Total execution time: ~0.28 hours
 
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1. Data Extraction | 2/2 | 7 min | 4 min |
-| 2. Transformation & KPIs | 2/2 | 10 min | 5 min |
-| 3. Orchestration & Batch | 3/3 | ~15 min | 5 min |
-| 4. Dashboard | 3/4 | 10 min | 3.3 min |
-
-**Recent Trend:**
-- Last 5 plans: 2 min, 5 min, 5 min, 3 min, 2 min
-- Trend: stable
-
-*Updated after each plan completion*
-| Phase 02 P02 | 5 | 2 tasks | 1 files |
-| Phase 03 P01 | 8 | 2 tasks | 3 files |
-| Phase 03 P02 | 5 | 2 tasks | 2 files |
-| Phase 04 P01 | 3 | 2 tasks | 2 files |
-| Phase 04 P02 | 2 | 2 tasks | 1 files |
-| Phase 04 P03 | 5 | 2 tasks | 0 files |
-| Phase 05 P01 | 8 | 3 tasks | 3 files |
-| Phase 05 P02 | 8 | 3 tasks | 1 files |
+**v2.0:**
+- Plans completed: 0
+- Status: Not started
 
 ## Accumulated Context
 
-### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+### Decisions (v1.0 — preserved)
 
 - [Setup]: Parquet for local storage — faster reads, avoids re-scraping, survives schema migrations
 - [Setup]: edgartools for EDGAR extraction — XBRL-native, returns DataFrames, SEC rate limiting built in
@@ -60,49 +38,41 @@ Recent decisions affecting current work:
 - [Setup]: Outliers preserved as real data — no artificial smoothing
 - [01-01]: edgartools imported as `edgar` in Python code (pip name differs from import name)
 - [01-01]: EDGAR_IDENTITY format is "Name email@domain" per SEC User-Agent policy
-- [01-01]: data/clean/ added now to avoid deviation in Plan 02 (Phase 2 Parquet output path)
-- [01-02]: set_rate_limit() removed in edgartools 5.x — use os.environ["EDGAR_RATE_LIMIT_PER_SEC"] = "8" before set_identity()
-- [01-02]: BRK.B resolved via "BRK-B" key in SEC tickers.json — SEC uses dash, not dot; resolve_cik() fallback handles transparently
-- [01-02]: Direct httpx.get() for companyfacts endpoint — guarantees verbatim JSON storage vs. edgartools ORM
-- [Phase 02-01]: shares_outstanding added as 22nd CONCEPT_MAP field — plan inconsistency (21 fields listed, 22 asserted); needed for EPS KPI
-- [Phase 02-01]: fiscal_year derived from end-date year not fy field — fy is filing year, comparative entries all share fy of filing year
-- [Phase 02]: safe_divide uses denominator.replace(0, np.nan) — never produces inf
+- [01-02]: set_rate_limit() removed in edgartools 5.x — use os.environ["EDGAR_RATE_LIMIT_PER_SEC"] = "8"
+- [01-02]: BRK.B resolved via "BRK-B" key in SEC tickers.json
+- [01-02]: Direct httpx.get() for companyfacts endpoint
+- [Phase 02-01]: shares_outstanding added as 22nd CONCEPT_MAP field
+- [Phase 02-01]: fiscal_year derived from end-date year not fy field
+- [Phase 02]: safe_divide uses denominator.replace(0, np.nan)
 - [Phase 02]: save_parquet unlinks before rename on Windows (NTFS atomic rename requirement)
-- [Phase 03-01]: KPI_REGISTRY is module-level dict — adding one entry causes new KPI in kpis.parquet with no other file changes (ORCHS-01)
-- [Phase 03-01]: loguru replaces stdlib logging in processor.py — consistent with scraper.py pattern
-- [Phase 03-01]: _col() and _cagr_10y() are module-level private functions — required for lambda scope in KPI_REGISTRY
-- [Phase 03-02]: FinancialAgent.run() calls processor.process() even on skipped_scrape — picks up KPI_REGISTRY changes without re-scraping
-- [Phase 03-02]: metadata last_downloaded preserved when scraped=False — skipped run does not reset staleness clock
-- [Phase 03-02]: GOOG and GOOGL both in BASE_TICKERS; share CIK but produce separate files — both valid dashboard tickers
-- [Phase 04-01]: format_kpi() percentage: no cap on values >100% (HD ROE legitimately 222.9%); negative values get "-" prefix naturally
-- [Phase 04-01]: pio.templates.default set at module level — all dashboard figures inherit plotly_white without per-figure parameter
-- [Phase 04-01]: load_kpis() returns empty DataFrame on missing file — caller (Plan 04-02) handles df.empty before rendering
-- [Phase 04-01]: streamlit 1.54.0 pins pandas to 2.3.3 (downgrade from 3.0.1); no pandas 3.x APIs used in dashboard code
-- [Phase 04-02]: width='stretch' used on all st.plotly_chart calls — use_container_width deprecated in Streamlit 1.40+, removed 2025-12-31
-- [Phase 04-02]: 5-KPI layout uses two separate st.columns() calls (2 then 3) — produces stacked 2+3 rows as designed
-- [Phase 04-02]: remaining = MAX_KPIS - len(selected_kpis) recalculated per expander group — global 5-KPI cap across all groups
-- [Phase 04-02]: st.cache_data.clear() after FinancialAgent.run() — new parquet immediately readable without TTL wait
-- [Phase 04-02]: agent module imported lazily inside button handler — no ETL initialization on page load
-- [Phase 04-03]: Human approval required before Phase 4 marked complete — dashboard is CFO-facing and must be visually verified in a real browser
-- [Phase 05-01]: InteractiveToken logon type used in task XML — required to access C:\Users\Seb\miniconda3\ and .env; S4U/Password create non-interactive sessions that fail
-- [Phase 05-01]: No conda activate in scheduler.bat — Task Scheduler sterile sessions do not run conda init; absolute C:\Users\Seb\miniconda3\python.exe used instead
-- [Phase 05-01]: StartBoundary=2026-04-01 — Jan 1 2026 already past; using past StartBoundary with StartWhenAvailable=true would trigger immediately on registration
-- [Phase 05-01]: wmic os get localdatetime for YYYYMMDD log filename — %DATE% format varies by Windows locale; wmic produces locale-independent 14-digit datetime string
-- [Phase 05-scheduling]: schtasks called via powershell.exe -Command to avoid bash path expansion treating /create as a Unix path
-- [Phase 05-02]: Task 1+2 combined into one commit — task registration is Windows registry state not a filesystem artifact; log file (Task 2) provides the only commitable evidence
-- [Phase 05-02]: Human verification approved 2026-02-28 — Task Scheduler shows Ready, logs/etl_20260227.log exit 0, SCHED-01 satisfied
+- [Phase 03-01]: KPI_REGISTRY is module-level dict
+- [Phase 03-01]: loguru replaces stdlib logging in processor.py
+- [Phase 03-02]: FinancialAgent.run() calls processor.process() even on skipped_scrape
+- [Phase 03-02]: GOOG and GOOGL both in BASE_TICKERS
+- [Phase 04-01]: format_kpi() percentage: no cap on values >100%
+- [Phase 04-01]: pio.templates.default set at module level
+- [Phase 04-02]: width='stretch' on all st.plotly_chart calls
+- [Phase 04-02]: st.cache_data.clear() after FinancialAgent.run()
+- [Phase 05-01]: InteractiveToken logon type for Task Scheduler
+- [Phase 05-01]: No conda activate in scheduler.bat
+- [Phase 05-02]: Task AI2026_QuarterlyETL registered — Status: Ready, Next: 4/1/2026 6:00 AM
+
+### Decisions (v2.0 — accumulating)
+
+(None yet — added as phases execute)
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- [Phase 2]: Financial sector companies (JPM, BRK.B) use different GAAP statement structures — may require `CONCEPT_MAP_FINANCIALS` variant; validate in Phase 2 against real data
-- [Phase 5]: APScheduler 4.x release status unknown (knowledge cutoff Aug 2025; was in alpha then) — run `pip index versions apscheduler` before Phase 5 planning and pin to `< 4.0` by default
+- [v2.0]: pytesseract requires Tesseract binary installed on Windows — verify before Phase that uses OCR
+- [v2.0]: weasyprint requires GTK libraries on Windows — validate install before PDF export phase
+- [v2.0]: Playwright requires `playwright install chromium` after pip install
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Completed 05-02-PLAN.md — project complete (all 5 phases done)
+Last session: 2026-03-03
+Stopped at: Milestone v2.0 initialization — requirements and roadmap pending
 Resume file: None
