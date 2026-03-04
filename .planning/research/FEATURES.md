@@ -1,196 +1,267 @@
-# Features Research: SP500 Financial Dashboard
+# Feature Research: LATAM Financial Analysis Pipeline (v2.0)
 
-> Research type: Project Research — Features dimension
-> Milestone: Greenfield
-> Question: What features do professional financial analysis dashboards have? Table stakes vs differentiators for multi-company S&P 500 comparison using 10-K data.
-> Date: 2026-02-24
+**Domain:** Multi-source financial data pipeline — LATAM corporate financial reports (web + PDF) with currency normalization, KPI analysis, red flags, and executive reporting
+**Researched:** 2026-03-03
+**Confidence:** MEDIUM — table stakes and complexity well-grounded; ARS/currency fallback is LOW confidence pending API validation; regulatory portal structure is LOW confidence (portals differ by country)
 
----
-
-## Table Stakes
-
-Features users expect as baseline. Without these, they will not trust the tool or will abandon it quickly.
-
-### Data Integrity and Sourcing
-
-| Feature | Description | Complexity |
-|---|---|---|
-| Source attribution | Every number shows where it came from (e.g., "10-K FY2023, filed 2024-02-15") | Low |
-| Filing date visibility | Users can see when data was filed, not just the fiscal year | Low |
-| Clearly labeled fiscal year vs calendar year | Many S&P 500 companies have non-December fiscal year ends | Low |
-| Restatement handling | When a company restates financials, old vs. new values must be distinguishable | Medium |
-| GAAP-only labeling | For 10-K sourced data, be explicit that these are audited GAAP figures | Low |
-
-**Why this is table stakes:** Financial professionals will immediately cross-check a few numbers against their known sources. One wrong number kills trust in the entire tool. SEC EDGAR is the authoritative source, so data provenance from EDGAR is itself a trust signal.
-
-### Core Financial Statements (from 10-K)
-
-| Feature | Description | Complexity |
-|---|---|---|
-| Income Statement | Revenue, gross profit, operating income, net income, EPS (basic + diluted) | Low |
-| Balance Sheet | Assets, liabilities, equity, cash, debt | Low |
-| Cash Flow Statement | Operating, investing, financing cash flows; free cash flow | Low |
-| At least 5 years of history | Trend analysis requires multi-year context; 10 years is better | Low (data storage) |
-| Per-share normalization | Revenue/share, earnings/share, book value/share | Low |
-
-### Key Derived Metrics (calculated from 10-K data)
-
-| Feature | Description | Complexity |
-|---|---|---|
-| Profitability ratios | Gross margin %, operating margin %, net margin %, ROE, ROA, ROIC | Low |
-| Leverage ratios | Debt/equity, debt/EBITDA, interest coverage | Low |
-| Liquidity ratios | Current ratio, quick ratio | Low |
-| Growth rates | YoY and CAGR for revenue, earnings, free cash flow | Low |
-| Valuation multiples | P/E, P/B, P/S, EV/EBITDA (requires market cap — see dependency note) | Medium |
-
-### Multi-Company Comparison
-
-| Feature | Description | Complexity |
-|---|---|---|
-| Side-by-side metric table | Select 2-10 companies, pick a metric, see values in columns | Low-Medium |
-| Sector/industry filtering | Filter S&P 500 universe by GICS sector or industry | Low |
-| Sortable tables | Sort companies by any metric (highest revenue, best margin, etc.) | Low |
-| Company search | Find a company by ticker or name | Low |
-
-### Visualization
-
-| Feature | Description | Complexity |
-|---|---|---|
-| Time series line charts | Plot any metric over time for one or more companies | Low-Medium |
-| Bar/column charts | Year-over-year comparison, single metric across companies | Low |
-| Readable, clean defaults | Charts must be interpretable without customization | Low |
-| Axis labels and units | Dollar amounts in $M or $B with clear labels; percentages labeled as % | Low |
+> **Milestone context:** This is a subsequent milestone. The US pipeline (SEC EDGAR, 20 KPIs, Streamlit dashboard, Task Scheduler) is fully built. All features below are net-new for v2.0 and must integrate with the existing dashboard and KPI engine.
 
 ---
 
-## Differentiators
+## Feature Landscape
 
-Features that elevate the tool from "fine" to "genuinely useful for professionals." These are where the tool can earn a reputation.
+### Table Stakes (Users Expect These)
 
-### Analytical Power
+Features that a professional analyst expects when using a LATAM financial analysis tool. Missing any of these breaks trust or makes the pipeline non-functional.
 
-| Feature | Description | Complexity | Why it Differentiates |
-|---|---|---|---|
-| Normalized comparison (% of revenue) | Show all income statement items as % of revenue for true peer comparison | Low | Removes size distortion; essential for cross-company analysis |
-| Indexed growth charts | Set any year as 100, show relative growth trajectories | Low-Medium | Reveals compounding differences Bloomberg shows this but buries it |
-| Cohort comparison by metric range | "Show all S&P 500 companies with gross margin > 60% and revenue growth > 10% YoY" | Medium | Screener capability; this is what analysts actually want |
-| Scatter plots (two-metric correlation) | Plot P/E vs. earnings growth, or margin vs. revenue growth, across the universe | Medium | Reveals valuation outliers and sector clusters |
-| Waterfall charts for margin analysis | Show where margin is lost from gross to operating to net | Medium | Used in earnings analysis; rarely available in free tools |
-| Segment-level data | Revenue/profit by business segment where disclosed in 10-K | High | Differentiates product lines; critical for conglomerates |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Web scraping to locate financial PDFs on corporate / regulatory portals | Core data acquisition — without it there is no LATAM pipeline | HIGH | Playwright handles JS-heavy portals; must handle login-free public portals; Supersalud, SMV, SFC, CMF, CNV, CNBV have different site structures |
+| PDF text extraction (digital PDFs) | Most formal LATAM financial reports are digital PDFs (IFRS-compliant, audited) | MEDIUM | pdfplumber v0.11.8+ handles table detection including dashed lines; edge_min_length_prefilter solves subtle border issues |
+| OCR fallback for scanned/image PDFs | Significant fraction of LATAM corporate PDFs are scanned or image-embedded | HIGH | pdfplumber alone fails on images; pymupdf + pytesseract required; accuracy 95-99% with good scans, degrades with poor quality |
+| Balance sheet, P&L, and cash flow extraction | Three core statements are minimum for any KPI calculation | HIGH | Tables vary by layout: vertical vs horizontal, IFRS labels vs local labels, Spanish vs Portuguese column headers |
+| Currency normalization to USD | KPI comparison across COP/PEN/CLP/ARS/MXN requires a common denomination | MEDIUM | frankfurter covers MXN only; COP, PEN, CLP, ARS require fallback API (exchangerate.host or equivalent); ARS has severe inflation/devaluation complexity |
+| Company identification by name + country | LATAM companies are not ticker-identified; NIT (CO), RUC (PE), RUT (CL), CUIT (AR), RFC (MX) are the canonical IDs | MEDIUM | Registry maps company name + country → regulatory ID → portal search URL |
+| KPI calculation reusing the existing 20-KPI engine | Analysts expect the same metrics they see for S&P 500 companies | MEDIUM | The existing processor.py engine must accept normalized USD figures from LATAM pipeline; adapter pattern required |
+| LATAM section visible in the existing Streamlit dashboard | Single unified experience — two tabs or sections, not two apps | MEDIUM | app.py must gain a routing structure; LATAM section displays company name, country, source PDF, KPI cards |
+| Red flags with severity classification | Any due diligence or credit analysis tool flags anomalies; severity (Alta/Media/Baja) is expected in LATAM professional context | MEDIUM | Thresholds based on healthcare sector benchmarks; current ratio < 1.0 is Alta, 1.0–1.5 is Media; interest coverage < 1.5 is Alta |
+| Source attribution per extracted figure | Analysts need to verify numbers against the source PDF; trust breaks without this | LOW | Display: filename, page number, extraction method (digital/OCR), period, currency original + converted |
+| IFRS vs local GAAP label awareness | Colombia, Chile, Peru, Mexico are IFRS-mandatory for regulated entities; Argentina allows local GAAP for SMEs | MEDIUM | Label the accounting standard on each company card; do not silently mix standards in comparisons |
 
-### Data Context and Intelligence
+### Differentiators (Competitive Advantage)
 
-| Feature | Description | Complexity | Why it Differentiates |
-|---|---|---|---|
-| Anomaly flagging | Highlight when a metric is a statistical outlier vs. peer group or own history | Medium | Saves analyst time; draws attention to what matters |
-| Trend direction indicators | Simple up/down/flat icons on key metrics, 3-year and 5-year view | Low | Scannable; reduces cognitive load |
-| Peer group auto-suggestion | When viewing a company, suggest its closest peers by sector + size | Medium | Reduces setup friction significantly |
-| Footnote / disclosure excerpts | Pull key disclosures from 10-K text (risk factors, accounting changes) | High | Raw EDGAR text is hard to navigate; surfacing it adds real value |
+Features that elevate this tool above a manual "download PDF and enter numbers in Excel" workflow — which is what LATAM analysts currently do.
 
-### Export and Integration
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Regulatory portal web search via duckduckgo-search | Automatically finds the right regulatory source (Supersalud, SMV, SFC, CMF, CNV, CNBV) for a given company | MEDIUM | User inputs company name + country; system queries regulatory portal and returns direct PDF links; reduces discovery from hours to seconds |
+| URL input as alternative to search | Expert users know the exact corporate or regulatory URL; accepting URL input makes the tool immediately usable without portal search | LOW | st.text_input() → Playwright navigates directly; bypasses duckduckgo-search step |
+| Period average FX conversion (not spot) | Using year-end spot rate distorts historical comparisons; period average is the correct method for income statement items | MEDIUM | Requires querying daily rates for the full fiscal year and computing mean; separate logic for balance sheet (year-end) vs P&L (period average) |
+| Executive PDF report with download button | Analysts produce deliverables; a formatted PDF export converts the tool from "analysis aid" to "deliverable generator" | HIGH | weasyprint converts HTML/CSS to PDF; Streamlit st.download_button() serves it; Plotly charts must be rendered as static images (weasyprint does not execute JS) |
+| Severity-coded red flags with LATAM context | Generic thresholds (US healthcare benchmarks) misfire on LATAM companies; severity labels in Spanish (Alta/Media/Baja) match professional context | MEDIUM | Thresholds calibrated per sector and country where possible; flag: operating margin < 3% (Media), < 0% (Alta); current ratio < 1.0 (Alta) |
+| Multi-year trend display for LATAM companies | Most LATAM tools show only the latest year; multi-year trend reveals deterioration or recovery | MEDIUM | Parquet store (same format as US pipeline) enables time-series display; requires consistent re-extraction across years |
+| Extraction confidence score per statement | Shows analyst how reliable the extracted figures are (digital PDF = high, clean OCR = medium, degraded scan = low) | MEDIUM | Drives trust: low-confidence extractions shown with visual warning; analyst knows to manually verify |
 
-| Feature | Description | Complexity | Why it Differentiates |
-|---|---|---|---|
-| CSV / Excel export of any table or chart data | Professionals do their own modeling; they need the numbers | Low | Macrotrends does this; it's why analysts use it despite ugly UI |
-| Reproducible data snapshots | Export with filing dates so the snapshot is auditable | Low | Critical for compliance and research documentation |
-| Python API / Jupyter notebook integration | For a Python-based tool, expose data as a DataFrame or via a clean API | Medium | Koyfin lacks this; open-source tools like financedatabase provide it; huge differentiator for quant users |
+### Anti-Features (Commonly Requested, Often Problematic)
 
-### User Experience
-
-| Feature | Description | Complexity | Why it Differentiates |
-|---|---|---|---|
-| Persistent custom comparison sets | Save "my FAANG comparison" and return to it | Low-Medium | Session state; Bloomberg does this; free tools do not |
-| Keyboard shortcuts for navigation | Switch companies, metrics, time periods without mouse | Medium | Power-user adoption; differentiates for frequent use |
-| URL-shareable views | A specific comparison (company set + metric + chart type) generates a shareable link | Low-Medium | Critical for team workflows; Koyfin added this late |
-| Dark mode | Standard expectation for terminal-style finance tools | Low | Table stakes among technical users; differentiator vs. Macrotrends |
-
----
-
-## Anti-Features
-
-Things to deliberately NOT build. Each adds complexity, maintenance burden, or scope creep without meaningful value for the stated use case (S&P 500 comparison using 10-K data).
-
-### Real-Time and Near-Real-Time Data
-
-| Anti-Feature | Why to Avoid |
-|---|---|
-| Live stock price feeds | 10-K data is annual/quarterly; mixing real-time prices requires data licensing, API costs, and rate limiting. The tool's value is fundamental analysis, not trading. |
-| Intraday charts or price history | This is Bloomberg/Refinitiv territory. It distracts from the 10-K fundamentals story. |
-| Earnings call transcripts or NLP | High complexity, requires separate data source, scope creep. Not 10-K data. |
-| Analyst consensus estimates | Forward-looking estimates are not in 10-K filings. Requires paid data (Bloomberg, FactSet). |
-
-### Social and Community Features
-
-| Anti-Feature | Why to Avoid |
-|---|---|
-| Comments or discussion threads | Moderation overhead; not how professionals consume financial data. |
-| User ratings or crowdsourced data | Undermines the "authoritative EDGAR source" trust signal. |
-| Watchlist notifications / alerts | Push infrastructure complexity; out of scope for a comparison dashboard. |
-
-### Excessive Customization
-
-| Anti-Feature | Why to Avoid |
-|---|---|
-| Custom formula builder (DIY metric creation) | High complexity, high support burden, low adoption. Professionals will use Excel for this. |
-| Drag-and-drop dashboard layout | Looks impressive in demos; adds little analytical value; significant frontend complexity. |
-| Custom color themes beyond light/dark | Engineering distraction with zero analytical payoff. |
-| AI-generated narrative summaries ("Company X has shown...") | LLM output is not auditable; analysts will not trust AI prose for financial conclusions. |
-
-### Data Scope Creep
-
-| Anti-Feature | Why to Avoid |
-|---|---|
-| Non-S&P 500 companies (global equities, small caps) | EDGAR coverage for foreign filers is inconsistent; normalization becomes very hard. |
-| 10-Q (quarterly) filings alongside 10-K | Quarterly XBRL tagging is less consistent; doubles data pipeline complexity. Start with 10-K only. |
-| Non-GAAP / adjusted metrics | Companies define these differently; cross-company comparison on non-GAAP is misleading. |
-| Macro economic overlays (GDP, rates) | Different data source, different cadence, different normalization. Scope creep. |
-| ESG / sustainability metrics | 10-K ESG disclosures are inconsistent pre-2024; not XBRL tagged; requires text extraction. |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Automatic login to gated regulatory portals | Some regulatory portals require registration (e.g., CMF Chile login) | Credential storage risk; session management complexity; legal gray area for automation | Flag gated portals to user; provide direct URL instructions; manual download fallback |
+| Real-time or quarterly LATAM extraction | US pipeline has quarterly scheduling; natural to replicate for LATAM | LATAM companies publish annually (not quarterly on SEC schedule); scraping quarterly adds noise from interim/unaudited reports | Keep LATAM on annual cycle; note publication lags (LATAM companies often file 3-6 months after fiscal year end) |
+| ARS inflation adjustment | Argentine peso inflation ~32% monthly in 2025; nominal figures seem meaningless | Inflation adjustment requires a deflator series (IPC) and introduces methodology disputes; project scope explicitly excludes inflation adjustments | Show nominal USD figures; note the devaluation context in a dashboard warning banner for ARS companies |
+| Auto-translation of PDF content | PDFs in Spanish/Portuguese; tempting to translate labels for uniformity | Translation adds hallucination risk for financial terminology; "Resultados del Ejercicio" ≠ "Net Income" in all accounting frameworks | Map known Spanish/Portuguese financial labels to standard English keys via lookup dictionary; do not LLM-translate |
+| Generic PDF scraping beyond financial statements | Some portals expose audit reports, ESG reports, governance filings | Out-of-scope content bloats storage and confuses extraction; audit report tables look like financial statement tables | Filter by filename pattern (estados financieros, balance, informe financiero) and file size; skip non-financial documents |
+| Cross-company LATAM comparison screener | US pipeline has a multi-company comparison view; natural to replicate | LATAM companies are not a homogeneous universe; mixing Colombian healthcare EPS with Chilean AFP is misleading | Provide single-company deep analysis; allow explicit side-by-side when user selects same-country same-sector companies |
+| Stock price / market cap for LATAM companies | Most target companies are not publicly listed; no ticker available | Data simply does not exist for private/mixed companies; valuation multiples (P/E, EV/EBITDA) are not computable | Display only computable KPIs from financial statements; clearly label that valuation multiples are unavailable for non-listed entities |
 
 ---
 
 ## Feature Dependencies
 
-Understanding which features must be built before others become possible.
-
 ```
-[1] EDGAR Data Pipeline (fetch + parse 10-K XBRL)
-        |
-        v
-[2] Normalized Data Store (company + fiscal_year + metric_name + value + source_filing)
-        |
-        +---> [3a] Single-company time series view
-        |
-        +---> [3b] Multi-company comparison table (depends on 2+ companies in store)
-        |
-        +---> [3c] Derived metrics (margins, ratios, growth rates) — depends on [2]
-                    |
-                    +---> [4a] Sector screener / filter — depends on [3c] + sector taxonomy
-                    |
-                    +---> [4b] Scatter plot / correlation view — depends on [3c] cross-company
-                    |
-                    +---> [4c] Anomaly flagging — depends on [3c] statistical distribution
-                    |
-                    +---> [5] Cohort / peer comparison — depends on [4a] + [3c]
+[EXISTING] 20-KPI Engine (processor.py)
+    └──adapter──> [NEW] LATAM KPI Adapter
+                      └──requires──> [NEW] Normalized USD Financial Data (Parquet)
+                                         └──requires──> [NEW] Currency Normalizer (FX API)
+                                         └──requires──> [NEW] PDF Extractor (pdfplumber + pytesseract + pymupdf)
+                                                             └──requires──> [NEW] Web Scraper (Playwright)
+                                                             └──requires──> [NEW] Company Registry LATAM
+
+[NEW] Company Registry LATAM
+    └──feeds──> [NEW] Regulatory Web Search (duckduckgo-search)
+                    └──feeds──> [NEW] Web Scraper (Playwright) → PDF download
+
+[NEW] LATAM KPI Adapter
+    └──feeds──> [NEW] Red Flags Engine
+    └──feeds──> [EXISTING] Dashboard (app.py) via [NEW] LATAM Section
+
+[NEW] Red Flags Engine
+    └──feeds──> [NEW] Executive Report Generator (weasyprint)
+    └──feeds──> [NEW] LATAM Dashboard Section
+
+[NEW] Executive Report Generator
+    └──requires──> [NEW] Red Flags Engine
+    └──requires──> [NEW] LATAM KPI Adapter (computed KPIs)
+    └──requires──> [NEW] Normalized USD Financial Data (rendered charts as static images)
 ```
 
-**Critical path insight:** Everything in the Differentiators section depends on [2] being designed correctly. If the data store normalizes metrics inconsistently (e.g., mixing fiscal year labels, storing revenue in dollars vs. thousands), downstream features will silently produce wrong answers. The data model is the highest-leverage design decision.
+### Dependency Notes
 
-**Market cap / valuation multiples dependency:** P/E, EV/EBITDA, and P/B require a market cap data source that is NOT in 10-K filings. This is a significant data sourcing decision. Options: (a) pull from a free source like Yahoo Finance, (b) omit valuation multiples from v1, (c) let users input market cap manually. Recommendation: omit or make optional in v1 to avoid data licensing complexity.
+- **PDF Extractor requires Web Scraper:** You cannot extract from a PDF you have not found and downloaded. Scraper must run first and deposit PDFs to a local staging area.
+- **Currency Normalizer requires fiscal year detection:** The normalizer must know the fiscal period (calendar year vs non-December year end) before it can query the correct date range for period average rates. Fiscal period comes from PDF extraction.
+- **LATAM KPI Adapter requires the 20-KPI Engine to remain untouched:** The adapter translates LATAM field names (Activo Corriente → current_assets) into the schema the existing processor.py expects. The engine itself is not modified — preserving the US pipeline.
+- **Red Flags Engine requires KPIs:** It consumes computed KPI values, not raw financials. It cannot run before the LATAM KPI Adapter.
+- **Executive Report requires static chart images:** weasyprint does not execute JavaScript. Plotly charts must be exported as PNG via kaleido or plotly.io.write_image() before being embedded in the HTML report template.
+- **Dashboard LATAM Section requires all upstream:** It is the final consumer. It displays company metadata, extracted financials, KPIs, red flags, and the report download button.
 
 ---
 
-## Key Findings
+## MVP Definition
 
-1. **Data provenance is the trust foundation.** For SEC EDGAR tools, showing the exact filing, filing date, and fiscal year for every data point is not optional — it is what separates a credible tool from a spreadsheet. Professional users will verify before they rely.
+### Launch With (v2.0 core)
 
-2. **The most valuable differentiator is the screener.** The ability to filter the entire S&P 500 universe by combinations of metrics ("high margin + high ROIC + accelerating revenue growth") is what Bloomberg and FactSet charge thousands per year for. This is achievable with EDGAR data and has very high professional value density per engineering effort.
+Minimum scope to validate the LATAM pipeline end-to-end with a single company.
 
-3. **Export is underrated.** Macrotrends is objectively an ugly tool with mediocre charts, yet it has strong analyst usage specifically because it exports clean CSVs. For a Python-based tool targeting analysts, a first-class DataFrame/CSV export path is a higher-return investment than chart polish.
+- [ ] Playwright scraper navigates a known URL (corporate or regulatory portal) and downloads the annual financial report PDF — validates the acquisition layer
+- [ ] pdfplumber extracts balance sheet and P&L tables from a digital PDF — validates the extraction layer for the happy path
+- [ ] pytesseract OCR fallback activates when pdfplumber returns empty tables — validates scanned PDF handling
+- [ ] LATAM field-name mapper translates Spanish financial labels to standard schema fields — validates normalization
+- [ ] Currency normalizer converts one LATAM currency to USD using period average rate — validates FX layer
+- [ ] LATAM KPI Adapter feeds existing 20-KPI engine and produces KPI output for one company — validates pipeline integration
+- [ ] Red flags engine evaluates KPIs against healthcare thresholds and outputs severity-coded alerts — validates alert logic
+- [ ] LATAM section appears in Streamlit dashboard showing one company's KPIs and red flags — validates UI integration
+- [ ] Company registry supports at least CO + PE + CL entries with NIT / RUC / RUT mapping — validates identifier layer
 
-4. **Quarterly data (10-Q) and real-time prices are traps.** Both seem like natural extensions but each adds significant data pipeline complexity and undermines the tool's core strength (audited, annual, apples-to-apples comparison). Resist scope creep toward these until the 10-K annual story is solid.
+### Add After Validation (v2.x)
 
-5. **The data model design is the highest-leverage decision.** A normalized store with consistent metric naming, fiscal year conventions, and source attribution enables every downstream feature. A poorly designed store makes anomaly detection, peer comparison, and export unreliable — and retrofitting is expensive. Invest in schema design before building UI.
+Features to add once the single-company end-to-end pipeline is confirmed working.
+
+- [ ] Regulatory web search (duckduckgo-search) — add once manual URL input is working; search is an enhancement, not a prerequisite
+- [ ] Executive PDF report download — add after KPI and red flag display is stable; weasyprint + static chart images is a self-contained feature
+- [ ] Multi-year storage and trend display — add after single-year extraction is reliable; requires consistent label mapping across years
+- [ ] Extraction confidence score — add after both extraction paths (digital + OCR) are working and producing measurable quality signals
+- [ ] AR (Argentina) + MX (Mexico) company support — add after CO + PE + CL baseline works; ARS devaluation warning banner required before enabling
+
+### Future Consideration (v3+)
+
+- [ ] Firecrawl / Tavily API integration — defer; project explicitly scopes these to v3.0 (paid APIs, not needed for MVP)
+- [ ] Cross-country LATAM screener — defer until enough companies are registered to make comparison meaningful
+- [ ] Automated quarterly re-extraction — defer; LATAM companies publish annually; premature automation before annual cycle is validated adds complexity
+- [ ] Login to gated regulatory portals — defer; credential management is a separate security concern; manual download fallback is acceptable for now
 
 ---
 
-*Sources used: Domain knowledge of Bloomberg Terminal, Koyfin, Macrotrends, Wisesheets, SEC EDGAR XBRL API, open-source Python financial libraries (financedatabase, yfinance, OpenBB), and professional financial analysis workflows. Research conducted 2026-02-24.*
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Playwright web scraper (URL input) | HIGH | MEDIUM | P1 |
+| pdfplumber digital PDF extraction | HIGH | MEDIUM | P1 |
+| pytesseract OCR fallback | HIGH | HIGH | P1 |
+| Spanish label → standard schema mapper | HIGH | MEDIUM | P1 |
+| Currency normalizer (MXN via frankfurter; COP/PEN/CLP via exchangerate.host; ARS with warning) | HIGH | MEDIUM | P1 |
+| Company registry LATAM (name + country + regulatory ID) | HIGH | LOW | P1 |
+| LATAM KPI Adapter (feeds existing 20-KPI engine) | HIGH | MEDIUM | P1 |
+| Red flags engine (severity Alta/Media/Baja) | HIGH | MEDIUM | P1 |
+| LATAM section in Streamlit dashboard | HIGH | MEDIUM | P1 |
+| Regulatory web search (duckduckgo-search) | MEDIUM | MEDIUM | P2 |
+| Executive PDF report (weasyprint + download button) | MEDIUM | HIGH | P2 |
+| Multi-year trend display for LATAM companies | MEDIUM | MEDIUM | P2 |
+| Extraction confidence score | MEDIUM | MEDIUM | P2 |
+| ARS devaluation warning banner | LOW | LOW | P2 |
+| IFRS vs local GAAP label on company card | LOW | LOW | P2 |
+
+**Priority key:**
+- P1: Must have for v2.0 pipeline to work end-to-end
+- P2: Should have; adds significant value, add when P1 pipeline is stable
+- P3: Nice to have; future consideration
+
+---
+
+## LATAM-Specific Nuances
+
+These are not standard features in financial pipeline research — they are unique constraints that affect every feature in this milestone.
+
+### PDF Quality Variance
+
+LATAM corporate financial reports range from:
+- **High quality:** IFRS-audited, digital PDF, structured tables, clear column headers — pdfplumber extracts cleanly
+- **Medium quality:** Digital PDF but non-standard layout (multi-column, merged cells, footnotes embedded in table rows) — pdfplumber requires tuning; edge_min_length_prefilter helps
+- **Low quality:** Scanned document or image-embedded PDF — pytesseract required; accuracy degrades with scan quality; manual verification warranted; extraction confidence score should be LOW
+
+Regulatory portal PDFs (Supersalud, SMV, SFC, CMF, CNV, CNBV) tend to be higher quality than directly published corporate website PDFs. Prioritize regulatory sources over corporate website PDFs where available.
+
+### Multi-Currency Complexity
+
+| Currency | Frankfurter Support | Fallback | Special Notes |
+|----------|--------------------|---------|-|
+| MXN | YES (ECB data) | — | Reliable; use frankfurter directly |
+| CLP | NO | exchangerate.host | ECB does not track CLP; requires alternative API |
+| COP | NO | exchangerate.host | ECB does not track COP; requires alternative API |
+| PEN | NO | exchangerate.host | ECB does not track PEN; requires alternative API |
+| ARS | NO | exchangerate.host | HIGH RISK: Argentina had 54%+ devaluation Dec 2023; ongoing crawling peg; period average is valid but produces very different results year-over-year; display warning to user |
+
+**Confidence: LOW** for ARS conversion reliability — the ARS-USD rate data from free APIs may not reflect the official/unofficial dual-rate system that existed in 2023-2024. Validate against Banco Central de la República Argentina data before using ARS KPIs for credit decisions.
+
+Annual average calculation: Neither frankfurter nor exchangerate.host provides a pre-computed annual average. Must query daily rates for the fiscal year period and compute mean in Python. For a 365-day year this is ~365 API calls or a timeseries request (exchangerate.host supports up to 365-day ranges per request, one call per year).
+
+### Accounting Standard Variance
+
+| Country | Standard for Listed/Regulated Entities | SMEs / Private |
+|---------|----------------------------------------|----------------|
+| Colombia | IFRS (mandatory since 2015 for regulated entities; Supersalud requires) | IFRS for SMEs or local GAAP |
+| Peru | IFRS (mandatory for SMV-registered entities) | IFRS for SMEs with local modifications |
+| Chile | IFRS (mandatory since 2009; CMF requires) | IFRS for SMEs |
+| Mexico | IFRS (CNBV-regulated entities; NIF for others) | Mexican Financial Reporting Standards (NIF) — similar to IFRS but distinct |
+| Argentina | IFRS (publicly traded companies); RT (Resoluciones Técnicas) for others | Local GAAP via FACPCE RT |
+
+**Implication:** Healthcare companies with regulatory obligation (primary target sector) are almost always required to use IFRS or IFRS for SMEs. Balance sheet and P&L line item names will be IFRS-standard in Spanish. The Spanish label mapper should cover IFRS Spanish terminology first; local GAAP labels are secondary.
+
+### Regulatory Portal Characteristics
+
+| Regulator | Country | Coverage | Portal Type | Access |
+|-----------|---------|----------|-------------|--------|
+| Supersalud | Colombia | Health insurers (EPS), hospitals | docs.supersalud.gov.co | Public PDFs, no login |
+| SFC | Colombia | Financial sector (banks, insurers) | superfinanciera.gov.co | Public, structured portal |
+| SMV | Peru | Securities market participants | smv.gob.pe/SIMV | Public, structured portal with company search |
+| CMF | Chile | Financial market (banks, insurers, issuers) | cmfchile.cl | Requires registration for some documents |
+| CNV | Argentina | Securities issuers | cnv.gob.ar | Public, but portal structure changes frequently |
+| CNBV | Mexico | Banks, brokerage firms | cnbv.gob.mx | Public statistics; individual company filings may require navigation |
+
+**Confidence: LOW** for portal-specific scraping patterns — site structures change; Playwright scripts will need to be validated against live portals and may require maintenance. Recommend building a portal adapter layer where each regulator has its own scraping strategy.
+
+### Red Flags Thresholds (Healthcare Sector Reference)
+
+Based on HFMA benchmarks and LATAM healthcare sector research:
+
+| KPI | Alta (Critical) | Media (Warning) | Baja (Watch) |
+|-----|----------------|-----------------|--------------|
+| Current ratio | < 1.0 | 1.0 – 1.5 | 1.5 – 2.0 |
+| Debt/Equity | > 2.0 | 1.0 – 2.0 | 0.8 – 1.0 |
+| Interest coverage | < 1.5 | 1.5 – 2.5 | 2.5 – 3.5 |
+| Operating margin | < 0% | 0% – 3% | 3% – 5% |
+| Net margin | < -5% | -5% – 0% | 0% – 2% |
+| Revenue growth YoY | < -10% | -10% – 0% | 0% – 3% |
+
+**Confidence: MEDIUM** — thresholds calibrated for US healthcare; LATAM healthcare companies operate with different leverage norms (higher debt ratios common in infrastructure-heavy health systems). Consider making thresholds configurable in a YAML file so they can be tuned without code changes.
+
+---
+
+## Dependencies on Existing Features
+
+| Existing Feature | How v2.0 Depends On It |
+|-----------------|------------------------|
+| 20-KPI calculation engine (processor.py) | LATAM KPI Adapter feeds normalized financial data into this engine; engine is not modified |
+| Parquet storage format (data/clean/{TICKER}/) | LATAM uses same format at data/latam/{NOMBRE_PAIS}/; same read/write patterns |
+| Streamlit dashboard (app.py) | LATAM section is added as a new tab/section; existing US section is not modified |
+| FinancialAgent orchestrator (agent.py) | LATAM pipeline uses same orchestrator interface with a different adapter; staleness detection reused |
+| loguru logging | All LATAM pipeline components use loguru for consistency |
+| Windows Task Scheduler quarterly automation | LATAM extraction can be added to the same scheduler job (annual cycle); or separate job |
+
+---
+
+## Sources
+
+- pdfplumber 0.11.8 table-AI update: [BrightCoding](https://www.blog.brightcoding.dev/2025/11/26/finance-bros-are-obsessed-with-this-0-11-8-update-pdfplumbers-new-table-ai-trick-explained/)
+- PDF extraction comparison (2025): [Medium — 7 Python PDF extractors tested](https://onlyoneaman.medium.com/i-tested-7-python-pdf-extractors-so-you-dont-have-to-2025-edition-c88013922257)
+- Financial PDF extraction challenges: [Seattle Data Guy](https://www.theseattledataguy.com/challenges-you-will-face-when-parsing-pdfs-with-python-how-to-parse-pdfs-with-python/)
+- Playwright file downloads: [Marketing Scoop](https://www.marketingscoop.com/tech/web-scraping/playwright-how-to-download-file-with-playwright/)
+- Playwright scraping guide 2025: [Oxylabs](https://oxylabs.io/blog/playwright-web-scraping)
+- Frankfurter API (ECB-sourced, MXN supported): [frankfurter.dev](https://frankfurter.dev/)
+- Frankfurter currency gap — COP/PEN/CLP/ARS not supported: [GitHub issue #144](https://github.com/lineofflight/frankfurter/issues/144)
+- exchangerate.host timeseries API: [exchangerate.host documentation](https://exchangerate.host/documentation)
+- LATAM IFRS adoption — Colombia 2015, Chile 2009, Peru adopted: [MDPI IFRS LATAM study](https://www.mdpi.com/1911-8074/18/10/567)
+- Mexico CNBV IFRS S1/S2 mandatory 2026: [GA Institute](https://ga-institute.com/Sustainability-Update/new-sustainability-reporting-requirements-in-mexico/)
+- ARS devaluation history and 2025 crawling peg: [EBC Financial Group](https://www.ebc.com/forex/usd-to-ars-outlook-how-argentina-s-fx-reform-changes-trading)
+- Argentina inflation 2025 (32.4% monthly peak): [TradingEconomics](https://tradingeconomics.com/argentina/inflation-cpi)
+- LATAM regulatory IDs (NIT, RUC, RUT, CUIT, RFC): [Microsoft Dynamics 365 LATAM tax ID documentation](https://learn.microsoft.com/en-us/dynamics365/finance/localizations/iberoamerica/ltm-core-tax-id-type)
+- Healthcare KPI thresholds: [HFMA](https://www.hfma.org/revenue-cycle/financial-kpis-redefined-in-healthcare/), [Definitive HC liquidity analysis](https://www.definitivehc.com/resources/healthcare-insights/hospital-liquidity)
+- Supersalud portal: [supersalud.gov.co](https://www.supersalud.gov.co/)
+- SMV Peru portal: [smv.gob.pe/SIMV](https://www.smv.gob.pe/SIMV/)
+- WeasyPrint Streamlit integration: [Medium — PDF in 3 steps](https://medium.com/@karanshingde/download-your-streamlit-data-dashboard-as-a-pdf-report-in-3-steps-97e09ed65558)
+- WeasyPrint JS limitation (confirmed, does not execute JS): [DEV Community](https://dev.to/thawkin3/docraptor-vs-weasyprint-a-pdf-export-showdown-34f)
+
+---
+
+*Feature research for: LATAM Financial Analysis Pipeline (v2.0)*
+*Researched: 2026-03-03*

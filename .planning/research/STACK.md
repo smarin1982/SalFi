@@ -1,340 +1,322 @@
-# Stack Research: SP500 Financial Dashboard
+# Stack Research: LATAM Financial Analysis Pipeline (v2.0 additions)
 
-> Research date: 2026-02-24
-> Scope: Python ETL pipeline for SEC EDGAR 10-K filings + local financial KPI dashboard via Streamlit
-> Note: Web search and live PyPI verification were unavailable during this research session.
-> Versions cited are based on training data through August 2025. Verify with `pip index versions <package>`
-> before pinning in requirements.txt.
-
----
-
-## Recommended Stack
-
-### Data Extraction
-
-#### Primary: `edgartools` (aka `edgar`) ~= 2.x
-
-**Rationale:**
-`edgartools` (installed as `pip install edgartools`, imported as `edgar`) is the clear winner for
-2025/2026 EDGAR work. It wraps the full SEC EDGAR XBRL inline viewer API and the company facts
-JSON endpoints in a Pythonic ORM-style interface. Key advantages:
-
-- **XBRL-native**: `Company("AAPL").get_filings(form="10-K").latest().xbrl()` returns a parsed
-  `XBRLData` object with `.financials` already structured — no manual XBRL parsing required.
-- **Financial statement extraction**: Direct `.income_statement`, `.balance_sheet`,
-  `.cash_flow_statement` properties return pandas DataFrames with normalized labels.
-- **Company facts API**: Uses `https://data.sec.gov/api/xbrl/companyfacts/{cik}.json` which is the
-  official EDGAR structured data endpoint — far more reliable than screen-scraping HTML filings.
-- **Active maintenance**: Consistent releases through 2024–2025, responsive to EDGAR API changes.
-- **SEC rate limiting built-in**: Respects the 10 requests/second SEC fair-use policy automatically.
-
-**Version to pin:** `edgartools>=2.0` (verify latest: `pip index versions edgartools`)
-
-**Confidence:** HIGH — this library has dominated EDGAR Python tooling since 2023 and has not been
-displaced by a competitor as of August 2025.
-
-#### Supplementary: Direct EDGAR XBRL API (no library)
-
-For bulk SP500 data pulls, the SEC's own structured data endpoints are extremely useful alongside
-edgartools:
-
-- `https://data.sec.gov/submissions/{cik}.json` — filing history
-- `https://data.sec.gov/api/xbrl/companyfacts/{cik}.json` — all reported XBRL facts
-- `https://data.sec.gov/api/xbrl/frames/us-gaap/Revenues/USD/CY2023Q4I.json` — cross-company frame
-
-Use `httpx` (async-capable) or `requests` with a `User-Agent` header (SEC requirement) for direct
-calls. For SP500-scale batch downloads, the frames endpoint lets you pull a single concept across
-all filers in one request — extremely efficient.
-
-**Version to pin:** `httpx>=0.27` or `requests>=2.32`
-
-#### What edgartools replaces:
-- `sec-edgar-downloader`: Downloads raw filing documents (HTML/XML files to disk). Useful only if
-  you need the full text of filings. For structured financial data extraction, it requires you to
-  then parse XBRL yourself — a significant additional burden. Skip it for this use case.
-- `python-xbrl`, `arelle`: Low-level XBRL parsers. Powerful but require deep XBRL taxonomy
-  knowledge. Overkill when edgartools already handles this layer.
+**Domain:** Python ETL pipeline — web scraping, PDF extraction, currency normalization, web search, PDF export
+**Researched:** 2026-03-03
+**Confidence:** HIGH (versions verified via live PyPI and official docs search)
+**Scope:** NEW additions only. Existing v1.0 stack (edgartools, Streamlit, Plotly, Pandas, PyArrow, loguru, Windows Task Scheduler) is validated and not re-researched here.
 
 ---
 
-### Data Storage
+## Existing Stack (v1.0 — Do Not Change)
 
-#### Primary: `duckdb` ~= 1.x
+| Component | Library | Notes |
+|-----------|---------|-------|
+| EDGAR scraping | `edgartools>=2.0` | XBRL-native, rate-limited |
+| Storage | Parquet via `pyarrow>=16.0` | Immutable archive layer |
+| Processing | `pandas>=2.1` | DataFrame transforms, KPI calc |
+| Dashboard | `streamlit>=1.35` | Local UI |
+| Charts | `plotly>=5.22` | Interactive, native Streamlit |
+| Logging | `loguru>=0.7` | Consistent across pipeline modules |
+| Scheduling | Windows Task Scheduler | Quarterly ETL trigger |
 
-**Rationale:**
-DuckDB is the correct choice for a local financial data pipeline in 2025/2026. It is an embedded
-analytical database (no server process) that outperforms SQLite on analytical queries by 10–100x
-for the workloads this project requires (multi-year, multi-company aggregations and comparisons).
-
-Key advantages for this project:
-
-- **Columnar storage**: Financial time series (revenue by quarter across 500 companies over 10 years)
-  maps perfectly to columnar layout. Scans are dramatically faster than row-oriented SQLite.
-- **SQL interface with pandas/polars integration**: `duckdb.sql("SELECT ...").df()` returns a
-  DataFrame directly. No ORM needed.
-- **Parquet interop**: Can query Parquet files directly with `SELECT * FROM 'data/*.parquet'`
-  without importing them — hybrid storage is seamless.
-- **Zero dependencies, embedded**: Single binary, no server, works on Windows/Mac/Linux.
-- **Window functions**: Essential for YoY growth rates, rolling averages, rank-within-sector KPIs.
-  DuckDB has full SQL:2003 window function support; SQLite does not.
-- **ATTACH multiple databases**: Can separate raw facts from processed KPIs cleanly.
-
-**Version to pin:** `duckdb>=1.0` (1.0 was a major milestone release in 2024; as of Aug 2025 the
-1.x series is stable)
-
-**Confidence:** HIGH — DuckDB has become the de facto standard for local analytical workloads in
-Python data pipelines. Strong community consensus.
-
-#### Secondary: Parquet via `pyarrow` for archival/interchange
-
-Use Parquet files as the raw data archive layer (immutable source-of-truth for scraped EDGAR data)
-and DuckDB as the analytical layer on top. This gives you:
-
-- Raw data that survives schema migrations (just re-process from Parquet)
-- DuckDB queries directly over Parquet without a separate import step
-
-**Version to pin:** `pyarrow>=16.0`
-
-**Confidence:** HIGH
-
-#### What NOT to use for storage:
-- **SQLite**: Inadequate for analytical queries. Lacks window functions in older versions, slow on
-  column scans, no native Parquet support. Fine for transactional data; wrong for this workload.
-- **Pandas-only (CSV/pickle)**: No query capability, poor memory efficiency at SP500 scale, no
-  concurrent access.
-- **PostgreSQL/MySQL**: Overkill for local-only dashboard. Server process overhead unjustified.
+The LATAM pipeline is additive — it plugs in as a new adapter under the same `FinancialAgent` interface. None of the above change.
 
 ---
 
-### Data Processing
+## New Stack for v2.0 LATAM Pipeline
 
-#### Primary: `pandas` ~= 2.x + `polars` ~= 1.x (situational)
+### Core Technologies (New)
 
-**Rationale:**
-Pandas 2.x (with the PyArrow backend via `pd.options.mode.dtype_backend = "pyarrow"`) is the
-standard for financial data transformation. It integrates natively with DuckDB and edgartools.
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `playwright` | `>=1.48` (latest: 1.58.0, Jan 2026) | Headless browser scraping of JS-rendered corporate websites | Only free Python library that handles JavaScript SPAs reliably; handles navigation, clicks, waits. Firecrawl/Splash are either paid or unmaintained. No API key needed. |
+| `PyMuPDF` (import: `fitz`) | `>=1.24` (latest: 1.27.1, Feb 2026) | PDF text and table extraction; primary layer before OCR fallback | Fastest Python PDF library; extracts structured text + bounding boxes from machine-readable PDFs. Used as first pass — if text is extractable, skip OCR entirely. Requires Python >=3.10. |
+| `pdfplumber` | `>=0.11` (latest: 0.11.9, Jan 2026) | Table extraction from PDFs where PyMuPDF text output lacks structure | Excels at identifying and parsing table grids in financial statements. Complement to PyMuPDF: use PyMuPDF for full-document text, pdfplumber for table-specific extraction where layout is critical. Already in environment from v1.0 adjacency. |
+| `pytesseract` | `>=0.3.13` (latest stable: 0.3.13, Aug 2024) | OCR fallback for scanned/image-only PDFs | Required for LATAM filings that are scanned documents (common for older filings and some regulatory archives). Wraps Tesseract 5.x engine. Must install Tesseract binary separately. |
+| `requests` | `>=2.32` (already in env) | HTTP client for Frankfurter currency API calls | Already present via edgartools dependency. Synchronous, simple, appropriate for a single API endpoint with no auth. No new dependency. |
+| `ddgs` | `>=9.0` (latest: 9.11.1, Mar 2026) | Web search for sector context and regulatory source discovery | The successor package to `duckduckgo-search` (same author, deedy5). Free, no API key, aggregates multiple search engines. Use this — NOT `duckduckgo-search` which now shows a deprecation warning. |
+| `weasyprint` | `>=68.0` (latest: 68.1, Feb 2026) | HTML-to-PDF export of executive report | Pure-Python rendering pipeline (no browser needed); integrates cleanly with Streamlit's `st.download_button`. Requires GTK3/Pango system libraries on Windows — see installation section. |
 
-- Use **pandas** as the default: edgartools returns DataFrames, Streamlit accepts DataFrames,
-  DuckDB reads DataFrames. Staying in pandas minimizes conversion overhead.
-- Use **polars** for heavy batch processing: If you are computing KPIs across all 500 companies
-  simultaneously, Polars is 3–10x faster than pandas for group-by aggregations. Polars 1.x has a
-  stable API as of 2025.
+### Supporting Libraries (New)
 
-**Versions to pin:**
-- `pandas>=2.1`
-- `polars>=1.0` (optional, for batch ETL performance)
-- `numpy>=1.26`
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| `Pillow` | `>=10.0` | Image pre-processing before pytesseract OCR | Required by pytesseract. Also used to deskew, threshold, and enhance scanned PDF pages before OCR. |
+| `langdetect` | `>=1.0.9` | Language detection on extracted PDF text | Detect whether a document is in Spanish/Portuguese before applying language-specific OCR tessdata. Lightweight, no external dependencies. |
 
-**Confidence:** HIGH
+### Frankfurter API (No Library Needed)
 
-#### KPI calculation: `pandas-ta` or manual
+The Frankfurter currency API (`https://api.frankfurter.dev/v1/`) is called directly via `requests`. No wrapper package needed.
 
-For financial ratios (P/E, ROE, debt/equity, current ratio, etc.), implement them manually in
-pandas/DuckDB SQL rather than using a specialized library. The calculations are simple enough that
-a dedicated TA library is unnecessary overhead. Store KPI definitions in a central `kpis.py`
-module for maintainability.
-
----
-
-### Visualization
-
-#### Primary: `streamlit` ~= 1.3x + `plotly` ~= 5.x
-
-**Rationale:**
-
-**Streamlit:**
-- Industry standard for Python data dashboards in 2025. Zero front-end code required.
-- `st.cache_data` decorator is essential for this project — cache DuckDB query results so
-  switching between companies does not re-query the database.
-- `st.session_state` for persisting selected companies, date ranges, and comparison state across
-  widget interactions.
-- Multipage apps (`pages/` directory) allow clean separation: overview page, single-company drill-
-  down page, comparison page, ETL status page.
-
-**Plotly:**
-- Best choice for interactive financial charts. Native Streamlit support via `st.plotly_chart()`.
-- Key patterns for multi-company time-series comparisons:
-  - `px.line()` with `color="company"` parameter handles multi-company overlays automatically.
-  - `go.Figure()` with multiple `go.Scatter()` traces for custom styling per company.
-  - `fig.update_layout(hovermode="x unified")` for synchronized crosshair across all companies.
-  - Faceted charts: `px.line(facet_col="metric")` to show Revenue, Net Income, EPS side-by-side.
-  - Use `secondary_y=True` in `make_subplots()` for charts combining absolute values with ratios
-    (e.g., Revenue bars + Gross Margin % line).
-
-**Versions to pin:**
-- `streamlit>=1.35`
-- `plotly>=5.22`
-
-**Confidence:** HIGH — Streamlit + Plotly is the dominant combination for this category of app.
-
-#### Supplementary patterns:
+- **No API key required.** Published by the ECB (European Central Bank) daily rates.
+- **Annual average calculation:** The API does not provide a pre-computed annual average endpoint. Use the time-series range endpoint and compute the mean in pandas:
 
 ```python
-# Multi-company comparison — canonical pattern
-import plotly.express as px
-import streamlit as st
+import requests
+import pandas as pd
 
-@st.cache_data(ttl=3600)
-def load_metric(metric: str, tickers: list[str]) -> pd.DataFrame:
-    return duckdb.sql(f"""
-        SELECT ticker, fiscal_year, fiscal_quarter, {metric}
-        FROM kpis
-        WHERE ticker IN ({', '.join(f"'{t}'" for t in tickers)})
-        ORDER BY ticker, fiscal_year, fiscal_quarter
-    """).df()
-
-tickers = st.multiselect("Companies", sp500_tickers, default=["AAPL", "MSFT", "GOOGL"])
-metric = st.selectbox("Metric", ["revenue", "net_income", "gross_margin_pct", "roe"])
-df = load_metric(metric, tickers)
-fig = px.line(df, x="fiscal_year", y=metric, color="ticker",
-              title=f"{metric} Comparison", markers=True)
-fig.update_layout(hovermode="x unified")
-st.plotly_chart(fig, use_container_width=True)
+def get_annual_avg_rate(currency: str, year: int) -> float:
+    """Return annual average exchange rate to USD for a given currency and year."""
+    url = f"https://api.frankfurter.dev/v1/{year}-01-01..{year}-12-31"
+    resp = requests.get(url, params={"from": currency, "to": "USD"}, timeout=10)
+    resp.raise_for_status()
+    rates = resp.json()["rates"]  # dict: {"2020-01-02": {"USD": 1.12}, ...}
+    values = [v["USD"] for v in rates.values()]
+    return sum(values) / len(values)
 ```
+
+- **Supported LATAM currencies:** MXN (Mexico), COP (Colombia), PEN (Peru), CLP (Chile), ARS (Argentina), BRL (Brazil). All covered by ECB reference rates.
+- **Limitation:** ARS (Argentine Peso) rates are nominal official rates, not parallel/blue market rates. This is by design — project uses nominal values per PROJECT.md constraints.
 
 ---
 
-### Scheduling
+## Installation
 
-#### Primary: `APScheduler` ~= 3.x (local) or simple cron/Task Scheduler
+### 1. Python packages
 
-**Rationale:**
+```bash
+# Activate your conda environment first
+conda activate ai2026   # or whatever your env name is
 
-For a **local** dashboard, the scheduling needs are minimal: run the ETL once per quarter when new
-10-K filings become available (roughly Feb, May, Aug, Nov). Three options in order of preference:
+# Core new dependencies
+pip install "playwright>=1.48"
+pip install "PyMuPDF>=1.24"
+pip install "pdfplumber>=0.11"
+pip install "pytesseract>=0.3.13"
+pip install "ddgs>=9.0"
+pip install "weasyprint>=68.0"
+pip install "Pillow>=10.0"
+pip install "langdetect>=1.0.9"
 
-**Option A: Windows Task Scheduler (recommended for local)**
-For a purely local Windows machine, the OS scheduler is the most reliable option. Create a
-`.bat` or Python script trigger. No Python dependency, survives reboots, visible in Task Scheduler
-UI. This is the simplest and most robust approach for a personal tool.
+# requests is already installed — verify
+pip show requests
+```
 
-**Option B: `APScheduler` 3.x (if in-process scheduling needed)**
+### 2. Playwright browser binaries
+
+After `pip install playwright`, download the Chromium binary. Use Chromium only — it is the smallest download and sufficient for scraping:
+
+```bash
+playwright install chromium
+# This downloads ~130MB to %LOCALAPPDATA%\ms-playwright\
+```
+
+Do NOT run `playwright install` without specifying a browser — it downloads Chromium + Firefox + WebKit (~600MB total). For scraping, Chromium is all you need.
+
+### 3. Tesseract OCR engine (Windows 11)
+
+pytesseract is a Python wrapper — it requires the Tesseract binary to be installed separately.
+
+**Step 1 — Download installer from UB Mannheim (the maintained Windows build):**
+```
+https://github.com/UB-Mannheim/tesseract/wiki
+```
+Download `tesseract-ocr-w64-setup-*.exe` (64-bit). Run the installer.
+Default install path: `C:\Program Files\Tesseract-OCR\`
+
+**Step 2 — Add Tesseract to PATH:**
+Add `C:\Program Files\Tesseract-OCR` to your Windows system PATH environment variable.
+(Or set it explicitly in code — see integration section below.)
+
+**Step 3 — Install Spanish and Portuguese language packs:**
+During the UB Mannheim installer, check the "Additional language data (download)" option and select:
+- `spa` — Spanish
+- `por` — Portuguese
+
+Alternatively, manually download `.traineddata` files from:
+```
+https://github.com/tesseract-ocr/tessdata
+```
+And place them in `C:\Program Files\Tesseract-OCR\tessdata\`.
+
+**Step 4 — Verify:**
+```bash
+tesseract --version
+tesseract --list-langs
+```
+Expected output includes `spa` and `por` in the list.
+
+### 4. WeasyPrint system dependencies (Windows 11)
+
+WeasyPrint requires GTK3 (Pango, Cairo, GDK-PixBuf) system libraries. This is the most complex installation step.
+
+**Recommended method: MSYS2 (as of WeasyPrint 65.0+, GTK3 Runtime standalone installer is outdated)**
+
+```bash
+# 1. Download and install MSYS2 from https://www.msys2.org/
+# 2. Open MSYS2 terminal and run:
+pacman -S mingw-w64-x86_64-pango
+
+# 3. Add MSYS2 bin directory to Windows PATH:
+# C:\msys64\mingw64\bin
+```
+
+**Set WEASYPRINT_DLL_DIRECTORIES environment variable** if WeasyPrint cannot find the GTK DLLs:
+```bash
+# In your conda environment or .env:
+set WEASYPRINT_DLL_DIRECTORIES=C:\msys64\mingw64\bin
+```
+
+**Verify:**
+```python
+import weasyprint
+weasyprint.HTML(string="<h1>test</h1>").write_pdf("test.pdf")
+```
+
+**Note:** If WeasyPrint installation proves too complex for the local Windows environment, the fallback is `xhtml2pdf` (pure Python, no system dependencies, simpler CSS support). The PDF report for this project is text-heavy and table-based — `xhtml2pdf` handles that adequately. See "Alternatives Considered" below.
+
+---
+
+## Windows-Specific Gotchas
+
+### Playwright + Windows event loop
+
+**Problem:** Playwright's async API requires `ProactorEventLoop` on Windows. Streamlit runs its own event loop. Mixing them causes `RuntimeError: The event loop is already running`.
+
+**Solution:** Run Playwright scraping as a **separate subprocess or background thread, never inside the Streamlit render loop**. Architecture pattern for this project:
 
 ```python
-from apscheduler.schedulers.background import BackgroundScheduler
+# latam_scraper.py — runs as standalone ETL script (called from Task Scheduler or subprocess)
+from playwright.sync_api import sync_playwright
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(run_etl, 'cron', month='2,5,8,11', day='1', hour='6')
-scheduler.start()
+def scrape_company_docs(url: str) -> list[str]:
+    """Returns list of PDF URLs found on the corporate IR page."""
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(url, wait_until="networkidle")
+        # ... navigation logic ...
+        browser.close()
 ```
 
-APScheduler is the standard Python library for in-process scheduling. Version 3.x has a stable,
-well-documented API. Version 4.x (alpha/beta as of 2025) is a significant rewrite — **avoid 4.x**
-until it reaches stable release.
+```python
+# In Streamlit app.py — trigger ETL as subprocess, don't call scraper directly
+import subprocess
+if st.button("Run LATAM ETL"):
+    subprocess.Popen(["python", "latam_etl.py", "--company", company_name])
+    st.info("ETL started in background. Results will appear when complete.")
+```
 
-**Option C: `schedule` library**
+The Playwright scraper runs outside Streamlit's event loop entirely. Streamlit polls for new Parquet files and renders them — it never touches Playwright directly. This is the correct architecture for this project.
 
-The `schedule` library (e.g., `schedule.every().monday.do(job)`) is simpler than APScheduler but
-requires a long-running process and has no persistence. Not recommended for quarterly ETL that
-needs to survive machine restarts.
+### pytesseract PATH on Windows
 
-**Versions to pin:**
-- `apscheduler>=3.10,<4.0` (pin to 3.x explicitly to avoid APScheduler 4.x alpha)
+If Tesseract is not on PATH or you are running inside a conda environment where the system PATH may not be inherited:
 
-**Confidence:** MEDIUM — for a local personal tool, OS-level scheduling is arguably better than
-any Python library. APScheduler 3.x is the correct Python choice if in-process scheduling is
-preferred.
+```python
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+```
 
-#### What NOT to use for scheduling:
-- **APScheduler 4.x**: Major API rewrite, was in alpha/beta as of mid-2025. Breaking changes from
-  3.x. Do not use until stable release.
-- **Celery/Redis**: Massively over-engineered for a local quarterly job. Requires a Redis server.
-- **Airflow/Prefect/Dagster**: Workflow orchestration tools designed for production data
-  engineering teams. The operational overhead (web server, database, worker processes) is
-  completely unjustified for a personal local dashboard running 4 jobs per year.
-- **`schedule` library for quarterly jobs**: Requires the process to be always running; not
-  appropriate for jobs that run 4 times a year on a personal machine.
+Set this once at module initialization in `latam_pdf_extractor.py`.
+
+### PyMuPDF import name
+
+PyMuPDF is installed as `PyMuPDF` but imported as `fitz`:
+```python
+import fitz  # this is PyMuPDF
+```
+
+This is a known naming quirk. Both `pip install pymupdf` and `pip install PyMuPDF` work — they are the same package.
 
 ---
 
-## Full Dependency Summary
+## Integration Points with Existing Stack
 
-```
-# requirements.txt (pinned ranges)
-edgartools>=2.0
-httpx>=0.27
-duckdb>=1.0
-pyarrow>=16.0
-pandas>=2.1
-numpy>=1.26
-polars>=1.0          # optional, for batch ETL performance
-streamlit>=1.35
-plotly>=5.22
-apscheduler>=3.10,<4.0
+| Integration | How |
+|-------------|-----|
+| LATAM data storage | Same Parquet format as US pipeline: `data/latam/{COMPANY}_{COUNTRY}/{financials,kpis}.parquet`. PyArrow already present. |
+| Dashboard integration | LATAM section added to `app.py` as a new tab or page. Reads from `data/latam/` Parquet files via same `@st.cache_data` pattern. |
+| Logging | Use existing `loguru` setup. LATAM scraper/extractor modules import the same logger config from `scraper.py` or a shared `config.py`. |
+| KPI calculation | Same `processor.py` KPI calculation functions apply. Currency normalization (USD conversion) is the only pre-processing addition before KPI calc. |
+| PDF export button | `st.download_button` with the WeasyPrint-generated PDF bytes. No additional Streamlit components needed. |
+| FinancialAgent class | LATAM adapter implements same interface as US adapter (documented in PROJECT.md). Swap the data source, keep the interface. |
+| Task Scheduler | Existing quarterly trigger can call a new `latam_etl.py` script. Or add a separate Task Scheduler entry for LATAM (different companies update at different times than SEC filings). |
 
-# Dev/utility
-python-dotenv>=1.0
-loguru>=0.7          # structured logging for ETL pipeline
-tenacity>=8.3        # retry logic for SEC API calls
-tqdm>=4.66           # progress bars for bulk downloads
-```
+---
+
+## Alternatives Considered
+
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| `playwright` | `selenium` | Only if you have an existing Selenium test suite. Playwright is faster, has better async support, and auto-manages browser binaries. For new code, Playwright is the correct choice in 2026. |
+| `playwright` | `httpx` + `BeautifulSoup` | Use this for sites that render server-side HTML (no JavaScript). If the corporate website's financial docs are in plain HTML links without JS, skip Playwright entirely and use httpx+BS4. It is faster and simpler. |
+| `PyMuPDF` + `pdfplumber` | `pypdf` (formerly PyPDF2) | pypdf is good for PDF manipulation (split, merge, metadata) but inferior for text/table extraction. Use PyMuPDF+pdfplumber for extraction tasks. |
+| `ddgs` | `duckduckgo-search` | Do NOT use `duckduckgo-search` — it is deprecated, the same author renamed the package to `ddgs`. Using the old package shows a RuntimeWarning and will eventually stop working. |
+| `weasyprint` | `xhtml2pdf` | If WeasyPrint's GTK3 dependency causes installation pain on Windows, xhtml2pdf is pure Python with no system dependencies. CSS support is more limited, but for a text+table financial report it is sufficient. `pip install xhtml2pdf` — no system prerequisites. |
+| `weasyprint` | `reportlab` | Use ReportLab only if you need full programmatic PDF control (drawing, custom page layouts). For HTML-to-PDF conversion from a dashboard template, WeasyPrint is simpler. |
+| `pytesseract` + Tesseract | `easyocr` | EasyOCR is easier to install on Windows (pure pip, no binary) and supports 80+ languages including Spanish/Portuguese. Trade-off: 300–500MB model download, slower inference. If Tesseract installation on Windows proves difficult, EasyOCR is a viable fallback. |
 
 ---
 
 ## What NOT to Use
 
-| Library / Approach | Why to Avoid |
-|---|---|
-| `sec-edgar-downloader` | Downloads raw HTML/XML filing documents, not structured data. Requires manual XBRL parsing afterward. Use edgartools instead. |
-| `python-xbrl` | Low-level XBRL parser, requires taxonomy expertise. Superseded by edgartools for this use case. |
-| `arelle` | Full XBRL validation tool, enormous dependency footprint. Appropriate for XBRL authoring, not consumption. |
-| `SQLite` for analytics | No columnar storage, limited window functions, slow on multi-company aggregations. Use DuckDB. |
-| PostgreSQL/MySQL | Server process overhead unjustified for local-only tool. DuckDB gives 90% of the capability with 0% of the ops burden. |
-| `APScheduler` 4.x | API rewrite in alpha/beta as of mid-2025. Stick to stable 3.x. |
-| `Celery` + Redis | Production-grade task queue. Massive overkill for 4 ETL runs per year on a personal machine. |
-| Airflow / Prefect / Dagster | Workflow orchestrators built for teams and production pipelines. Wrong scale for this project. |
-| `bokeh` or `matplotlib` for charts | Plotly has better Streamlit integration, superior interactivity, and better multi-series support. Bokeh adds complexity without benefit. Matplotlib produces static charts. |
-| `yfinance` as primary data source | Does not provide 10-K financial statement line items with XBRL precision. Good for price data supplement; wrong for fundamental analysis. |
-| `BeautifulSoup` / `scrapy` for EDGAR | Screen-scraping HTML filings is fragile and violates the spirit of EDGAR's structured data APIs. The XBRL JSON endpoints are official, stable, and structured. |
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `duckduckgo-search` | Deprecated — same author renamed the package to `ddgs`. Shows RuntimeWarning, will break eventually. | `ddgs>=9.0` |
+| `Firecrawl` | Paid API — explicitly out of scope per PROJECT.md | `playwright` |
+| `Tavily` | Paid API — explicitly out of scope per PROJECT.md | `ddgs` |
+| `scrapy` | Framework overhead unjustified for targeted corporate website scraping (single page per company). Playwright handles JS; scrapy does not natively. | `playwright` with `sync_playwright` |
+| `Splash` (Scrapinghub) | Unmaintained Lua-based JS rendering service. Docker dependency. Playwright obsoletes it. | `playwright` |
+| `openpyxl` / Excel output | Explicitly out of scope per PROJECT.md. | Parquet + Streamlit dashboard |
+| `easyocr` as primary OCR | 300–500MB model download, GPU recommended for reasonable speed. Tesseract 5 is faster and smaller for structured document OCR. | `pytesseract` + Tesseract 5 |
+| `async_playwright` inside Streamlit | Causes `RuntimeError: The event loop is already running`. Playwright scraping must run outside the Streamlit process. | Run scraper as subprocess; Streamlit only reads Parquet results. |
 
 ---
 
-## Key Findings
+## Version Compatibility
 
-- **edgartools is the clear winner for EDGAR data extraction.** Its XBRL-native interface
-  eliminates the need to write any XBRL parsing code, returning pandas DataFrames with normalized
-  financial statement labels. The SEC's own company facts JSON API (which edgartools wraps) is
-  the official, stable, structured data channel — far more reliable than HTML scraping.
-
-- **DuckDB should replace both SQLite and pandas-as-database for this project.** The analytical
-  query patterns required (multi-company, multi-year, cross-metric comparisons with window
-  functions for YoY growth) map directly to DuckDB's columnar, SQL-first design. The performance
-  difference over SQLite for these workloads is order-of-magnitude, not marginal.
-
-- **Streamlit's `@st.cache_data` is architecturally critical.** Without it, every widget
-  interaction triggers a DuckDB query and a full Python re-run. With it, the dashboard feels
-  instant. Cache TTL of 1–24 hours is appropriate since EDGAR data changes only quarterly.
-
-- **APScheduler 4.x is a trap.** It was undergoing a major API rewrite with breaking changes as
-  of mid-2025. Pin explicitly to `>=3.10,<4.0`. For a Windows local machine, Windows Task
-  Scheduler calling a Python script is actually the most robust approach and has zero Python
-  dependencies.
-
-- **Store raw EDGAR data as Parquet, process into DuckDB.** This two-layer architecture (immutable
-  Parquet archive + DuckDB analytical layer) gives you schema evolution safety: if you add new KPI
-  calculations, you re-process from the original Parquet without re-hitting the SEC API. DuckDB
-  can query Parquet files directly, making the boundary seamless.
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| `playwright>=1.48` | Python >=3.9, Windows 11 | Requires separate `playwright install chromium` step. Browsers stored in `%LOCALAPPDATA%\ms-playwright\`. |
+| `PyMuPDF>=1.24` | Python >=3.10 | Pip wheel available for Windows x64 — no build tools required. |
+| `pdfplumber>=0.11` | Python >=3.8, `pdfminer.six`, `Pillow`, `pypdfium2` | Auto-installs its own dependencies. Already validated in v1.0 environment. |
+| `pytesseract>=0.3.13` | Python >=3.8, Tesseract 5.x binary | Tesseract 5 must be installed separately from UB Mannheim. Not pip-installable. |
+| `ddgs>=9.0` | Python >=3.10 | Breaking rename from `duckduckgo-search`. Do not import both in the same environment. |
+| `weasyprint>=68.0` | Python >=3.10, GTK3 (Pango, Cairo) | System libraries (MSYS2) required on Windows. Verify with a test PDF before building against it. |
 
 ---
 
-## Confidence Levels Summary
+## Full New Dependencies for requirements.txt
 
-| Component | Recommendation | Confidence |
-|---|---|---|
-| EDGAR scraping | `edgartools` | HIGH |
-| Storage (analytical) | `duckdb` | HIGH |
-| Storage (archive) | Parquet via `pyarrow` | HIGH |
-| Data processing | `pandas` 2.x | HIGH |
-| Visualization | `streamlit` + `plotly` | HIGH |
-| Scheduling (Python) | `apscheduler` 3.x | MEDIUM |
-| Scheduling (OS) | Windows Task Scheduler | HIGH |
+```
+# LATAM Pipeline additions (v2.0)
+playwright>=1.48
+PyMuPDF>=1.24
+pdfplumber>=0.11
+pytesseract>=0.3.13
+Pillow>=10.0
+ddgs>=9.0
+weasyprint>=68.0
+langdetect>=1.0.9
 
-> MEDIUM confidence on APScheduler reflects the uncertainty around whether 4.x reached stable
-> release between August 2025 and February 2026. Verify with `pip index versions apscheduler`
-> and pin to `<4.0` as a precaution regardless.
+# requests already present (edgartools dependency) — no change needed
+```
+
+**Post-install steps (Windows 11, in order):**
+1. `playwright install chromium`
+2. Install Tesseract 5 binary from UB Mannheim with `spa` and `por` language packs
+3. Install MSYS2 + `mingw-w64-x86_64-pango` for WeasyPrint
+4. Add `C:\msys64\mingw64\bin` to PATH (or set `WEASYPRINT_DLL_DIRECTORIES`)
+5. Optionally add `pytesseract.pytesseract.tesseract_cmd` config to `latam_pdf_extractor.py` if PATH is not inherited inside conda
 
 ---
 
-*Generated by gsd-project-researcher | Knowledge cutoff: August 2025 | Live version verification
-was not available during this session — run `pip index versions <package>` to confirm latest
-stable releases before pinning.*
+## Sources
+
+- [playwright PyPI](https://pypi.org/project/playwright/) — version 1.58.0, Jan 2026. MEDIUM-HIGH confidence.
+- [Playwright Python docs — Installation](https://playwright.dev/python/docs/intro) — Windows 11+ supported, `playwright install chromium` step confirmed.
+- [PyMuPDF PyPI](https://pypi.org/project/PyMuPDF/) — version 1.27.1, Feb 2026. HIGH confidence.
+- [pdfplumber PyPI](https://pypi.org/project/pdfplumber/) — version 0.11.9, Jan 2026. HIGH confidence.
+- [pytesseract PyPI / GitHub releases](https://github.com/madmaze/pytesseract/releases) — version 0.3.13, Aug 2024. HIGH confidence (no newer release as of Mar 2026).
+- [ddgs PyPI](https://pypi.org/project/ddgs/) — version 9.11.1, Mar 2026. HIGH confidence. Confirmed successor to `duckduckgo-search`.
+- [weasyprint PyPI](https://pypi.org/project/weasyprint/) — version 68.1, Feb 2026. HIGH confidence.
+- [WeasyPrint Windows docs](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) — MSYS2 recommended over GTK3 standalone installer. HIGH confidence.
+- [Frankfurter API](https://frankfurter.dev/) — Free, no key, ECB reference rates, daily historical data available. HIGH confidence. Annual average must be computed from time-series endpoint — no built-in avg endpoint.
+- [Playwright + Streamlit async issues](https://discuss.streamlit.io/t/using-playwright-with-streamlit/28380) — confirmed: scraper must run outside Streamlit process. MEDIUM confidence (multiple sources agree).
+
+---
+
+*Stack research for: LATAM Financial Analysis Pipeline (v2.0 additions)*
+*Researched: 2026-03-03*
+*Previous v1.0 STACK.md content preserved for reference — this file now covers both v1.0 (unchanged) and v2.0 new additions.*

@@ -1,340 +1,603 @@
-# Pitfalls Research: SP500 Financial Dashboard
+# Pitfalls Research: LATAM Financial Analysis Pipeline (v2.0)
 
-> Research Type: Pitfalls — Greenfield project
-> Domain: SEC EDGAR financial data pipeline + Streamlit dashboard
-> Date: 2026-02-24
+**Domain:** Adding LATAM web scraping + PDF extraction to existing Python/Streamlit financial dashboard on Windows 11
+**Researched:** 2026-03-03
+**Confidence:** HIGH (Windows-specific issues verified via official docs and community issue trackers; currency coverage verified against ECB/Frankfurter source)
 
----
-
-## SEC EDGAR Scraping Pitfalls
-
-### 1. Rate Limit Violations (Hard Ban Risk)
-**Warning signs:** HTTP 429 responses, sudden connection resets, requests silently returning empty responses.
-**Details:** The SEC EDGAR EFTS and data APIs enforce a limit of **10 requests per second** per IP. Exceeding this triggers a temporary block; repeated violations escalate to longer bans. Many implementations use async fetching with a thread pool and forget that all threads share the same outbound IP.
-**Prevention strategy:**
-- Use a token-bucket or leaky-bucket rate limiter (e.g., `aiohttp` + `asyncio.Semaphore` capped at 8 req/s to leave headroom).
-- Always include a `User-Agent` header identifying your app and contact email (required by SEC policy; missing header is itself grounds for blocking).
-- Implement exponential backoff with jitter on 429/503 responses (start at 2 s, max 60 s).
-- Never parallelize more than one concurrent connection per IP to EDGAR full-text endpoints.
-**Phase:** Phase 1 (initial scraper) — build the limiter before any bulk fetch.
+> These pitfalls are specific to v2.0 additions. Pitfalls for the v1.0 S&P 500 pipeline
+> are documented in the original PITFALLS.md and are not repeated here.
 
 ---
 
-### 2. Missing or Malformed `User-Agent` Header
-**Warning signs:** 403 Forbidden responses right from the start; works fine in browser but fails in code.
-**Details:** SEC explicitly requires `User-Agent: CompanyName AppName contact@email.com`. Requests with generic agents (e.g., `python-requests/2.x`) are increasingly blocked.
-**Prevention strategy:** Set `User-Agent` once at the session level. Add an integration test that verifies the header is present before any production run.
-**Phase:** Phase 1 — day-zero configuration.
+## Critical Pitfalls
+
+### Pitfall 1: Playwright Sync API Crashes Inside Streamlit's Asyncio Loop
+
+**What goes wrong:**
+Calling any `sync_playwright()` function from within a Streamlit app raises:
+```
+Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead.
+```
+On Windows 11, this is compounded by a second incompatibility: Playwright requires the `ProactorEventLoop` (to run browser subprocesses), but Streamlit's Tornado server uses the `SelectorEventLoop`. The result is either a crash with `NotImplementedError` or a silent hang.
+
+**Why it happens:**
+Streamlit runs an asyncio event loop internally (via Tornado). Playwright's synchronous API detects the running loop and refuses to execute. The Windows `SelectorEventLoop` additionally cannot handle subprocess communication, which Playwright requires to talk to its browser driver process. This is a Windows-specific aggravation of a general Playwright + async environment conflict.
+
+**How to avoid:**
+Run all Playwright scraping in a dedicated background thread with its own event loop — never in the Streamlit main thread. The correct pattern:
+
+```python
+import concurrent.futures
+import asyncio
+from playwright.sync_api import sync_playwright
+
+def _scrape_in_thread(url: str) -> str:
+    """Must be called via ThreadPoolExecutor, not from Streamlit main thread."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(url, timeout=30000)
+        content = page.content()
+        browser.close()
+    return content
+
+def scrape_url(url: str) -> str:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_scrape_in_thread, url)
+        return future.result(timeout=60)
+```
+
+Each thread must have its own `sync_playwright()` instance — Playwright is not thread-safe across instances. Do NOT use `nest_asyncio` as a fix: it allows nesting but does not resolve the `ProactorEventLoop` requirement on Windows.
+
+**Warning signs:**
+- `NotImplementedError` or `RuntimeError: This event loop is already running` on first Playwright call from a Streamlit button
+- App hangs indefinitely when a user triggers scraping
+- Works fine when run from a plain `python script.py` but fails inside Streamlit
+
+**Phase to address:** Phase 1 (LATAM scraper foundation) — validate the thread isolation pattern before writing any scraping logic. Add a single-URL smoke test that calls from the Streamlit UI context.
 
 ---
 
-### 3. CIK Lookup Failures and CIK-Ticker Drift
-**Warning signs:** Companies not found; CIK lookup returns a CIK that does not match the expected ticker.
-**Details:** The `company_tickers.json` endpoint maps tickers to CIKs, but tickers change (post-merger, post-spin-off, symbol change). CIK is stable; ticker is not. Also, some companies have multiple CIK entries (subsidiaries filing separately).
-**Prevention strategy:**
-- Store CIK as the canonical identifier; never use ticker as a primary key in your data model.
-- Cache `company_tickers.json` locally but refresh weekly; detect changes via hash diff.
-- Cross-validate CIK against company name for any bulk operation.
-- Handle the case where a ticker maps to zero or multiple CIKs — log and skip rather than fail silently.
-**Phase:** Phase 1 (company universe setup).
+### Pitfall 2: Playwright Browser Binaries Not Found After pip install
+
+**What goes wrong:**
+After `pip install playwright`, running the scraper raises:
+```
+playwright._impl._errors.Error: Executable doesn't exist at ...
+Run: playwright install
+```
+The Python package and the browser binaries are two separate install steps. In a conda environment on Windows, the `playwright install` command must be run inside the activated environment, and it downloads Chromium to `%USERPROFILE%\AppData\Local\ms-playwright` (shared across environments by default, but this path can diverge if `PLAYWRIGHT_BROWSERS_PATH` is set).
+
+**Why it happens:**
+`pip install playwright` only installs the Python wrapper. Browser executables (~300 MB for Chromium) must be downloaded separately via `playwright install chromium`. This step is easily missed in documentation, CI setups, or when moving between machines. On Windows, the download path is not on `PATH` — it is looked up by the Playwright driver at runtime — so it fails silently until first use.
+
+**How to avoid:**
+Add `playwright install chromium` to your environment setup script (e.g., `setup_env.bat`). Verify the install by running:
+```bash
+python -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium.launch(); b.close(); p.stop(); print('OK')"
+```
+If moving to a different machine or rebuilding the conda env, re-run `playwright install chromium`. Optionally pin the browser path with `PLAYWRIGHT_BROWSERS_PATH` to a stable, non-user-profile location.
+
+**Warning signs:**
+- `Executable doesn't exist` error on first scrape attempt
+- Works on dev machine, fails on a freshly cloned repo
+
+**Phase to address:** Phase 1 — document in project README and environment setup script. Automate the `playwright install chromium` step in any `make setup` or `setup_env.bat` script.
 
 ---
 
-### 4. EDGAR Full-Text Search vs. Structured Data API Confusion
-**Warning signs:** XBRL data missing for a company that clearly filed; data exists in EDGAR but not via the structured API.
-**Details:** EDGAR has two relevant APIs: the **submissions API** (`data.sec.gov/submissions/CIK.json`) and the **XBRL company facts API** (`data.sec.gov/api/xbrl/companyfacts/CIK.json`). Some filings are only in the submissions API (e.g., older non-XBRL filings). XBRL-tagged facts are only available via the companyfacts endpoint. Mixing these two leads to gaps.
-**Prevention strategy:**
-- Clearly separate your data-access layer: one module for submission listings, one for XBRL facts.
-- For companies with filings before ~2009, expect XBRL gaps — document this as a known limitation.
-- Use the `accessionNumber` as a stable join key between the two APIs.
-**Phase:** Phase 1 (architecture decision).
+### Pitfall 3: pytesseract Fails With TesseractNotFoundError on Windows
+
+**What goes wrong:**
+```
+pytesseract.pytesseract.TesseractNotFoundError:
+tesseract is not installed or it's not in your PATH.
+```
+This occurs even if Tesseract is installed, because pytesseract looks for the binary via `PATH` or an explicit `tesseract_cmd` variable. Windows `PATH` is not automatically updated by the Tesseract installer unless the user explicitly checks the "Add to PATH" option — which is unchecked by default in older installer versions.
+
+**Why it happens:**
+pytesseract is a Python wrapper; the actual OCR engine is a separate Windows binary (`tesseract.exe`). The installer puts it in `C:\Program Files\Tesseract-OCR\` but does not always add it to `PATH`. Additionally, language packs for Spanish (`spa`) must be selected during installation — they are not installed by default — or downloaded manually as `.traineddata` files.
+
+**How to avoid:**
+Add explicit path configuration at the top of the OCR module:
+
+```python
+import pytesseract
+import os
+
+TESSERACT_CMD = os.environ.get(
+    "TESSERACT_CMD",
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
+pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+```
+
+During Tesseract installation:
+1. Select "Additional language data (download)" in the installer.
+2. Check `Spanish (spa)` and `Spanish (Old) (spa_old)` from the language list.
+3. After install, verify with: `tesseract --list-langs` (should include `spa`).
+
+For Spanish + number recognition in financial tables: use `lang='eng+spa'` to combine both language models.
+
+**Warning signs:**
+- `TesseractNotFoundError` on first pytesseract call
+- OCR produces empty output or garbage for Spanish text (missing `spa` language pack)
+- Works on one machine, fails on another — PATH inconsistency across machines
+
+**Phase to address:** Phase 2 (PDF extractor) — add a startup check that validates `tesseract_cmd` points to an existing file and that `spa` is in `tesseract --list-langs` output. Fail fast with a clear error message, not a silent empty string.
 
 ---
 
-### 5. Pagination and Incomplete Filing Lists
-**Warning signs:** You only get the most recent N filings; historical data appears truncated.
-**Details:** The submissions endpoint paginates older filings into separate `submissions/CIK-submissions-NNN.json` files linked from the main response. Many implementations only fetch the root file and miss years of history.
-**Prevention strategy:**
-- Parse the `files` array in the root submissions JSON and iterate all `data.sec.gov/submissions/` files for that CIK.
-- Write a test that checks a known long-history company (e.g., $AAPL) returns filings going back to at least 2010.
-**Phase:** Phase 1 (scraper completeness).
+### Pitfall 4: WeasyPrint Cannot Load GTK DLLs on Windows
+
+**What goes wrong:**
+```
+OSError: cannot load library 'gobject-2.0': error 0x7e
+OSError: dlopen() failed to load a library: cairo / cairo-2
+```
+WeasyPrint requires Pango, cairo, and GDK-PixBuf — native GTK libraries that must be installed as separate Windows binaries. These are not Python packages; they are system DLLs that WeasyPrint loads at runtime via cffi. Without them, `import weasyprint` itself may work, but `weasyprint.HTML(...).write_pdf()` will crash immediately.
+
+**Why it happens:**
+WeasyPrint v52+ (which dropped the old GTK+ Runtime installer) now recommends MSYS2 for the Windows GTK stack. The old "GTK3 Runtime" Windows installer is discontinued. Users following outdated tutorials install the old runtime, which puts DLLs in a location WeasyPrint can't find, or installs the wrong DLL filenames (e.g., `libgobject-2.0-0.dll` vs. `gobject-2.0-0.dll`).
+
+**How to avoid:**
+Use MSYS2 for GTK dependencies (the only officially supported path as of WeasyPrint v52+):
+
+```bash
+# 1. Install MSYS2 from https://www.msys2.org/
+# 2. In MSYS2 shell:
+pacman -S mingw-w64-x86_64-pango
+
+# 3. Add to Windows PATH (System Environment Variables):
+C:\msys64\mingw64\bin
+
+# 4. Set WeasyPrint DLL directory:
+set WEASYPRINT_DLL_DIRECTORIES=C:\msys64\mingw64\bin
+```
+
+Then in Python code, set the DLL path explicitly before importing weasyprint:
+```python
+import os
+os.environ.setdefault("WEASYPRINT_DLL_DIRECTORIES", r"C:\msys64\mingw64\bin")
+import weasyprint
+```
+
+**Alternative if MSYS2 is too complex:** Replace WeasyPrint with `reportlab` or `fpdf2`. Both are pure-Python with no system dependencies and work on Windows without any extra install. ReportLab supports complex layouts with tables and charts; FPDF2 is simpler but sufficient for executive summary PDFs. Consider this trade-off seriously before committing to WeasyPrint on Windows.
+
+**Warning signs:**
+- `OSError: cannot load library` on first `weasyprint.HTML().write_pdf()` call
+- Error references `gobject`, `cairo`, `pango`, or `gdk_pixbuf`
+- Works on Linux/Mac CI but fails on Windows
+
+**Phase to address:** Phase 4 (PDF report generation) — validate WeasyPrint OR make the call to switch to reportlab/fpdf2 before building any report templates. Do not assume WeasyPrint works until it has been tested end-to-end on the actual Windows machine.
 
 ---
 
-### 6. SSL Certificate and Network Retry Edge Cases
-**Warning signs:** Occasional `SSLError` or `ConnectionResetError` in production; fails overnight but works during business hours.
-**Details:** EDGAR servers occasionally drop connections, especially during off-peak maintenance windows. One-shot requests fail silently in scheduled jobs.
-**Prevention strategy:**
-- Use `requests.Session` with a `HTTPAdapter` configured with `max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])`.
-- Log every retry attempt with timestamp and URL for post-mortem analysis.
-**Phase:** Phase 1-2 (infrastructure hardening).
+### Pitfall 5: Frankfurter API Does Not Support Most LATAM Currencies
+
+**What goes wrong:**
+Calls to `https://api.frankfurter.app/latest?from=ARS&to=USD` return:
+```json
+{"message": "not found"}
+```
+or an HTTP 422 error. The Frankfurter API is backed by the European Central Bank (ECB), which tracks only 31 currencies — primarily major currencies. Of the key LATAM currencies for this project:
+
+| Currency | Code | Frankfurter Support |
+|----------|------|---------------------|
+| Brazilian Real | BRL | YES |
+| Mexican Peso | MXN | YES |
+| Argentine Peso | ARS | NO |
+| Chilean Peso | CLP | NO |
+| Colombian Peso | COP | NO |
+| Peruvian Sol | PEN | NO |
+
+ARS, CLP, COP, and PEN are absent from ECB tracking and therefore unavailable. This is a hard API limitation, not a rate limit or temporary outage.
+
+**Why it happens:**
+The project description selected Frankfurter as a "free, no-key-required" API for FX normalization. This is correct for BRL and MXN, but the selection was not validated against the full list of needed LATAM currencies. ARS in particular is not ECB-tracked due to Argentina's exchange rate instability and capital controls.
+
+**How to avoid:**
+Use a tiered fallback strategy per currency:
+
+1. **BRL, MXN** — Frankfurter API (reliable, ECB-backed)
+2. **ARS, CLP, COP, PEN** — `exchangerate-api.com` free tier (no key, 1500 req/month) or `open.er-api.com` (no key required, covers 160+ currencies including all LATAM)
+3. **All currencies** — hardcoded annual averages as last-resort fallback (from Banco Central, BCRP, SFC official publications)
+
+The FX normalizer module must accept a currency code and route to the correct source transparently. Never assume Frankfurter covers the full LATAM currency set.
+
+**Warning signs:**
+- HTTP 422 or `{"message": "not found"}` from Frankfurter for ARS/CLP/COP/PEN
+- All financial figures for Argentine/Chilean/Colombian/Peruvian companies show as `None` or `0` after normalization
+- No error logged — the API call "succeeds" with an error JSON that the code silently ignores
+
+**Phase to address:** Phase 3 (currency normalization) — before writing the normalizer, enumerate all currency codes that will appear in LATAM data and test each one against Frankfurter. Implement the tiered fallback immediately, not as a future enhancement.
 
 ---
 
-## Financial Data Pitfalls
+### Pitfall 6: Scanned PDFs Return Empty Strings Without OCR Fallback
 
-### 7. Missing XBRL Concept Names (Custom Taxonomies)
-**Warning signs:** Revenue is `None` for a company even though it clearly has revenue; KPI calculations silently return NaN.
-**Details:** US GAAP XBRL requires standard concept names (e.g., `us-gaap:Revenues`), but companies frequently use custom extensions (`dei:RevenueFromContractWithCustomerExcludingAssessedTax` vs `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax`). Banks and financial companies are especially prone to this — they use `us-gaap:InterestAndDividendIncomeOperating` instead of `us-gaap:Revenues`.
-**Prevention strategy:**
-- Maintain a concept alias map: `{"Revenues": ["us-gaap:Revenues", "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax", "us-gaap:SalesRevenueNet", ...]}`.
-- Fall back through the alias list in priority order; log which alias was used so the map can be improved.
-- Accept that some KPIs will be unavailable for some companies — surface this explicitly in the UI rather than showing `0` or a misleading value.
-**Phase:** Phase 2 (KPI engine design).
+**What goes wrong:**
+`pdfplumber.open(path).pages[0].extract_text()` returns `""` or `None` for a large proportion of LATAM financial reports. The PDF appears to have content visually (it renders correctly in a PDF viewer), but all text extraction returns empty.
 
----
+**Why it happens:**
+Many LATAM financial documents — especially from health sector regulators (Supersalud, SMV) and privately-held companies — are scanned documents: images embedded in a PDF wrapper, with no text layer. pdfplumber is built on pdfminer, which only processes text layers and cannot OCR image content. Additionally, some LATAM PDFs use non-standard embedded fonts or encryption that prevents text extraction even when a text layer exists.
 
-### 8. Division by Zero in KPI Calculations
-**Warning signs:** `inf`, `-inf`, or `NaN` values propagating into charts; entire dashboard breaks on one bad company.
-**Details:** ROE = Net Income / Equity. ROA = Net Income / Assets. Gross Margin = Gross Profit / Revenue. Each denominator can legally be zero or negative (startup with no equity, quarter with $0 revenue due to discontinued ops).
-**Prevention strategy:**
-- Never use bare `/` for financial ratios. Always use a guarded function:
-  ```python
-  def safe_ratio(numerator, denominator, floor=None):
-      if denominator is None or denominator == 0:
-          return None
-      result = numerator / denominator
-      return result if floor is None else max(result, floor)
-  ```
-- Store KPIs as `Optional[float]` (nullable), never as 0 when undefined.
-- In the dashboard, distinguish "value is zero" from "value is unavailable" with distinct visual treatment (e.g., `—` vs `0.0%`).
-**Phase:** Phase 2 (KPI engine).
+**How to avoid:**
+Implement a detection-and-fallback pipeline:
 
----
+```python
+def extract_text(path: str) -> str:
+    with pdfplumber.open(path) as pdf:
+        text = " ".join(
+            page.extract_text() or "" for page in pdf.pages
+        ).strip()
 
-### 9. Negative Equity Makes ROE Meaningless
-**Warning signs:** ROE chart shows -2000% for a company — technically correct but visually/analytically misleading.
-**Details:** Companies like McDonald's carry negative book equity due to aggressive buybacks. ROE = Net Income / Negative Equity produces a negative ROE even when the company is highly profitable — the opposite of the intuitive interpretation.
-**Prevention strategy:**
-- Flag negative-equity ROE as analytically unreliable; display a warning in the dashboard.
-- Offer an alternative metric (e.g., Return on Invested Capital / ROIC) that handles this case better.
-- Do not include negative-equity ROE in cross-company ranking comparisons without disclosure.
-**Phase:** Phase 2 (KPI engine) + Phase 3 (visualization warnings).
+    if len(text) < 50:  # threshold: fewer than 50 chars = likely scanned
+        # Fallback: render page as image, then OCR
+        text = _ocr_pdf(path)
 
----
+    return text
 
-### 10. Fiscal Year vs. Calendar Year Misalignment in Period Comparisons
-**Warning signs:** "Full Year 2023" for one company is actually Jan–Dec; for another it is Jul 2022–Jun 2023 — but both are labeled "FY2023".
-**Details:** XBRL period labels use the end date of the fiscal year (`period.endDate`). A company with a June fiscal year end reports its FY2023 as ending 2023-06-30, but an investor comparing "FY2023" across companies assumes December.
-**Prevention strategy:**
-- Store the actual `period.startDate` and `period.endDate` from XBRL, never infer fiscal year from the year in the end date alone.
-- Define `fiscal_year` as the *calendar year in which the fiscal year ends* (FY2023 = fiscal year ending in CY2023, regardless of month).
-- When comparing companies for a given fiscal year, surface the actual end dates to the user.
-- For TTM (trailing twelve months) calculations, always use 4 rolling quarters anchored to exact dates, not fiscal year labels.
-**Phase:** Phase 2 (data model) — must be settled before KPI calculations.
+def _ocr_pdf(path: str) -> str:
+    import fitz  # pymupdf
+    doc = fitz.open(path)
+    pages_text = []
+    for page in doc:
+        # Render at 300 DPI for OCR quality
+        pix = page.get_pixmap(dpi=300)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        pages_text.append(pytesseract.image_to_string(img, lang="eng+spa"))
+    return "\n".join(pages_text)
+```
+
+The 50-character threshold is a heuristic; calibrate against your actual document corpus.
+
+**Warning signs:**
+- `extract_text()` returns empty string for visually non-empty PDFs
+- Tables extract as `None` even when clearly visible in the document
+- Different results for PDFs from the same company across years (some are scanned, some are born-digital)
+
+**Phase to address:** Phase 2 (PDF extractor) — always implement the OCR fallback from day one. Do not build the extractor assuming all LATAM PDFs are born-digital; the health sector in particular has high scanned-document prevalence.
 
 ---
 
-### 11. Duplicate Facts from Amended Filings (10-K/A, 10-Q/A)
-**Warning signs:** Revenue for Q3 2022 appears twice in your database with different values; charts show spikes.
-**Details:** When a company restates financials, it files a 10-K/A or 10-Q/A. The XBRL facts API may return both the original and amended values for the same period. If you don't deduplicate, aggregations double-count.
-**Prevention strategy:**
-- Prefer the most recent filing for any given `(CIK, concept, period)` triple.
-- Track the `accessionNumber` and `filed` date alongside every fact; when deduplicating, keep the fact from the highest `filed` date.
-- Log when an amendment overrides an original value — this is also useful for detecting material restatements.
-**Phase:** Phase 1-2 (data ingestion + storage schema).
+### Pitfall 7: duckduckgo-search Gets Rate-Limited or Blocked Without Warning
+
+**What goes wrong:**
+After a moderate number of requests, `DDGS().text(query)` raises:
+```
+duckduckgo_search.exceptions.RatelimitException: 202 Ratelimit
+```
+or returns empty results without raising an exception, making it appear that no search results exist for the query. The library has no configurable rate limit setting — it relies on DuckDuckGo's undocumented tolerance thresholds, which vary by backend (`html`, `lite`) and by IP.
+
+**Why it happens:**
+DuckDuckGo does not have a public API for programmatic search. The `duckduckgo-search` library reverse-engineers the DuckDuckGo web interface, which means DuckDuckGo can change rate limits, block patterns, or alter HTML structure without notice. Multiple reported incidents in early 2025 show rate limiting triggering at as few as 10-20 requests per session, particularly on home IP addresses.
+
+**How to avoid:**
+1. Cache all search results to disk (by query hash) — never repeat the same search in the same session.
+2. Add randomized delays between searches: `time.sleep(random.uniform(2, 5))`.
+3. Limit web search to the "context enrichment" phase only — do not call it in a tight loop or for every company on every run.
+4. Wrap all DDGS calls in retry logic with exponential backoff and explicit `RatelimitException` handling:
+
+```python
+from duckduckgo_search import DDGS
+from duckduckgo_search.exceptions import RatelimitException
+import time, random
+
+def search_with_retry(query: str, max_results: int = 5) -> list[dict]:
+    for attempt in range(3):
+        try:
+            with DDGS() as ddgs:
+                return list(ddgs.text(query, max_results=max_results))
+        except RatelimitException:
+            wait = (2 ** attempt) * random.uniform(3, 7)
+            time.sleep(wait)
+    return []  # graceful degradation — context enrichment is optional
+```
+
+5. Treat DDGS results as supplementary context, not as required data. If search fails, the pipeline continues without it.
+
+**Warning signs:**
+- `RatelimitException` after fewer than 20 queries in a session
+- Empty results for clearly findable queries (e.g., company name + "informe financiero")
+- Results inconsistent between runs for the same query
+
+**Phase to address:** Phase 3 (web search integration) — design as optional/degradable from the start. Never make the pipeline block on search results; always log and continue.
 
 ---
 
-### 12. Annualized vs. Point-in-Time Concepts
-**Warning signs:** Balance sheet items (Assets, Equity) added across four quarters, producing 4x the actual value.
-**Details:** XBRL has two concept types: **instantaneous** (balance sheet items, reported at a point in time — `Assets`, `LiabilitiesAndStockholdersEquity`) and **duration** (income/cash flow items, accumulated over a period — `NetIncomeLoss`, `Revenues`). Summing four quarters of `Assets` is nonsensical.
-**Prevention strategy:**
-- For TTM income statement aggregation: sum 4 quarterly duration values.
-- For balance sheet: use the most recent quarter's instantaneous value — never sum.
-- Maintain a concept-type registry that classifies every concept as `instant` or `duration`.
-**Phase:** Phase 2 (KPI engine — critical architectural decision).
+## Moderate Pitfalls
+
+### Pitfall 8: pdfplumber vs. pymupdf: Wrong Tool for the Job
+
+**What goes wrong:**
+Using pdfplumber for large, complex LATAM annual reports causes excessive memory use and slow processing. Using pymupdf (fitz) for structured table extraction on well-formatted PDFs misses the table bounding box detection that pdfplumber provides. Swapping libraries mid-project requires rewriting the extraction layer.
+
+**Why it happens:**
+pdfplumber excels at table extraction with visual bounding-box analysis, but it is significantly slower and more memory-intensive than pymupdf. pymupdf excels at raw text and image extraction speed but lacks pdfplumber's table detection. Many projects start with one and hit the other's limitations.
+
+**How to avoid:**
+Use both, each for what it does best:
+
+| Task | Library | Reason |
+|------|---------|--------|
+| Table extraction from born-digital PDFs | pdfplumber | Bounding box analysis, column detection |
+| Fast text extraction for overview/triage | pymupdf | 5-10x faster than pdfplumber for text |
+| Page-to-image conversion for OCR | pymupdf | Built-in `page.get_pixmap()` at arbitrary DPI |
+| Detecting scanned vs. text PDFs | pymupdf | `page.get_text()` fast check before pdfplumber |
+
+Use pymupdf as the first-pass triage tool, then route to pdfplumber only for pages where table extraction is needed.
+
+**Warning signs:**
+- pdfplumber taking 30+ seconds per PDF for large reports
+- Missing table data when using pymupdf alone
+- Running both on every page unnecessarily
+
+**Phase to address:** Phase 2 (PDF extractor architecture) — document the two-library strategy in the extractor module design before implementation.
 
 ---
 
-## Streamlit/Visualization Pitfalls
+### Pitfall 9: Spanish Character Encoding in Company Name Slugs for Storage Paths
 
-### 13. Re-Running Entire ETL on Every Page Interaction
-**Warning signs:** Dashboard takes 10-30 seconds to respond to any filter change; users see loading spinners constantly.
-**Details:** Streamlit reruns the entire script on every widget interaction. Without caching, this means re-reading Parquet files, re-computing KPIs, and re-filtering datasets on every click.
-**Prevention strategy:**
-- Use `@st.cache_data` for data loading and KPI computation functions. Set appropriate `ttl` (e.g., `ttl=3600` for hourly refresh).
-- Load the full dataset once at startup; use Pandas/Polars filtering in-memory for user selections rather than re-reading from disk.
-- For large Parquet datasets, use **predicate pushdown** via PyArrow: read only the columns and row groups needed for the current view.
-**Phase:** Phase 3 (dashboard architecture).
+**What goes wrong:**
+Company names like `"Clínica Alemana"`, `"Organización Sanitas"`, or `"EPS Sánitas"` generate storage paths like `data/latam/Cl?nica Alemana/` on Windows, or cause `OSError: [WinError 123] The filename, directory name, or volume label syntax is incorrect` when the path contains characters Windows does not allow in file names (`<>:"/\|?*`).
 
----
+**Why it happens:**
+Windows NTFS technically supports Unicode filenames, but many characters that are valid in Spanish (`ñ`, accented vowels) can trigger encoding issues when conda/Python uses the system code page (CP1252 or CP850) instead of UTF-8. Additionally, Windows forbids certain characters in paths that are valid on Linux/macOS. Python's default file operations on Windows may not normalize paths correctly unless the code explicitly handles it.
 
-### 14. `st.session_state` Corruption Across Page Navigations
-**Warning signs:** Filters applied on page A bleed into page B; resetting a filter on one company affects another company's view.
-**Details:** Streamlit's multi-page apps share `session_state` across pages. Widget keys that are not unique cause state collisions. Mutable objects (lists, dicts) stored in session_state and mutated in-place bypass Streamlit's change detection.
-**Prevention strategy:**
-- Use fully namespaced keys: `st.session_state["company_filter_page1"]` not `st.session_state["filter"]`.
-- Never mutate session_state values in-place; always replace: `st.session_state["key"] = new_value`.
-- Initialize all session_state keys in a single `init_session_state()` function called at the top of each page.
-**Phase:** Phase 3 (dashboard architecture).
+**How to avoid:**
+Generate slugs for all storage paths — never use raw company names as directory or file names:
 
----
+```python
+import unicodedata
+import re
 
-### 15. Parquet File Size and Column Bloat
-**Warning signs:** First load takes 5+ seconds even with caching; memory usage spikes to multi-GB.
-**Details:** Storing all XBRL facts (hundreds of concept names) for 500+ companies across 10+ years in a single wide Parquet file creates a massive dataset. Most users only view 5-10 KPIs at a time.
-**Prevention strategy:**
-- Use a **narrow fact table** schema: `(cik, ticker, concept, period_end, value, unit, filing_date)` rather than a wide pivoted table with one column per concept.
-- Partition Parquet files by `cik` or `year` to enable partition pruning.
-- Pre-compute and store the specific KPIs (Revenue, NetIncome, ROE, etc.) in a separate summary Parquet — load this for the dashboard; use the raw fact table only for drill-down.
-- Use Polars instead of Pandas for filtering — significantly faster for large DataFrames.
-**Phase:** Phase 2 (data storage design) — fixing this post-hoc is expensive.
+def make_slug(name: str, country: str) -> str:
+    """Convert 'Clínica Alemana' + 'CL' -> 'clinica-alemana_CL'"""
+    # Normalize unicode: decompose accented chars, then drop accents
+    normalized = unicodedata.normalize("NFKD", name)
+    ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
+    # Lowercase, replace spaces/special chars with hyphen
+    slug = re.sub(r"[^\w\s-]", "", ascii_name).strip().lower()
+    slug = re.sub(r"[\s_-]+", "-", slug)
+    return f"{slug}_{country.upper()}"
 
----
+# Result: "clinica-alemana_CL", "organizacion-sanitas_CO"
+```
 
-### 16. Plotly/Altair Chart Performance with Many Data Points
-**Warning signs:** Time-series chart with 500 companies x 40 quarters = 20,000 points causes browser lag.
-**Details:** Client-side rendering in Plotly/Altair becomes slow above ~10,000 data points in a single chart. Streamlit sends the entire dataset to the browser as JSON.
-**Prevention strategy:**
-- Default charts to a max of 10-20 companies; require explicit "compare all" action.
-- For trend charts, consider pre-aggregating to annual from quarterly for overview views.
-- Use `st.plotly_chart(fig, use_container_width=True)` with `config={"displayModeBar": False}` for simpler rendering.
-- Consider server-side rendering with Matplotlib for static snapshots of large comparison grids.
-**Phase:** Phase 3 (visualization implementation).
+Store the display name (with accents) separately in metadata; use only the slug for filesystem paths. Alternatively use `python-slugify` library which handles this robustly.
+
+**Warning signs:**
+- `OSError` or `FileNotFoundError` for paths containing Spanish company names
+- Paths display as `????` in Windows Explorer
+- Parquet files saved but cannot be reopened due to path encoding mismatch
+
+**Phase to address:** Phase 1 (LATAM data storage design) — define the slug function and storage path convention before writing any data to disk. Retrofitting this after data is saved forces a migration.
 
 ---
 
-### 17. Streamlit Deployment Memory Limits
-**Warning signs:** App crashes or restarts on Streamlit Cloud after loading large datasets; works fine locally.
-**Details:** Streamlit Community Cloud has a ~1 GB RAM limit per app. A 500-company, 10-year XBRL dataset can easily exceed this if loaded naively into a DataFrame.
-**Prevention strategy:**
-- Use `@st.cache_resource` for heavy singleton objects (database connections, large lookup tables).
-- Consider a DuckDB in-process database instead of loading all Parquet data into RAM — DuckDB can query Parquet files on disk with SQL, returning only the slice needed.
-- Set dtype precision appropriately: use `float32` instead of `float64` for financial ratios; use `int32` for counts.
-**Phase:** Phase 3 (deployment planning).
+### Pitfall 10: Streamlit Widget Key Collisions When Adding LATAM Section
+
+**What goes wrong:**
+Adding LATAM widgets to `app.py` causes `streamlit.errors.DuplicateWidgetID` errors that break the entire app, including the existing S&P 500 section. Examples: `st.text_input("Company", key="company")` already exists in the S&P 500 section; adding a second `st.text_input("Company", key="company")` for LATAM breaks both sections.
+
+**Why it happens:**
+Streamlit generates a unique ID per widget based on its `key` parameter (or its position if no key is given). When the same key appears twice in the same script run, Streamlit raises `DuplicateWidgetID`. This is especially easy to trigger when copying widget code from the existing S&P 500 section as a starting point for the LATAM section.
+
+**How to avoid:**
+Namespace all new LATAM widget keys with a prefix:
+
+```python
+# S&P 500 section (existing — do not touch)
+ticker = st.text_input("Ticker", key="sp500_ticker")
+
+# LATAM section (new)
+company_url = st.text_input("Corporate URL", key="latam_company_url")
+country = st.selectbox("Country", options=LATAM_COUNTRIES, key="latam_country")
+```
+
+Use a consistent prefix (`latam_`) for all new widgets. Initialize all LATAM session state keys in a separate `init_latam_session_state()` function called at the top of the LATAM section.
+
+**Warning signs:**
+- `DuplicateWidgetID` error immediately after adding new widgets
+- The error appears in the S&P 500 section, not the LATAM section — confusing because the new code is elsewhere
+- App was working before the LATAM section was added
+
+**Phase to address:** Phase 5 (dashboard LATAM section integration) — adopt the `latam_` namespace prefix as a convention from the very first widget added. Code review should check all new widget keys against existing ones.
 
 ---
 
-## ETL/Scheduling Pitfalls
+### Pitfall 11: Backwards Compatibility — Existing S&P 500 Imports Break on New Dependencies
 
-### 18. Timezone Confusion in Quarterly Scheduling
-**Warning signs:** ETL runs at wrong time after daylight saving time change; "daily" job runs twice on one day.
-**Details:** SEC filing deadlines are in US Eastern Time (ET). Cron jobs on UTC servers appear to shift relative to ET twice a year. A cron job set to `0 6 * * *` UTC means 1 AM ET in winter and 2 AM ET in summer — fine for overnight runs, but problematic if you're targeting a specific window after market close.
-**Prevention strategy:**
-- Express all scheduled times in **UTC** in cron/scheduler configuration, then document the ET equivalent.
-- Use `pytz` or `zoneinfo` for any ET-aware date logic; never use naive `datetime.now()`.
-- For quarterly earnings season (approx Jan, Apr, Jul, Oct), increase ETL run frequency to daily.
-**Phase:** Phase 4 (scheduler setup).
+**What goes wrong:**
+Adding `import playwright` or `import weasyprint` at the top of `app.py` causes the entire app to fail to load if those packages are not installed or if their native dependencies (GTK, Playwright browsers) are not configured. This breaks the S&P 500 section — which has no dependency on any of these packages — for users who have not yet set up the LATAM environment.
 
----
+**Why it happens:**
+Top-level imports in Python execute at module load time. If `weasyprint` raises an `OSError` (missing GTK DLL) or `playwright` raises an import error, the entire `app.py` module fails to load. The S&P 500 section, which was working fine, becomes unavailable due to a failed import for a feature it does not use.
 
-### 19. Partial Run Corruption (Non-Atomic Writes)
-**Warning signs:** Dashboard shows some companies with data through Q3 2024 and others only through Q1 2024 after an ETL run; inconsistent data mid-run.
-**Details:** If the ETL writes company-by-company to Parquet and a run is interrupted (OOM, network timeout, crash), you end up with a partially updated dataset. Future runs that skip already-processed companies will perpetuate the partial state.
-**Prevention strategy:**
-- Write ETL output to a staging directory/file; atomically swap to production only on full success (rename/replace, not in-place write).
-- Maintain a run manifest: `{run_id, started_at, completed_at, companies_processed, status}`. Only mark `status=success` on full completion.
-- On restart, process companies in alphabetical/CIK order and use idempotent upsert logic rather than overwrite.
-**Phase:** Phase 4 (ETL reliability).
+**How to avoid:**
+Use lazy imports scoped to the LATAM section functions:
 
----
+```python
+# BAD — top-level import breaks the whole app if GTK is missing
+import weasyprint
 
-### 20. Stale Data Detection Failure
-**Warning signs:** Dashboard shows Q2 data labeled as "current" in November, when Q3 has already been filed; users trust outdated numbers.
-**Details:** SEC filing deadlines: 10-Q is due 40 days after quarter end for large accelerated filers, 45 days for accelerated filers. Many pipelines check "did we run today?" rather than "is the data actually fresh relative to what should be available?"
-**Prevention strategy:**
-- Track `last_filing_date` per company; compare against the theoretical filing deadline for the most recent quarter end.
-- Raise an alert if a company's most recent data is more than 60 days behind the expected filing deadline.
-- In the dashboard, display a "Data as of [date]" label per company, not a global "Updated today" label.
-**Phase:** Phase 4 (data freshness monitoring).
+# GOOD — import only when the LATAM feature is actually used
+def generate_pdf_report(html_content: str) -> bytes:
+    try:
+        import weasyprint
+        return weasyprint.HTML(string=html_content).write_pdf()
+    except ImportError:
+        raise RuntimeError(
+            "WeasyPrint not installed. Run: pip install weasyprint "
+            "and install GTK dependencies."
+        )
+```
 
----
+Similarly, wrap LATAM section rendering in a `try/except ImportError` that shows a setup instructions panel instead of crashing.
 
-### 21. Re-Scraping Already-Fetched Filings (Wasteful and Ban-Prone)
-**Warning signs:** ETL always re-fetches all filings from scratch; run time grows linearly with history depth.
-**Details:** Fetching 10 years of 10-K/10-Q filings for 500 companies from scratch on every run wastes bandwidth, risks rate-limiting, and takes hours.
-**Prevention strategy:**
-- Maintain a local cache of `accessionNumber -> filing_data`; only fetch accession numbers that are not already cached.
-- Use the `filed` date from the submissions API as a high-water mark: only fetch filings newer than `max(filed_date)` in your cache.
-- For XBRL facts, use the `companyfacts` bulk download ZIP (available quarterly from SEC) as the baseline; layer incremental API calls on top.
-**Phase:** Phase 1-4 (incremental design — must be planned upfront).
+**Warning signs:**
+- S&P 500 section stops working after adding LATAM code
+- App fails to start with an import error referencing a LATAM-only package
+- No error in LATAM code itself — error is at module load time
+
+**Phase to address:** Phase 5 (dashboard integration) — establish a "lazy import" pattern for all LATAM dependencies from the first integration commit. Never add LATAM imports to the top-level `app.py` import block.
 
 ---
 
-### 22. EDGAR Bulk Download vs. API Inconsistency
-**Warning signs:** Bulk download has more/different data than the real-time API; reprocessing bulk gives different KPIs than live scraping.
-**Details:** SEC provides quarterly bulk XBRL data dumps at `https://www.sec.gov/dera/data`. These dumps are point-in-time snapshots and may lag amendments filed after the dump date. The live API reflects the current state including amendments.
-**Prevention strategy:**
-- Use bulk downloads for historical backfill (faster, less rate-limit risk); use the live API for incremental updates.
-- Document which data source was used for each filing in your manifest.
-- For auditing, always be able to trace a KPI value back to its source `accessionNumber` and API endpoint.
-**Phase:** Phase 1 (data architecture decision).
+### Pitfall 12: LATAM PDF Table Extraction Fails Due to IFRS vs. Local GAAP Structural Differences
+
+**What goes wrong:**
+Table extraction logic that works for one LATAM country fails for another because the structure of financial statements differs — not just in language, but in the number of line items, the nesting depth, the label conventions, and the presence/absence of subtotals. An extractor calibrated on Chilean CMF PDFs (which follow IFRS closely) produces garbage results on Colombian Supersalud filings (which use local GAAP with custom account codes).
+
+**Why it happens:**
+LATAM countries use a mix of IFRS (Chile, Colombia, Peru, Mexico — for publicly listed companies), local adaptations (Colombian health sector uses PCG-Salud, Peru uses NIIF-SMCF), and purely local GAAP (smaller private entities). Statement labels, line item names, currency placement, and column orders vary substantially. There is no standardized XBRL taxonomy equivalent for LATAM health sector filings.
+
+**How to avoid:**
+1. Build per-country extraction configurations (or adapters) rather than a single universal parser.
+2. Use heuristic label matching (`"ingresos" in row_label.lower()` rather than `row_label == "Revenues"`).
+3. Extract a "raw table" with all rows first; apply label normalization in a post-processing step.
+4. Treat the extraction layer as inherently lossy — design the pipeline to surface confidence scores and flag manual review when extraction quality is below threshold (e.g., fewer than 5 recognizable financial line items extracted).
+
+**Warning signs:**
+- Extraction produces tables with correct column count but meaningless row labels
+- Totals don't balance (extracted Revenue != sum of extracted line items)
+- Same extractor works for Brazil but fails for Colombia
+
+**Phase to address:** Phase 2 (PDF extractor) — design the extractor with a country-adapter pattern from the start. Budget significant time for per-country calibration in Phase 2.
 
 ---
 
-## Multi-Company Comparison Pitfalls
+## Technical Debt Patterns
 
-### 23. Fiscal Year End Heterogeneity Breaking Peer Comparisons
-**Warning signs:** "FY2023 Revenue" for a retail company (Jan fiscal year) includes January 2024 sales; comparison to a calendar-year company is misleading.
-**Details:** S&P 500 companies have fiscal year ends spread across all 12 months. Retail companies commonly use late January (Walmart: Jan 31). Tech companies commonly use December 31. A "same year" comparison can be 12 months apart in actual economic reality.
-**Prevention strategy:**
-- Always expose fiscal year end month in company metadata and in comparison tables.
-- Offer two comparison modes: (1) by fiscal year label (FY2023 vs FY2023), (2) by calendar year overlap (actual dates overlapping a calendar year).
-- Warn users when comparing companies whose fiscal year ends differ by more than 3 months.
-**Phase:** Phase 3 (dashboard UX design).
+Shortcuts that seem reasonable but create long-term problems.
 
----
-
-### 24. Restatements Silently Changing Historical Comparables
-**Warning signs:** "Revenue growth" calculation for a company changes overnight without a new quarter filing; historical chart shifts.
-**Details:** Companies restate prior-period financials in subsequent filings. The amended 10-K will contain restated figures for prior years within its comparative financial statements. If you ingest these figures, your database now has revised historical data — but your dashboard may show this as a "change" in old data rather than a restatement.
-**Prevention strategy:**
-- Track data provenance: every financial fact has a `source_accession_number` and `source_filed_date`.
-- When a new filing updates a prior-period value, log the delta as a restatement event.
-- In the dashboard, show a "restatement flag" icon on data points that have been revised from their original values.
-**Phase:** Phase 2 (data model) + Phase 3 (visualization).
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Using Frankfurter for all LATAM FX | Simple single-API implementation | ARS/CLP/COP/PEN always return None; silent data corruption | Never — must implement tiered fallback before first use |
+| Single universal PDF extractor | Faster to build | Fails on 30-50% of LATAM PDFs due to country/format variation | Never — use country adapters from day one |
+| Top-level LATAM imports in app.py | Simpler code structure | Breaks S&P 500 section if any LATAM dep fails to load | Never for optional features |
+| Raw company names as filesystem paths | No slug function to write | OSError on Spanish characters; cross-platform inconsistency | Never on Windows with Unicode names |
+| Calling Playwright from Streamlit main thread | Simpler code | Crashes with NotImplementedError on Windows | Never — always use thread isolation |
+| Skipping OCR fallback for "simple" cases | Faster initial build | 30-50% of LATAM PDFs are scanned; pipeline silently returns empty | Never — implement fallback from day one |
+| Hardcoding Tesseract path as C:\Program Files\Tesseract-OCR\tesseract.exe | Works on dev machine | Breaks on any machine with different Tesseract install path | Only in rapid prototyping; use env var before any shared use |
+| Not namespacing Streamlit widget keys | Less verbose code | DuplicateWidgetID errors that break both SP500 and LATAM sections | Never when adding to existing app |
 
 ---
 
-### 25. M&A Events Breaking Time-Series Continuity
-**Warning signs:** Revenue chart for an acquiring company jumps 40% in one quarter due to acquisition, falsely appearing as organic growth.
-**Details:** Mergers, acquisitions, and divestitures create structural breaks in time-series financials. An acquisition adds the target's revenue immediately from the acquisition date. Organic growth rates cannot be calculated across these boundaries without pro-forma adjustment.
-**Prevention strategy:**
-- Flag quarters where a company filed an 8-K with Item 2.01 (Completion of Acquisition/Disposition) — this is available via the submissions API's form type filter.
-- Show a visual indicator on the time-series chart at M&A event dates.
-- Do not attempt to calculate YoY growth rates across acquisition quarters without explicitly labeling them as inorganic.
-**Phase:** Phase 3 (visualization) + Phase 2 (data enrichment).
+## Integration Gotchas
+
+Common mistakes when connecting to external services and components.
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Frankfurter API | Assuming all LATAM currencies are available | Check supported currency list first; ARS, CLP, COP, PEN are absent — use fallback API |
+| Frankfurter API | Not handling date-range gaps (weekends/holidays) | Request `start_date` to `end_date` range; API returns business days only — compute average from available dates |
+| duckduckgo-search | Calling in a loop without caching | Cache results by query hash; add 2-5s randomized delay between calls |
+| duckduckgo-search | Treating empty results as "no data found" | Empty results may be rate limiting, not absence of data — retry with backoff |
+| Playwright | Calling sync API from Streamlit main thread | Always use `ThreadPoolExecutor` to isolate Playwright in its own thread |
+| Playwright | Running `playwright install` once globally then switching conda envs | Re-run `playwright install chromium` in each new env; browser binaries are path-dependent |
+| pytesseract | Calling without setting `tesseract_cmd` on Windows | Always set `pytesseract.pytesseract.tesseract_cmd` explicitly; do not rely on PATH |
+| weasyprint | Importing at module top level | Use lazy import inside the PDF generation function; GTK errors are runtime, not import-time |
+| pdfplumber | Assuming non-empty output means good extraction | Check: (1) character count reasonable? (2) recognizable financial keywords present? (3) numbers extractable? |
+| LATAM regulatory sites | Assuming stable URL patterns for annual reports | LATAM regulator websites change URL structure frequently; validate URL accessibility before running ETL |
 
 ---
 
-### 26. Survivorship Bias in S&P 500 Universe
-**Warning signs:** All companies in your dataset show historically healthy performance; no bankruptcies or delistings appear.
-**Details:** The S&P 500 index membership changes over time. If you use the *current* S&P 500 list as your universe and fetch historical data, you are implicitly selecting for companies that survived to the present — biasing any historical analysis.
-**Prevention strategy:**
-- Use a point-in-time S&P 500 membership list (available from data providers or via historical press releases) if historical accuracy is required.
-- Clearly document in the dashboard that the universe is "current S&P 500 members" and that historical data for these companies may exhibit survivorship bias.
-- If a company is delisted (e.g., acquired out of the index), retain its historical data rather than deleting it.
-**Phase:** Phase 1 (scope definition) — decide upfront if point-in-time membership matters.
+## Performance Traps
+
+Patterns that work for a small test set but fail at scale.
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Running Playwright headless for every PDF download | Works for 5 companies; 10-minute timeout for 50 | Use Playwright only for JS-rendered pages; use `requests` for direct PDF URLs once found | Beyond ~10 simultaneous scrapes |
+| Running pytesseract on full PDF without DPI control | OCR produces garbled output; accuracy <50% | Use 300 DPI for `page.get_pixmap(dpi=300)`; 150 DPI minimum | Any scan below 200 DPI |
+| Loading all LATAM PDFs into memory simultaneously | RAM exhaustion on large annual reports (50-200 MB each) | Process one PDF at a time; close pdfplumber handles after extraction | 3+ large PDFs in memory |
+| Re-scraping the same LATAM URL on every Streamlit rerun | Playwright launches on every button click | Cache scraped HTML to disk; check cache before launching browser | First time user clicks button twice |
+| Calling duckduckgo-search 10+ times per company analysis | RatelimitException mid-pipeline | Batch all search queries; run once per analysis session, cache to JSON | 5+ companies in same session |
 
 ---
 
-### 27. Sector/Industry Classification Inconsistency
-**Warning signs:** Comparing "Retail" companies includes both pure-play retailers and conglomerates; peer benchmarks are meaningless.
-**Details:** GICS sector classifications change over time (e.g., Meta moved from IT to Communication Services in 2018). Using current GICS for historical peer comparisons creates anachronistic groupings.
-**Prevention strategy:**
-- Store both current and historical GICS codes if sector-based peer analysis is a feature.
-- For the MVP, use the current GICS code and disclose the limitation.
-- Cross-reference with SIC codes from EDGAR DEI (Document and Entity Information) as a secondary classification.
-**Phase:** Phase 1-2 (company metadata model).
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **Playwright scraper:** Tested with a URL from an actual LATAM health company website — not just `https://example.com`. JS-heavy sites (common in LATAM corporates) require `page.wait_for_load_state("networkidle")`.
+- [ ] **OCR fallback:** Tested against an actual scanned PDF from a LATAM regulator, not just a born-digital test PDF. Confirm `spa` language model produces readable Spanish output.
+- [ ] **Currency normalizer:** Tested with ARS, CLP, COP, PEN — not just BRL and MXN. Frankfurter fallback path exercised.
+- [ ] **PDF report (WeasyPrint):** Tested `write_pdf()` end-to-end on the Windows machine — not just that `import weasyprint` succeeds. GTK DLL errors only appear at `write_pdf()` time.
+- [ ] **Slug generation:** Tested with `ñ`, `á`, `é`, `í`, `ó`, `ú`, `ü`, spaces, and parentheses in company names. Windows path created and reopened successfully.
+- [ ] **LATAM section in app.py:** Confirmed existing S&P 500 section still works after adding LATAM imports. Run the app with LATAM packages uninstalled to verify graceful degradation.
+- [ ] **Widget keys:** Confirmed no `DuplicateWidgetID` error by searching `app.py` for duplicate `key=` values after adding LATAM widgets.
+- [ ] **Tesseract configuration:** Run `tesseract --list-langs` and confirm `spa` appears. Run a test OCR on a Spanish-language image — not just an English test.
+- [ ] **duckduckgo-search:** Tested that `RatelimitException` is caught and pipeline continues — does not require results to proceed.
 
 ---
 
-## Key Findings
+## Recovery Strategies
 
-### Top 5 Most Critical Risks
+When pitfalls occur despite prevention, how to recover.
 
-**Risk 1 — XBRL Concept Name Fragmentation (Severity: Critical)**
-Revenue and other core KPIs will silently return `None` for 10-30% of companies due to custom taxonomy extensions if you hardcode a single concept name. This is the #1 source of incorrect-looking data in financial dashboards built on EDGAR. Fix: build a concept alias fallback chain in Phase 2 before any KPI code is written.
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Playwright crashes from asyncio conflict | LOW | Move all Playwright calls into `ThreadPoolExecutor`; no data loss |
+| Playwright browser binaries missing | LOW | Run `playwright install chromium`; 2-minute fix |
+| pytesseract TesseractNotFound | LOW | Set `tesseract_cmd` explicitly; add env var to `.env` file |
+| WeasyPrint GTK DLLs missing | MEDIUM | Install MSYS2 + pango, add to PATH, set `WEASYPRINT_DLL_DIRECTORIES`; OR switch to reportlab/fpdf2 (2-4 hours if switching libraries) |
+| Frankfurter missing ARS/CLP/COP/PEN | MEDIUM | Implement tiered FX fallback; all previously normalized data for those currencies is `None` and must be re-processed |
+| duckduckgo-search blocked | LOW | Add retry + delay + cache; pipeline degrades gracefully without search results |
+| Scanned PDFs returning empty | MEDIUM | Add OCR fallback; re-run extraction on all previously processed PDFs (may be slow) |
+| LATAM section breaks S&P 500 | LOW | Move LATAM imports to lazy import pattern; no data loss, 30-minute fix |
+| Widget key collision | LOW | Add `latam_` prefix to all new keys; no data loss, 15-minute fix |
+| Slug generation breaks paths | MEDIUM | Add slug function; rename existing LATAM data directories; update all references |
 
-**Risk 2 — Rate Limiting and IP Ban (Severity: Critical)**
-A bulk fetch of 500 companies without a proper rate limiter will trigger an EDGAR IP ban within minutes of the first run. This blocks all development and testing. Fix: implement the rate limiter and `User-Agent` header as the very first line of scraper code in Phase 1.
+---
 
-**Risk 3 — Instant vs. Duration Concept Confusion (Severity: High)**
-Summing four quarters of balance sheet items (instantaneous concepts) is a silent error that produces plausible-looking but completely wrong numbers. There is no runtime error — the aggregation just multiplies balance sheet figures by 4. Fix: establish the concept-type registry in Phase 2 before any TTM calculation logic.
+## Pitfall-to-Phase Mapping
 
-**Risk 4 — Partial ETL Run Data Corruption (Severity: High)**
-Without atomic writes, any interrupted ETL run leaves the production dataset in an inconsistent state where some companies are days or quarters behind others. Debugging this without a run manifest is extremely difficult. Fix: design atomic staging-swap writes and run manifests in Phase 4 before scheduling anything in production.
+How roadmap phases should address these pitfalls.
 
-**Risk 5 — Fiscal Year Heterogeneity in Peer Comparisons (Severity: Medium-High)**
-Users will naturally compare "FY2023" across companies without realizing they are comparing periods that may differ by up to 11 months of actual calendar time. This produces misleading conclusions in any peer benchmarking feature. Fix: expose fiscal year end dates in all comparison views and add a warning when fiscal year ends differ by more than 3 months (Phase 3, UX design gate).
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Playwright + asyncio event loop conflict | Phase 1 — scraper foundation | Smoke test: call scraper function from a Streamlit button; confirm no NotImplementedError |
+| Playwright browser binaries missing | Phase 1 — environment setup | Run `python -c "from playwright.sync_api import sync_playwright; ..."` in the conda env |
+| pytesseract TesseractNotFoundError | Phase 2 — PDF extractor | Startup check verifies `tesseract_cmd` exists and `spa` is in `--list-langs` |
+| WeasyPrint GTK DLL failures | Phase 4 — PDF report generation | Call `weasyprint.HTML(string="<p>test</p>").write_pdf()` before building templates |
+| Frankfurter missing LATAM currencies | Phase 3 — currency normalizer | Unit test: normalize values for ARS, CLP, COP, PEN — all must return a float, not None |
+| Scanned PDFs return empty | Phase 2 — PDF extractor | Integration test: run extraction on a known scanned PDF; confirm non-empty output |
+| duckduckgo-search rate limiting | Phase 3 — web search integration | Integration test: trigger `RatelimitException` deliberately; confirm pipeline continues |
+| pdfplumber vs. pymupdf wrong tool | Phase 2 — PDF extractor | Benchmark both on 3 representative LATAM PDFs; document decision |
+| Spanish character slugs on Windows | Phase 1 — data storage design | Create test paths with all special characters; confirm round-trip open/read |
+| Widget key collision | Phase 5 — dashboard integration | Search `app.py` for `key=` values; confirm no duplicates across S&P 500 and LATAM sections |
+| Backwards compatibility imports | Phase 5 — dashboard integration | Start app with LATAM packages uninstalled; S&P 500 section must load cleanly |
+| IFRS vs. local GAAP table structure | Phase 2 — PDF extractor | Test on one PDF from each target country (CO, PE, CL, MX, AR, BR) |
+
+---
+
+## Sources
+
+- [Streamlit + Playwright asyncio conflict — GitHub Issue #7825](https://github.com/streamlit/streamlit/issues/7825)
+- [Playwright sync API inside asyncio loop — GitHub Issue #462](https://github.com/microsoft/playwright-python/issues/462)
+- [Playwright sync API + Streamlit workaround — Streamlit Community](https://discuss.streamlit.io/t/using-playwright-with-streamlit/28380)
+- [Playwright thread safety discussion — GitHub Issue #470](https://github.com/microsoft/playwright-python/issues/470)
+- [Playwright Installation — Official Docs](https://playwright.dev/python/docs/intro)
+- [pytesseract TesseractNotFoundError — GitHub Issue #348](https://github.com/madmaze/pytesseract/issues/348)
+- [WeasyPrint Windows GTK install — Official Docs v52.5](https://doc.courtbouillon.org/weasyprint/v52.5/install.html)
+- [WeasyPrint MSYS2 recommendation — GitHub Issue #2105](https://github.com/Kozea/WeasyPrint/issues/2105)
+- [WeasyPrint gobject DLL error — GitHub Issue #971](https://github.com/Kozea/WeasyPrint/issues/971)
+- [Frankfurter API currency list — Official Site](https://frankfurter.dev/)
+- [Frankfurter currency requests tracker — GitHub Issue #144](https://github.com/lineofflight/frankfurter/issues/144)
+- [duckduckgo-search RatelimitException — open-webui Discussion #6624](https://github.com/open-webui/open-webui/discussions/6624)
+- [duckduckgo-search rate limit — agno community](https://community.agno.com/t/duckduckgo-search-rate-limit-issue/1021)
+- [pdfplumber + OCR fallback guide — Woteq Softwares](https://woteq.com/how-to-read-scanned-pdfs-using-pdfplumber-and-ocr/)
+- [PDF parsers comparison 2025 — Medium](https://onlyoneaman.medium.com/i-tested-7-python-pdf-extractors-so-you-dont-have-to-2025-edition-c88013922257)
+- [PyMuPDF installation — Official Docs](https://pymupdf.readthedocs.io/en/latest/installation.html)
+- [python-slugify — PyPI](https://pypi.org/project/python-slugify/)
+- [Streamlit DuplicateWidgetID — Community](https://discuss.streamlit.io/t/duplicate-widgetid-error/4739)
+- [ReportLab vs WeasyPrint on Windows — DEV Community](https://dev.to/claudeprime/generate-pdfs-in-python-weasyprint-vs-reportlab-ifi)
+
+---
+*Pitfalls research for: LATAM Financial Analysis Pipeline (v2.0 addition to existing Streamlit dashboard)*
+*Researched: 2026-03-03*
+*Confidence: HIGH — all Windows-specific issues traced to official docs or community issue trackers with confirmed resolutions*

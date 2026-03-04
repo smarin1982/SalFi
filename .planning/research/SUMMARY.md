@@ -1,208 +1,225 @@
 # Project Research Summary
 
-**Project:** SP500 Financial Dashboard
-**Domain:** Financial data pipeline + local analytical dashboard (SEC EDGAR / Python)
-**Researched:** 2026-02-24
-**Confidence:** HIGH
+**Project:** LATAM Financial Analysis Pipeline (v2.0)
+**Domain:** Additive ETL pipeline — LATAM corporate PDF extraction, currency normalization, KPI analysis, red flags, and executive reporting layered onto an existing Python/Streamlit financial dashboard
+**Researched:** 2026-03-03
+**Confidence:** MEDIUM-HIGH (stack and architecture HIGH; currency coverage and regulatory portal patterns LOW)
 
 ## Executive Summary
 
-This project is a local Python ETL pipeline that extracts audited financial data from SEC EDGAR 10-K filings for S&P 500 companies and surfaces it through a Streamlit dashboard for multi-company comparison and KPI analysis. Expert consensus is clear on the technology choices: `edgartools` for XBRL-native extraction, DuckDB for analytical storage, pandas for transformation, and Streamlit + Plotly for visualization. The stack is mature, well-integrated, and designed for exactly this workload. No exotic choices are needed.
+The v2.0 LATAM pipeline is an additive extension to an already-validated US S&P 500 financial analysis dashboard. The core design principle across all four research areas is strict isolation: every new LATAM module runs alongside its US counterpart without touching existing code. The existing `processor.py`, `scraper.py`, `agent.py`, and the S&P 500 section of `app.py` are never modified — only the dashboard gains a new LATAM section. This pattern reduces integration risk to a known surface area (`app.py` modifications and `requirements.txt`) and ensures that if the LATAM pipeline breaks, the US pipeline keeps working.
 
-The architecture must follow a strict layered order: scraper (raw JSON) -> processor (Parquet) -> orchestrator (FinancialAgent) -> dashboard (Streamlit). Every component depends on the one before it producing real output, which means the build order is non-negotiable. The most critical architectural decision — and highest source of future bugs — is XBRL concept normalization. Revenue alone has 7+ valid XBRL tags across different sectors; a priority-ordered concept alias map with graceful NaN degradation must be built before any KPI code is written.
+The recommended technical approach uses Playwright for headless JavaScript scraping, a tiered PDF extraction stack (pdfplumber for tables, PyMuPDF for text triage and page-to-image, pytesseract for OCR fallback), and a two-tier FX normalizer (Frankfurter for BRL/MXN, a secondary free API for ARS/CLP/COP/PEN). The build order is strictly bottom-up: `currency.py` first (no dependencies, testable immediately with static inputs), then `web_search.py`, then the scraper, then the extractor, then the processor, then the `LatamAgent` orchestrator, and finally the dashboard section. Each layer is testable independently before the next is built.
 
-The dominant risk throughout the project is silent data correctness failures: wrong XBRL concept picked (revenue shows as None for 10-30% of companies), instantaneous vs. duration concept confusion (balance sheet items summed across quarters), fiscal year heterogeneity (FY2023 ends in June for some companies, December for others), and partial ETL runs leaving inconsistent data. None of these produce runtime errors — they produce plausible-looking wrong numbers. Mitigation requires defensive design at the data model layer in Phase 2, before the dashboard is built.
-
----
+The primary risks cluster around three Windows-specific system integrations: Playwright's event-loop conflict with Streamlit's Tornado server (must be thread-isolated via `ThreadPoolExecutor`), WeasyPrint's GTK3 dependency via MSYS2 (non-trivial Windows install with a viable fallback to `reportlab` or `fpdf2`), and pytesseract's Tesseract binary dependency (must be explicitly path-configured, not PATH-reliant). A critical data-integrity risk is the Frankfurter API's currency coverage gap: it only covers BRL and MXN of the six target LATAM currencies. ARS, CLP, COP, and PEN are absent — using Frankfurter alone silently produces `None` for all normalized financials for four of six countries, with no runtime error raised. The tiered FX fallback must be implemented before any LATAM Parquet data is written.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is high-confidence across all components. `edgartools` (imported as `edgar`) is the clear winner for EDGAR access — it wraps the SEC's official XBRL company facts JSON API and returns pandas DataFrames with normalized financial statement labels, eliminating all manual XBRL parsing. DuckDB replaces both SQLite (inadequate window functions for YoY/CAGR calculations) and pandas-as-database (no query capability at SP500 scale). The Parquet + DuckDB two-layer pattern — immutable Parquet archive as source of truth, DuckDB as the analytical query layer — is the key architectural insight for storage: it allows XBRL normalization bugs to be fixed by re-running the processor without re-hitting the SEC API.
+The v1.0 stack (edgartools, Streamlit, Plotly, Pandas, PyArrow, loguru, Windows Task Scheduler) is unchanged. Six new packages are added for v2.0, with two system-level binary dependencies.
 
-**Core technologies:**
-- `edgartools >= 2.0`: EDGAR XBRL extraction — XBRL-native, returns DataFrames, SEC rate limiting built in
-- `duckdb >= 1.0`: Analytical storage — columnar, embedded, window functions, Parquet interop, zero server overhead
-- `pyarrow >= 16.0`: Parquet archive layer — immutable raw data store, survives schema migrations
-- `pandas >= 2.1`: Data transformation — native edgartools and Streamlit integration
-- `streamlit >= 1.35` + `plotly >= 5.22`: Dashboard and charts — `@st.cache_data` is architecturally critical for performance
-- `apscheduler >= 3.10, < 4.0`: Scheduling — pin to 3.x explicitly; 4.x was in breaking-change alpha as of mid-2025
-- `tenacity >= 8.3` + `loguru >= 0.7`: Retry logic and structured logging for ETL reliability
+**Core technologies (new):**
+- `playwright>=1.48`: Headless Chromium scraping — the only free Python library handling JS-rendered corporate IR pages; requires `playwright install chromium` as a separate post-pip binary download step
+- `PyMuPDF>=1.24` (imported as `fitz`): Fast PDF triage and page-to-image rendering at 300 DPI for OCR pre-processing; used as first pass before pdfplumber to classify scanned vs. digital PDFs
+- `pdfplumber>=0.11`: Bounding-box table extraction from born-digital PDFs; complement to PyMuPDF for structured table detection, not a replacement
+- `pytesseract>=0.3.13`: OCR fallback via Tesseract 5 binary; requires separate UB Mannheim Windows installer with Spanish (`spa`) and Portuguese (`por`) language packs installed explicitly
+- `ddgs>=9.0`: Free DuckDuckGo web search for regulatory source discovery; renamed successor to `duckduckgo-search` — the old package name now shows RuntimeWarning and will eventually break
+- `weasyprint>=68.0`: HTML-to-PDF executive report generation; requires MSYS2 and GTK3/Pango on Windows; `reportlab` or `fpdf2` are valid pure-Python fallbacks if GTK install proves unworkable
 
-**What not to use:** SQLite (no window functions), PostgreSQL (server overhead unjustified), `sec-edgar-downloader` (raw HTML only, no structured data), APScheduler 4.x (API rewrite), Celery/Airflow (massive overkill for 4 ETL runs per year).
+**Currency API (no new package):**
+- Frankfurter API (`api.frankfurter.dev/v1/`) via existing `requests`: Free, ECB-backed, no key required; covers BRL and MXN only — CLP, COP, PEN, ARS require a secondary free API (open.er-api.com or exchangerate.host); annual average must be computed from the daily timeseries endpoint, not a built-in average endpoint
+
+See `.planning/research/STACK.md` for full version table, installation commands, and Windows-specific gotchas including the Playwright event-loop conflict, PyMuPDF import name quirk, and WeasyPrint MSYS2 setup.
 
 ### Expected Features
 
-The feature dependency chain is: EDGAR pipeline -> normalized data store -> financial statements -> derived KPIs -> comparison views -> screener/analytics. Everything in the differentiators section is gated on the data store being designed correctly in Phase 2.
+The research separates v2.0 features into a tight P1 core (end-to-end pipeline for a single company) and a P2 enhancement layer to add once the core is stable.
 
-**Must have (table stakes):**
-- Source attribution on every data point — exact filing, filing date, fiscal year (trust foundation; professional users will verify)
-- Core financial statements from 10-K: income statement, balance sheet, cash flow (5-10 years history)
-- Derived KPIs: profitability ratios, leverage ratios, liquidity ratios, YoY/CAGR growth rates
-- Multi-company side-by-side comparison table with sector/industry filtering
-- Time-series line charts with multi-company overlay (Plotly `px.line` with `color="ticker"`)
-- Clearly labeled fiscal year vs. calendar year (non-December fiscal years affect 30%+ of S&P 500)
+**Must have — v2.0 P1 core (table stakes):**
+- Web scraper accepting a direct corporate or regulatory URL and downloading the annual financial report PDF
+- PDF text and table extraction with both digital and OCR paths — both required from day one; 30-50% of LATAM health sector PDFs are scanned image documents
+- Spanish/Portuguese financial label mapper translating IFRS labels (Activo Corriente, Ingresos, etc.) to the existing `processor.py` KPI schema field names; IFRS terminology first, local GAAP labels secondary
+- Currency normalizer with tiered FX fallback (Frankfurter for BRL/MXN, secondary API for ARS/CLP/COP/PEN); period-average rates for income statement items
+- Company registry mapping name + country to regulatory ID (NIT/RUC/RUT/CUIT/RFC) and regulatory authority
+- LATAM KPI adapter feeding the existing 20-KPI engine via `processor.calculate_kpis()` without modifying `processor.py`
+- Red flags engine with Alta/Media/Baja severity classification using healthcare sector KPI thresholds
+- LATAM section in the existing Streamlit dashboard displaying company cards, KPIs, and severity-coded red flags
 
-**Should have (competitive differentiators):**
-- Company screener: filter entire S&P 500 by metric combinations (high margin + high ROIC + accelerating growth) — this is the highest analytical value per engineering effort
-- Normalized comparison (% of revenue) — removes size distortion for true peer analysis
-- Indexed growth charts (set any year as 100) — reveals compounding differences
-- CSV/DataFrame export — underrated; Macrotrends has strong analyst adoption specifically because of clean CSV export
-- Trend direction indicators (up/down/flat icons, 3-year and 5-year view)
-- Data freshness indicators per company (from metadata.parquet)
-- Persistent comparison sets via `st.session_state`
+**Should have — v2.x additions (differentiators):**
+- Regulatory web search via `ddgs` to discover the correct portal URL for a given company + country (enhances the scraper; direct URL input works without it)
+- Executive PDF report download via WeasyPrint + `st.download_button` (Plotly charts must be exported as static PNGs via kaleido before embedding — WeasyPrint does not execute JavaScript)
+- Multi-year trend display (Parquet storage pattern already enables this once extraction is stable)
+- Extraction confidence score (HIGH/MEDIUM/LOW) surfaced in the UI per extracted financial statement
+- ARS devaluation warning banner for Argentine companies
 
-**Defer to v2+:**
-- Quarterly 10-Q data (inconsistent XBRL tagging, doubles pipeline complexity)
-- Valuation multiples requiring market cap (P/E, EV/EBITDA) — market cap is not in 10-K filings; requires separate data source
-- Segment-level revenue/profit breakdown (high complexity, high value for conglomerates)
-- Anomaly flagging and peer auto-suggestion (depend on full SP500 data being clean first)
-- Real-time price feeds, earnings transcripts, analyst estimates — not 10-K data, out of scope
+**Defer to v3+:**
+- Automated login to gated regulatory portals (credential storage risk, legal ambiguity)
+- Cross-country LATAM screener (meaningful only with enough registered companies for comparison)
+- Firecrawl/Tavily API integration (paid, explicitly out of scope per PROJECT.md)
+- Automated quarterly LATAM re-extraction (LATAM companies publish annually; premature before annual cycle is validated)
+
+See `.planning/research/FEATURES.md` for full prioritization matrix, feature dependency graph, multi-currency complexity table, accounting standard variance by country, and regulatory portal characteristics per regulator.
 
 ### Architecture Approach
 
-The system decomposes into five components with strict separation of concerns: scraper (only talks to SEC EDGAR), processor (only transforms raw JSON to Parquet), FinancialAgent (orchestrates one ticker end-to-end), data store (`/data/raw/` + `/data/clean/` + `/data/cache/`), and app.py (only reads Parquet, never triggers ETL inline). No component reaches into another's internal structures — all cross-component communication is via stable Parquet files or well-defined Python interfaces. The FinancialAgent is stateless between instantiations; all state lives in `metadata.parquet`.
+The architecture uses a parallel-modules pattern: every new LATAM module mirrors its US counterpart in name and responsibility but never modifies the original. `LatamAgent.py` exposes the same `run()` / `needs_update()` interface as `FinancialAgent`, so `app.py` calls both pipelines with identical patterns. LATAM data lands in `data/latam/{country}/{slug}/` — a separate directory tree — with `financials.parquet` and `kpis.parquet` that are schema-identical to US output (all monetary values in USD, missing fields as `NaN` not `0`). The same dashboard loaders, chart builders, and KPI comparisons work on both datasets without branching.
 
-**Major components:**
-1. `scraper.py` — Extraction only: fetches `data.sec.gov` XBRL JSON, enforces 10 req/s rate limit, writes verbatim `data/raw/{TICKER}/facts.json`
-2. `processor.py` — Transformation only: XBRL concept normalization (CONCEPT_MAP with priority fallback), deduplication (prefer latest `filed` date per period), KPI calculation, Parquet writes to `data/clean/{TICKER}/`
-3. `FinancialAgent` (`agent.py`) — Orchestration: coordinates scraper + processor per ticker, `needs_update()` check via `metadata.parquet`, supports `incremental` and `full_refresh` modes
-4. `data/` store — Three-layer file system: raw verbatim JSON (re-scrape protection), clean Parquet (analysis-ready), cache metadata (freshness tracking)
-5. `app.py` — Presentation: reads Parquet via `@st.cache_data`, renders Plotly charts, never triggers ETL directly
+**Major components (all new):**
+1. `currency.py` — stateless FX normalizer; Frankfurter primary + secondary API fallback; `lru_cache` + disk cache at `data/cache/fx_rates.json` to avoid repeated API calls per fiscal year
+2. `web_search.py` — `ddgs` wrapper for regulatory source discovery; treats search results as optional/degradable; retry with exponential backoff on `RatelimitException`
+3. `latam_scraper.py` — Playwright scraper isolated in `ThreadPoolExecutor`; navigates corporate/regulatory URLs, finds PDF links, downloads to `data/latam/{country}/{slug}/raw/`
+4. `latam_extractor.py` — three-mode extraction pipeline: PyMuPDF text triage (fast, classifies scanned vs. digital) → pdfplumber table extraction (born-digital PDFs) → pytesseract OCR (scanned PDFs at 300 DPI); returns `{fiscal_year: {field: (value, currency_code)}}`
+5. `latam_processor.py` — maps extracted fields to KPI schema; calls `currency.to_usd()` per field per year; calls `processor.calculate_kpis()` directly (no duplicated KPI logic); writes atomic Parquet
+6. `LatamAgent.py` — orchestrator mirroring `FinancialAgent` interface; coordinates scrape → extract → process → save; writes `meta.json` with company metadata and extraction quality
+7. `app.py` (modified, additive only) — adds LATAM section with `latam_`-namespaced widget keys; all LATAM imports are lazy (inside functions, not at module top level); `st.cache_data.clear()` after ETL completes
+
+**Key patterns:**
+- Schema compatibility contract: LATAM Parquet output must match US column names and dtypes exactly; FX metadata stored in `meta.json`, not in Parquet columns
+- Lazy imports in `app.py`: GTK or Playwright import failure must not break the S&P 500 section
+- Slug-based storage paths: `unicodedata.normalize("NFKD")` + ASCII encode + lowercase before any company name is used as a directory segment (Windows NTFS Unicode encoding issues with Spanish/Portuguese characters)
+- Thread isolation for Playwright: always via `concurrent.futures.ThreadPoolExecutor`; never from the Streamlit main thread
+
+See `.planning/research/ARCHITECTURE.md` for full component responsibility table, annotated build order, data flow diagrams for both pipelines, storage schema definitions, and four documented anti-patterns with explanations.
 
 ### Critical Pitfalls
 
-1. **XBRL concept name fragmentation** — Revenue has 7+ valid tags; banks use `InterestAndDividendIncomeOperating` not `Revenues`. Build a `CONCEPT_MAP` with priority-ordered alias fallback and NaN degradation in Phase 2 before any KPI code. This is the #1 source of silently wrong data.
+1. **Playwright sync API crashes inside Streamlit's asyncio loop** — on Windows 11 this is a double failure: Playwright's synchronous API detects the running event loop and refuses to execute, compounded by Streamlit's Tornado server using `SelectorEventLoop` while Playwright requires `ProactorEventLoop` for subprocess communication. Manifests as `NotImplementedError` or a silent hang. Prevention: always call the Playwright scraper via `ThreadPoolExecutor`; validate this thread-isolation pattern in Phase 1 with a smoke test from a Streamlit button click before writing any scraping logic.
 
-2. **SEC rate limit violations (IP ban risk)** — 500 companies fetched without a rate limiter will trigger an EDGAR block within minutes. Implement the token-bucket limiter and `User-Agent` header (`"Name name@email.com"` format) as the very first lines of scraper code, before any bulk fetch.
+2. **Frankfurter API silently returns nothing for ARS, CLP, COP, PEN** — these four currencies are absent from ECB tracking; calls return HTTP 422 or `{"message": "not found"}` which, if not explicitly handled, causes the normalizer to return `None` for all financial figures for four of six target countries with no runtime exception. Prevention: implement the tiered FX fallback before writing any normalized Parquet data; unit-test all six LATAM currency codes against the normalizer before Phase 3 is considered done.
 
-3. **Instant vs. duration concept confusion** — Balance sheet items (Assets, Equity) are instantaneous snapshots; income/cash flow items are duration accumulations. Summing four quarters of Assets produces 4x the actual value with no runtime error. Establish a concept-type registry classifying every concept as `instant` or `duration` in Phase 2 before any TTM calculation logic.
+3. **Scanned PDFs return empty strings without OCR fallback** — 30-50% of LATAM health sector PDFs are image-embedded; `pdfplumber.extract_text()` returns `""` without error for these documents. Prevention: implement the OCR fallback from day one using a character-count heuristic (fewer than 50 chars triggers OCR path); never defer OCR as a "future enhancement" — it must be part of the initial extractor design.
 
-4. **Partial ETL run corruption** — Without atomic writes, an interrupted run leaves some companies current and others stale. Design staging-directory writes with atomic swap on success and a run manifest (`run_id`, `started_at`, `completed_at`, `status`) in Phase 4 before scheduling.
+4. **WeasyPrint fails at `write_pdf()` time with GTK DLL errors** — `import weasyprint` succeeds even when GTK3 DLLs are missing; the crash only surfaces at the first actual `write_pdf()` call. Prevention: run `weasyprint.HTML(string="<p>test</p>").write_pdf()` end-to-end on the actual Windows machine before building any report templates. If MSYS2/GTK3 install fails, commit to `reportlab` or `fpdf2` (both pure-Python, no system dependencies) in the same session.
 
-5. **Fiscal year heterogeneity in peer comparisons** — "FY2023" for Walmart ends January 2024; for Apple it ends September 2023; for most tech companies it ends December 2023. Store actual `period.startDate` and `period.endDate` from XBRL. Warn users in the UI when comparing companies with fiscal year ends differing by more than 3 months.
+5. **Top-level LATAM imports in `app.py` break the S&P 500 section** — if any LATAM package fails to load (missing GTK for WeasyPrint, missing Playwright browser binaries), the entire `app.py` module fails to import and the S&P 500 section becomes unavailable. Prevention: all LATAM-specific `import` statements must be lazy (inside the function that uses them) with `try/except ImportError` showing a setup-instructions panel rather than crashing.
 
----
+See `.planning/research/PITFALLS.md` for all 12 documented pitfalls with code-level prevention patterns, warning signs, recovery cost estimates, and a pitfall-to-phase assignment table.
 
 ## Implications for Roadmap
 
-Based on research, the build order is determined by hard dependencies. Nothing to the right of each arrow can be meaningfully built without everything to its left: `CIK resolution -> download_facts -> CONCEPT_MAP/extract_concept -> clean_financials -> calculate_kpis -> Parquet files -> FinancialAgent orchestration -> app.py`.
+Based on the hard dependency chain from ARCHITECTURE.md and the pitfall-to-phase mapping in PITFALLS.md, six phases are recommended. The ordering follows the build dependency graph: foundational infrastructure first (modules with no dependencies), data acquisition second, data transformation third, analysis fourth, reporting fifth, and dashboard integration last. This ordering ensures each phase has real output to test against, and that the highest-risk Windows integrations are validated before significant template or UI work is built on top of them.
 
-### Phase 1: Data Foundation
+### Phase 1: Foundation — Environment, Scraper Infrastructure, and FX Layer
 
-**Rationale:** All downstream work is blocked without local data to process. Rate limiting and User-Agent setup must be day-zero to avoid SEC bans during development.
-**Delivers:** Working scraper producing `data/raw/{TICKER}/facts.json` for Top 20 tickers; ticker-to-CIK resolution via cached `tickers.json`
-**Addresses:** Data sourcing, company universe definition (current S&P 500, survivorship bias documented)
-**Avoids:** Rate limit ban (implement limiter first), CIK drift (store CIK as canonical key, not ticker), pagination gaps (iterate all `submissions/CIK-submissions-NNN.json` files), EDGAR API vs. full-text confusion
-**Research flag:** Standard patterns — EDGAR HTTP API is well-documented; no additional research needed
+**Rationale:** Three pitfalls (Playwright asyncio conflict, browser binaries missing, Spanish slug path errors) must be resolved before any other LATAM code is written. The FX normalizer and web search wrapper have zero dependencies on other LATAM modules and can be built and fully unit-tested here in isolation. The storage directory structure and slug convention must be locked in before any Parquet files are written — retrofitting path conventions after data is saved requires a migration.
+**Delivers:** Working Playwright scraper thread-isolated in `ThreadPoolExecutor` (smoke-tested from a Streamlit button), `currency.py` with tiered FX fallback validated for all six LATAM currencies (unit tests for MXN, BRL, ARS, CLP, COP, PEN), `web_search.py` with rate-limit retry and cache, `make_slug()` function tested against Spanish/Portuguese names with accents and special characters, `data/latam/` directory structure defined.
+**Addresses:** Web scraper (URL input), company registry foundation, currency normalizer (all P1 features)
+**Avoids:** Playwright + asyncio crash (Pitfall 1), missing browser binaries (Pitfall 2), slug/path OSError on Spanish characters (Pitfall 9), silent FX currency coverage gaps (Pitfall 5)
+**Research flag:** Playwright thread-isolation pattern is well-documented — standard implementation. The secondary FX API (open.er-api.com) should be empirically validated for rate limits and ARS data accuracy against BCRA official rates during implementation.
 
-### Phase 2: Transformation Core and Data Model
+### Phase 2: PDF Extraction Pipeline
 
-**Rationale:** This is the highest-leverage phase. XBRL normalization bugs discovered here can be fixed by re-running processor.py without re-scraping. Data model decisions (concept types, fiscal year convention, deduplication rules) made here cannot be cheaply changed later.
-**Delivers:** `data/clean/{TICKER}/financials.parquet` and `kpis.parquet` for Top 20 tickers; 20 calculated KPIs; `metadata.parquet` with completeness tracking
-**Uses:** `edgartools` XBRL patterns, `duckdb`, `pyarrow`, `pandas 2.x`
-**Implements:** `processor.py` with `CONCEPT_MAP`, `extract_concept()`, `clean_financials()`, `calculate_kpis()` with `safe_ratio()` guards
-**Critical decisions here:** concept-type registry (instant vs. duration), fiscal year convention (end-date based), deduplication rule (latest `filed` date wins), `safe_ratio()` for all KPI denominators, negative-equity ROE flagging
-**Avoids:** Concept fragmentation (alias fallback), division-by-zero (safe_ratio), instant/duration confusion (concept-type registry), duplicate amended filings (deduplicate by latest filed date)
-**Research flag:** No additional research needed — architecture file provides full CONCEPT_MAP and extraction patterns
+**Rationale:** The extractor depends on real downloaded PDFs from Phase 1; it cannot be meaningfully built or tested against synthetic inputs. This is the highest-complexity phase: three extraction modes must work correctly, the OCR fallback must be present from day one (not deferred), and the country-adapter pattern must be established before a single extraction function is committed — retrofitting a universal parser to handle per-country structural differences costs more than building the adapter pattern correctly from the start.
+**Delivers:** `latam_extractor.py` with three-mode pipeline (PyMuPDF triage → pdfplumber tables → pytesseract OCR at 300 DPI); startup validation that Tesseract binary exists and `spa` language pack is installed; extraction confidence score per statement; per-country adapter stubs for CO, PE, CL; tested against at least one real PDF from each of those three countries.
+**Uses:** PyMuPDF (`fitz`), pdfplumber, pytesseract, langdetect, Pillow
+**Avoids:** Scanned PDFs returning empty (Pitfall 6), pytesseract `TesseractNotFoundError` (Pitfall 3), wrong-tool pdfplumber vs. PyMuPDF confusion (Pitfall 8), IFRS vs. local GAAP structural failures (Pitfall 12)
+**Research flag:** Needs per-country calibration on real PDFs from Supersalud (CO), SMV (PE), CMF (CL). Regulatory portal URL structure is LOW confidence — validate live portal accessibility before committing portal-specific scraper logic. Budget extra time for country calibration; this phase has the highest probability of schedule variance.
 
-### Phase 3: Orchestration and Batch Processing
+### Phase 3: Data Transformation and KPI Integration
 
-**Rationale:** `FinancialAgent` can only be meaningfully tested once scraper and processor are independently verified on real data.
-**Delivers:** `FinancialAgent` class with `run(mode="incremental")`, `needs_update()` logic, batch processing of all 20 base tickers end-to-end; full `metadata.parquet` for all companies
-**Implements:** `agent.py`, incremental update logic, batch runner script
-**Avoids:** Re-scraping already-fetched filings (needs_update check), stale data detection failure (metadata tracking last_year_available)
-**Research flag:** Standard patterns — well-defined in architecture research
+**Rationale:** `latam_processor.py` depends on extractor output (Phase 2) and the FX layer (Phase 1); it cannot be built or meaningfully tested before both are complete. This is where the schema compatibility contract is enforced. The `LatamAgent` orchestrator ties all upstream modules together and produces the first complete end-to-end pipeline run for one real company.
+**Delivers:** `latam_processor.py` mapping extracted fields to the 24-column financial schema with USD normalization per field per year; `LatamAgent.py` orchestrating scrape → extract → process → save and mirroring `FinancialAgent` interface; `meta.json` with company metadata and extraction quality; end-to-end pipeline producing valid `financials.parquet` and `kpis.parquet` for one real LATAM healthcare company, with KPI output verified for plausibility.
+**Implements:** Schema compatibility contract (identical column schema as US output), LatamAgent mirrors FinancialAgent pattern, currency normalization as pure function with caching
+**Avoids:** Modifying `processor.py` (Architecture Anti-Pattern 1), using different Parquet schema for LATAM (Anti-Pattern 2), storing LATAM data under `data/clean/` (Anti-Pattern 3), silent FX failures for COP/PEN/CLP/ARS (Pitfall 5 — final verification)
+**Research flag:** `ddgs` rate-limit behavior (Pitfall 7) should be integration-tested here; confirm that pipeline succeeds when DDGS returns no results. The web search step must be optional and degradable, never a blocking dependency.
 
-### Phase 4: Dashboard (Basic)
+### Phase 4: Red Flags Engine
 
-**Rationale:** Build app.py last, once all Parquet files exist and are verified correct. Static first (read existing Parquet), then dynamic (trigger FinancialAgent on demand).
-**Delivers:** Working Streamlit dashboard with multi-company line charts, KPI comparison table, year filter, data freshness indicators; `@st.cache_data` applied from day one
-**Uses:** `streamlit >= 1.35`, `plotly >= 5.22`, `st.cache_data`, `st.session_state` with namespaced keys
-**Addresses:** Table stakes features: core financial statements display, multi-company comparison, source attribution, fiscal year labeling
-**Avoids:** Full ETL re-run on every widget interaction (cache_data), session_state corruption (namespaced keys, init function), chart performance issues (cap default comparison at 10-20 companies)
-**Research flag:** Standard patterns — Streamlit + Plotly patterns are well-documented
+**Rationale:** The red flags engine consumes computed KPI values and cannot run before Phase 3 produces them. Separating it into its own phase ensures threshold configuration (YAML, not hardcoded) is designed as a first-class concern rather than an afterthought. The LATAM healthcare calibration is a distinct domain concern from data transformation.
+**Delivers:** Red flags engine evaluating the 20 KPIs against Alta/Media/Baja thresholds; configurable YAML threshold file per sector; severity-coded output consumed by both the dashboard section and the executive report; validated against at least one real company's KPI output; ARS devaluation warning flag surfaced when currency is ARS.
+**Addresses:** Red flags with severity classification (P1), IFRS vs. local GAAP label on company card (P2)
+**Research flag:** Healthcare threshold calibration is MEDIUM confidence per FEATURES.md — current thresholds are derived from US HFMA benchmarks. Flag this explicitly in the YAML file comments as an approximation that requires LATAM-specific calibration. Standard implementation otherwise.
 
-### Phase 5: Analytical Features and Differentiators
+### Phase 5: Executive PDF Report
 
-**Rationale:** Can only be built once Phase 4 dashboard is reliable and data quality is verified across the full company set.
-**Delivers:** Company screener (filter S&P 500 by metric combinations), normalized % of revenue comparison, indexed growth charts, CSV/DataFrame export, trend direction indicators, restatement flagging, M&A event markers on time-series
-**Addresses:** Differentiator features from FEATURES.md; the screener is the highest analytical value per engineering effort
-**Avoids:** Fiscal year heterogeneity warnings in peer comparison UI (display fiscal year end dates, warn on 3+ month delta), survivorship bias disclosure
-**Research flag:** Screener feature may need additional research on efficient DuckDB query patterns for cross-company metric filtering at scale
+**Rationale:** The PDF report is a self-contained P2 deliverable feature that depends on stable KPIs and red flags from Phases 3-4. It is isolated here because the WeasyPrint GTK dependency requires a hard go/no-go decision before any template work begins. Plotly charts must be exported as static PNGs before embedding, since WeasyPrint does not execute JavaScript.
+**Delivers:** WeasyPrint validated end-to-end with `write_pdf()` on the actual Windows machine (or explicit documented decision to use `reportlab`/`fpdf2` instead); HTML report template with company overview, KPI table, red flags section, and embedded Plotly chart PNGs (via kaleido or `plotly.io.write_image`); `st.download_button` wired to PDF bytes in the dashboard.
+**Uses:** WeasyPrint (or reportlab/fpdf2 fallback), Plotly + kaleido for static chart export
+**Avoids:** WeasyPrint GTK DLL failure discovered mid-template-build (Pitfall 4) — validate `write_pdf()` smoke test as the first action of this phase, not `import weasyprint`
+**Research flag:** WeasyPrint Windows GTK3 is MEDIUM confidence. Treat Phase 5 session 1 as a validation spike: install, test `write_pdf()`, decide. If MSYS2/GTK fails, switch to `reportlab` or `fpdf2` (1-2 hours for switch, simpler CSS support is acceptable for a text+table financial report). Do not build templates until the library decision is final.
 
-### Phase 6: Scheduling and Reliability
+### Phase 6: Dashboard Integration
 
-**Rationale:** ETL reliability infrastructure should come after the pipeline is proven correct on the base dataset.
-**Delivers:** Atomic ETL writes with staging-swap, run manifest, Windows Task Scheduler trigger (or APScheduler 3.x), stale data detection with per-company "data as of" labels
-**Uses:** `apscheduler >= 3.10, < 4.0` or Windows Task Scheduler; `tenacity` for retry logic
-**Avoids:** Partial run corruption (staging-swap + run manifest), timezone confusion (UTC scheduling documented with ET equivalent), re-scraping (incremental high-water mark)
-**Research flag:** Standard patterns — APScheduler 3.x is stable and well-documented; verify APScheduler version stability before pinning
+**Rationale:** The LATAM section in `app.py` is last because it requires Parquet data from the full pipeline and a stable `LatamAgent` interface. All integration pitfalls (widget key collisions, backwards-compatibility import breaks) are guarded at this phase. This phase is additive only — the S&P 500 section is never modified.
+**Delivers:** `app.py` with LATAM section (URL input widget, `LatamAgent.run()` call wrapped in `st.spinner()` with stage progress, company card display, red flag display with severity colors, PDF download button); all new widget keys prefixed `latam_`; all LATAM imports lazy with `try/except ImportError` showing setup instructions; `st.cache_data` cleared after ETL completes; S&P 500 section confirmed working with LATAM packages uninstalled.
+**Addresses:** LATAM section in Streamlit dashboard (P1), URL input alternative to search (P2 differentiator), ARS devaluation warning banner (P2)
+**Avoids:** Widget `DuplicateWidgetID` from key collisions (Pitfall 10), backward-compatibility import breaks (Pitfall 11), 30-120 second blocking ETL call freezing the browser tab (Architecture Anti-Pattern 4)
+**Research flag:** Standard Streamlit patterns apply — no deep research needed. The `latam_` key namespace convention must be enforced in code review. After completing this phase, verify the full pitfall checklist in PITFALLS.md section "Looks Done But Isn't."
 
 ### Phase Ordering Rationale
 
-- Phases 1-3 follow the hard dependency chain in the architecture (scraper -> processor -> orchestrator -> dashboard). Attempting Phase 4 before Phase 2 is complete means building on placeholder data that masks real normalization problems.
-- Phase 2 is the critical path gate: data model decisions here (concept types, deduplication, fiscal year convention) cannot be cheaply changed after the dashboard is built against them.
-- Phase 5 differentiators are deliberately deferred until data quality across the full company set is verified — analytical features built on wrong data are worse than no features.
-- Phase 6 scheduling is last because atomic writes require knowing the ETL is stable; scheduling an unstable pipeline amplifies data corruption.
+- Phases 1-3 follow the hard dependency graph from ARCHITECTURE.md: no phase can be meaningfully tested without the preceding phase producing real output. Attempting Phase 3 without Phase 2 means building a processor with no real extracted data to validate against.
+- Phase 4 (red flags) is decoupled from Phase 5 (PDF report) even though the report consumes red flag output. This separation enables the dashboard (Phase 6) to display red flags before the PDF report feature is complete, delivering user value incrementally.
+- Phase 5 is positioned before Phase 6 because the PDF download button in the dashboard section depends on the WeasyPrint (or fallback) integration; the dashboard phase must not be left incomplete pending a library decision.
+- Phase 6 (dashboard integration) is last because it is the only phase that modifies existing code (`app.py`). Deferring it minimizes the window during which the existing S&P 500 section is at any risk.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 5 (Screener):** DuckDB query patterns for cross-company metric filtering with multiple concurrent conditions at scale — may need optimization research if performance degrades with full SP500 dataset
-- **Phase 2 (Financial sector companies):** Banks and insurers have structurally different GAAP presentation; may need a `CONCEPT_MAP_FINANCIALS` variant once gaps are observed — research which companies require sector-specific concept maps
+Phases needing deeper investigation during planning or early implementation:
+- **Phase 2 (PDF Extractor):** Per-country PDF format calibration is LOW confidence. Real PDFs from Supersalud (CO), SMV (PE), CMF (CL), and CNV (AR) should be downloaded and manually inspected before the country-adapter design is finalized. Budget additional time — this is the phase most likely to require schedule adjustment.
+- **Phase 3 (Currency normalizer — ARS):** Argentine peso exchange rate reliability from free APIs is LOW confidence. The ARS-USD rate data may reflect the official crawling peg or the parallel market depending on the API; validate against Banco Central de la República Argentina official data for at least one historical year before using ARS-normalized KPIs for any credit decision context.
+- **Phase 5 (PDF Report):** WeasyPrint Windows GTK3 install is MEDIUM confidence. Treat session 1 as a spike; decide WeasyPrint vs. reportlab before any template work.
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1:** EDGAR HTTP API is fully documented at data.sec.gov; edgartools has clear usage patterns
-- **Phase 3:** FinancialAgent orchestration follows standard ETL coordinator patterns
-- **Phase 4:** Streamlit + Plotly multi-company chart patterns are well-established
-- **Phase 6:** APScheduler 3.x and atomic file swap patterns are standard
-
----
+Phases with standard, well-documented patterns (no deep research needed):
+- **Phase 1:** Playwright thread isolation is confirmed in official docs and multiple community sources. Currency API endpoints are live and verified. Standard implementation.
+- **Phase 4:** Red flags threshold configuration is a deterministic YAML-driven design. Standard implementation — only LATAM-specific calibration is a gap, and it is documented as an approximation.
+- **Phase 6:** Streamlit patterns are well-established. The lazy import and `latam_` namespace convention are documented with code examples in PITFALLS.md.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All core libraries are mature, well-integrated, and the dominant choices for this category. Single uncertainty: verify APScheduler has not hit a stable 4.x release since Aug 2025 cutoff. |
-| Features | HIGH | Based on domain knowledge of Bloomberg, Koyfin, Macrotrends, and financial analyst workflows. Feature dependencies well-reasoned. |
-| Architecture | HIGH | EDGAR XBRL API structure is well-documented. Component boundaries and CONCEPT_MAP patterns are grounded in real API behavior. |
-| Pitfalls | HIGH | Pitfalls are grounded in specific XBRL API behaviors (instant vs. duration, concept fragmentation) and are well-evidenced. |
+| Stack | HIGH | Versions verified via live PyPI (Mar 2026). Windows-specific install steps confirmed against official docs and community issue trackers. Single exception: WeasyPrint GTK3 install is MEDIUM — confirmed approach (MSYS2) but known Windows friction with a documented fallback path. |
+| Features | MEDIUM | Table stakes and P1 features are well-grounded. Frankfurter currency coverage gap confirmed via GitHub Issue #144. Regulatory portal scraping patterns are LOW confidence — portal structures change frequently and must be validated live. ARS exchange rate reliability is LOW confidence. |
+| Architecture | HIGH | Based on direct analysis of the existing codebase (`agent.py`, `processor.py`, `scraper.py`, `app.py`) plus PROJECT.md milestone specification. All component boundaries, the schema compatibility contract, and the LatamAgent interface design are grounded in actual existing code, not inference. |
+| Pitfalls | HIGH | All 7 critical pitfalls traced to official documentation or confirmed GitHub issue threads with reproducible behaviors and community-verified fixes. Windows-specific issues (Playwright event loop, WeasyPrint DLL, Tesseract PATH) are particularly well-evidenced. |
 
-**Overall confidence:** HIGH
+**Overall confidence:** MEDIUM-HIGH
 
 ### Gaps to Address
 
-- **Market cap data source for valuation multiples:** P/E, EV/EBITDA, P/B require market cap, which is not in 10-K filings. Recommendation is to defer to v2 or add as optional manual input. If included in Phase 5, decide on data source (yfinance for historical market cap is imprecise; no free authoritative source exists) before committing to the feature.
+- **ARS/COP/PEN/CLP FX API accuracy:** The secondary FX API (open.er-api.com or exchangerate.host) is identified but not benchmarked against official central bank data. Validate one historical year of ARS-USD rates against BCRA official publications before any ARS-normalized figures are used for credit analysis. This is an explicit LOW confidence item.
 
-- **APScheduler 4.x release status:** The research knowledge cutoff is August 2025; as of that date APScheduler 4.x was in alpha/beta with breaking changes from 3.x. Run `pip index versions apscheduler` before Phase 6 to confirm whether stable 4.x has released and whether migration is worthwhile. Default: pin to `< 4.0`.
+- **Regulatory portal scraping patterns:** The portal adapter design is the right architectural decision, but the specific scraping logic for Supersalud, SMV, CMF, CNV, and CNBV cannot be finalized until live portals are inspected in Phase 2. These portals change URL structure without notice. Plan for per-portal calibration time — treat portal scraping as inherently maintenance-prone.
 
-- **Financial sector company coverage:** Banks (JPM), insurers (BRK.B), and diversified financials use fundamentally different GAAP statement structures. The base CONCEPT_MAP covers most tech, consumer, healthcare, and industrial companies. Financial sector coverage will need validation in Phase 2 against real data and may require `CONCEPT_MAP_FINANCIALS` in Phase 5.
+- **OCR accuracy on real LATAM health sector PDFs:** The `eng+spa` language model and 300 DPI rendering are reasonable starting points. Actual accuracy on Supersalud or SMV scanned filings is unknown until tested. The extraction confidence score (built in Phase 2) is the mechanism for surfacing this to the user so low-accuracy extractions are flagged for manual verification rather than silently accepted.
 
-- **Survivorship bias decision:** The project currently scopes to current S&P 500 members. Historical analysis will have survivorship bias (all current members survived to present). This is a scope decision, not a bug — but must be disclosed in the dashboard UI.
+- **WeasyPrint vs. reportlab/fpdf2 decision:** Remains open until Phase 5. The recommendation is to treat Phase 5 session 1 as a validation spike. If WeasyPrint GTK3 install fails, switch to `reportlab` or `fpdf2` (both pure-Python, adequate CSS/layout support for a text-and-table financial report, 1-2 hour switch cost).
 
----
+- **Healthcare KPI thresholds — LATAM calibration:** The red flags thresholds in Phase 4 are derived from US HFMA benchmarks. LATAM healthcare companies (especially Colombian EPS, Peruvian IPRESS) operate with different leverage norms and margin structures. The YAML threshold file design in Phase 4 is the right architectural choice precisely because it allows thresholds to be tuned without code changes as LATAM-specific benchmarks become available.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- SEC EDGAR XBRL company facts API (`data.sec.gov/api/xbrl/companyfacts/{cik}.json`) — direct API structure analysis
-- SEC EDGAR submissions API (`data.sec.gov/submissions/{cik}.json`) — filing history structure
-- `edgartools` library documentation and design patterns — XBRL extraction approach
-- `duckdb` 1.x documentation — columnar storage, Parquet interop, window functions
-- Streamlit documentation — `@st.cache_data`, `st.session_state`, multipage apps
+- `agent.py`, `processor.py`, `scraper.py`, `app.py` (direct codebase analysis) — existing architecture, interface contracts, Parquet schema
+- PROJECT.md milestone specification — authoritative feature scope, constraints, and out-of-scope items
+- [playwright PyPI](https://pypi.org/project/playwright/) — version 1.58.0, Jan 2026; `playwright install chromium` step confirmed
+- [Playwright Python docs](https://playwright.dev/python/docs/intro) — Windows 11+ confirmed, thread isolation approach
+- [PyMuPDF PyPI](https://pypi.org/project/PyMuPDF/) — version 1.27.1, Feb 2026; import as `fitz` confirmed
+- [pdfplumber PyPI](https://pypi.org/project/pdfplumber/) — version 0.11.9, Jan 2026
+- [ddgs PyPI](https://pypi.org/project/ddgs/) — version 9.11.1, Mar 2026; confirmed successor to `duckduckgo-search`
+- [weasyprint PyPI](https://pypi.org/project/weasyprint/) — version 68.1, Feb 2026
+- [WeasyPrint Windows docs](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) — MSYS2 as recommended GTK3 source confirmed
+- [Frankfurter API](https://frankfurter.dev/) — ECB-backed; BRL and MXN confirmed supported; ARS/CLP/COP/PEN absence confirmed via [GitHub Issue #144](https://github.com/lineofflight/frankfurter/issues/144)
+- [Playwright + Streamlit asyncio conflict](https://github.com/streamlit/streamlit/issues/7825) and [playwright-python Issue #462](https://github.com/microsoft/playwright-python/issues/462) — confirmed behavior and ThreadPoolExecutor fix
+- [WeasyPrint GTK DLL errors](https://github.com/Kozea/WeasyPrint/issues/971); [WeasyPrint MSYS2 recommendation](https://github.com/Kozea/WeasyPrint/issues/2105)
+- [pytesseract TesseractNotFoundError](https://github.com/madmaze/pytesseract/issues/348) — confirmed fix via explicit `tesseract_cmd`
 
 ### Secondary (MEDIUM confidence)
-- Bloomberg Terminal, Koyfin, Macrotrends feature comparison — features and UX patterns
-- US-GAAP XBRL taxonomy — concept name structures and sector variations
-- APScheduler 3.x documentation — scheduling patterns (4.x status needs runtime verification)
+- [Frankfurter API timeseries endpoint](https://frankfurter.dev/) — annual average must be computed from daily series; no built-in average endpoint; weekends/holidays return business days only
+- [pdfplumber 0.11.8 table update](https://www.blog.brightcoding.dev/2025/11/26/finance-bros-are-obsessed-with-this-0-11-8-update-pdfplumbers-new-table-ai-trick-explained/) — `edge_min_length_prefilter` behavior on financial tables confirmed
+- [LATAM IFRS adoption timeline](https://www.mdpi.com/1911-8074/18/10/567) — country-by-country IFRS mandates
+- [LATAM regulatory tax IDs](https://learn.microsoft.com/en-us/dynamics365/finance/localizations/iberoamerica/ltm-core-tax-id-type) — NIT/RUC/RUT/CUIT/RFC structure
+- [Healthcare KPI thresholds](https://www.hfma.org/revenue-cycle/financial-kpis-redefined-in-healthcare/) — US-derived HFMA benchmarks; LATAM calibration is an explicit open gap
+- [duckduckgo-search rate limit behavior](https://github.com/open-webui/open-webui/discussions/6624) — `RatelimitException` at 10-20 requests in some conditions; threshold undocumented
+- [ARS devaluation and crawling peg 2025](https://www.ebc.com/forex/usd-to-ars-outlook-how-argentina-s-fx-reform-changes-trading)
 
-### Tertiary (requires runtime validation)
-- APScheduler 4.x release status — verify with `pip index versions apscheduler` before Phase 6
-- Financial sector CONCEPT_MAP completeness — validate against real JPM, BRK.B, BAC data in Phase 2
-- yfinance market cap data quality — validate before committing to valuation multiples feature
+### Tertiary (LOW confidence — requires live validation during implementation)
+- Regulatory portal scraping structure (Supersalud, SMV, CMF, CNV, CNBV) — site structures change; must be validated live in Phase 2 before finalizing scraper design
+- ARS-USD rate accuracy from secondary FX APIs vs. BCRA official rates — not cross-validated against authoritative source
+- OCR accuracy on actual LATAM health sector scanned PDFs — estimated 95-99% on good scans; untested against real document corpus
 
 ---
-*Research completed: 2026-02-24*
+*Research completed: 2026-03-03*
 *Ready for roadmap: yes*

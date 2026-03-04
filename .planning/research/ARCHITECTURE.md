@@ -1,477 +1,546 @@
-# Architecture Research: SP500 Financial Dashboard
+# Architecture Research
 
-*Research type: Greenfield — Architecture dimension*
-*Date: 2026-02-24*
-*Project: SEC EDGAR financial ETL + Streamlit dashboard*
-
----
-
-## Component Map
-
-The system decomposes into five distinct components with explicit ownership boundaries. No component should reach into another's internal data structures directly; all cross-component communication happens through stable file formats or well-defined Python interfaces.
-
-### 1. `scraper.py` — Extraction Layer
-
-**Sole responsibility:** Talk to SEC EDGAR. Nothing else.
-
-- Downloads the official `company_tickers.json` from `https://data.sec.gov/submissions/` at startup and saves it to `data/cache/tickers.json`
-- Resolves `ticker → CIK` using the cached map (zero network calls for known tickers)
-- Fetches 10-K filing index pages for a given CIK via `https://data.sec.gov/submissions/CIK{:010d}.json`
-- Downloads raw XBRL JSON facts from `https://data.sec.gov/api/xbrl/companyfacts/CIK{:010d}.json`
-- Enforces SEC rate limit: max 10 requests/second using a token-bucket or `time.sleep(0.1)` between calls
-- Sets `User-Agent` header as required: `"YourName yourname@email.com"` (SEC policy)
-- Writes raw output to `data/raw/{TICKER}/facts.json` — untouched, verbatim from SEC
-- Has NO knowledge of KPIs, Parquet, or Streamlit
-
-**What it does NOT do:** parse, transform, calculate, or render anything.
+**Domain:** Financial data pipeline integration — LATAM extension onto existing Python/Streamlit dashboard
+**Researched:** 2026-03-03
+**Confidence:** HIGH
 
 ---
 
-### 2. `processor.py` — Transformation + Load Layer
+## Standard Architecture
 
-**Sole responsibility:** Turn raw SEC facts into clean, analysis-ready Parquet tables.
+### System Overview
 
-Sub-responsibilities within this file:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          PRESENTATION LAYER                              │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  app.py  (Streamlit — single unified dashboard)                  │   │
+│  │  ┌────────────────────────┐  ┌───────────────────────────────┐   │   │
+│  │  │  Section: S&P 500      │  │  Section: LATAM  [NEW]        │   │   │
+│  │  │  (existing, unchanged) │  │  URL input, company cards,    │   │   │
+│  │  │                        │  │  red flags, executive report  │   │   │
+│  │  └────────────────────────┘  └───────────────────────────────┘   │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                         ORCHESTRATION LAYER                              │
+│  ┌──────────────────────────┐  ┌──────────────────────────────────┐    │
+│  │  FinancialAgent          │  │  LatamAgent.py  [NEW]            │    │
+│  │  (agent.py — unchanged)  │  │  Orchestrates LATAM pipeline     │    │
+│  └──────────────────────────┘  └──────────────────────────────────┘    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                        TRANSFORMATION LAYER                              │
+│  ┌─────────────────┐  ┌────────────────────┐  ┌───────────────────┐   │
+│  │  processor.py   │  │  latam_processor.py │  │  currency.py      │   │
+│  │  (unchanged)    │  │  [NEW]              │  │  [NEW]            │   │
+│  └─────────────────┘  └────────────────────┘  └───────────────────┘   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                         EXTRACTION LAYER                                 │
+│  ┌─────────────────┐  ┌────────────────────┐  ┌───────────────────┐   │
+│  │  scraper.py     │  │  latam_scraper.py   │  │  web_search.py    │   │
+│  │  (unchanged)    │  │  [NEW] Playwright   │  │  [NEW] DDG search │   │
+│  └─────────────────┘  └────────────────────┘  └───────────────────┘   │
+│                        ┌────────────────────┐                           │
+│                        │  latam_extractor.py │                           │
+│                        │  [NEW] PDF extract  │                           │
+│                        └────────────────────┘                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                            DATA STORE                                    │
+│  ┌──────────────────────────┐  ┌──────────────────────────────────┐    │
+│  │  data/raw/{TICKER}/      │  │  data/latam/{country}/{slug}/    │    │
+│  │  data/clean/{TICKER}/    │  │    financials.parquet  [NEW]     │    │
+│  │  data/cache/             │  │    kpis.parquet        [NEW]     │    │
+│  │  (existing, unchanged)   │  │    meta.json           [NEW]     │    │
+│  └──────────────────────────┘  └──────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-- **XBRL Normalizer**: Maps inconsistent XBRL concept names to canonical field names (see XBRL section below)
-- **Cleaner**: Handles missing values (rolling median for gaps ≤ 2 years, propagation for structural gaps), deduplicates overlapping fiscal periods, selects annual (`10-K`) frames over quarterly ones
-- **KPI Calculator**: Computes the 20 financial KPIs from cleaned base fields
-- **Loader**: Writes three output Parquet files per company:
-  - `data/clean/{TICKER}/financials.parquet` — normalized annual statements (10 years)
-  - `data/clean/{TICKER}/kpis.parquet` — 20 calculated KPIs per year
-  - `data/cache/metadata.parquet` — run timestamps, last-updated year per ticker, data completeness flags
+### Component Responsibilities
 
-Has NO knowledge of SEC HTTP endpoints or Streamlit widgets.
+| Component | Status | Responsibility | Communicates With |
+|-----------|--------|---------------|-------------------|
+| `scraper.py` | EXISTING — no changes | SEC EDGAR extraction for US tickers | `agent.py` |
+| `processor.py` | EXISTING — no changes | XBRL normalization + 20 KPI calculation | `agent.py` |
+| `agent.py` (FinancialAgent) | EXISTING — no changes | US pipeline orchestration | `scraper.py`, `processor.py`, `app.py` |
+| `latam_scraper.py` | NEW | Playwright web scraper — discovers PDF URLs on LATAM corporate sites | `LatamAgent.py` |
+| `latam_extractor.py` | NEW | PDF extraction (pdfplumber + pytesseract + pymupdf) — returns structured financial tables | `LatamAgent.py` |
+| `latam_processor.py` | NEW | Maps extracted LATAM financial data to the same KPI schema as `processor.py` | `LatamAgent.py` |
+| `currency.py` | NEW | Frankfurter API — fetches period-average FX rates, converts local currency to USD | `latam_processor.py` |
+| `web_search.py` | NEW | DuckDuckGo search — discovers regulatory source URLs and sector context | `LatamAgent.py` |
+| `LatamAgent.py` | NEW | Orchestrates the full LATAM ETL pipeline for one company (mirrors FinancialAgent interface) | `app.py` |
+| `app.py` | MODIFIED — LATAM section added | Unified Streamlit dashboard: existing S&P 500 section + new LATAM section | `agent.py`, `LatamAgent.py` |
 
 ---
 
-### 3. `app.py` — Presentation Layer
+## Recommended Project Structure
 
-**Sole responsibility:** Read Parquet files, render the Streamlit dashboard. Never triggers ETL directly.
+```
+AI 2026/
+├── scraper.py               # US: SEC EDGAR extraction (EXISTING — unchanged)
+├── processor.py             # US: XBRL normalization + KPIs (EXISTING — unchanged)
+├── agent.py                 # US: FinancialAgent orchestrator (EXISTING — unchanged)
+├── app.py                   # Dashboard (EXISTING — add LATAM section)
+│
+├── latam_scraper.py         # LATAM: Playwright web scraper [NEW]
+├── latam_extractor.py       # LATAM: PDF extraction pipeline [NEW]
+├── latam_processor.py       # LATAM: Financial data → KPI schema mapping + USD normalize [NEW]
+├── currency.py              # LATAM: Frankfurter FX API wrapper [NEW]
+├── web_search.py            # LATAM: DuckDuckGo search wrapper [NEW]
+├── LatamAgent.py            # LATAM: Orchestrator (mirrors FinancialAgent) [NEW]
+│
+├── data/
+│   ├── raw/{TICKER}/        # US raw XBRL JSON (EXISTING — unchanged)
+│   ├── clean/{TICKER}/      # US clean Parquet (EXISTING — unchanged)
+│   ├── cache/               # US metadata + tickers.json (EXISTING — unchanged)
+│   └── latam/               # LATAM storage root [NEW]
+│       └── {country}/       # e.g., colombia/, peru/, chile/
+│           └── {slug}/      # e.g., grupo-keralty/, clinica-bupa/
+│               ├── financials.parquet   # same schema as US financials.parquet
+│               ├── kpis.parquet         # same schema as US kpis.parquet
+│               ├── meta.json            # company metadata (name, country, regulatory_id, source_url)
+│               └── raw/                 # downloaded PDFs (optional, for audit trail)
+│                   └── {year}_annual_report.pdf
+│
+├── requirements.txt         # EXISTING — add LATAM deps
+├── scheduler.bat            # EXISTING — unchanged
+└── tests/
+    ├── test_scraper.py      # EXISTING
+    └── test_latam_*.py      # NEW
+```
 
-- Reads `data/clean/*/kpis.parquet` and `data/clean/*/financials.parquet` at session start
-- Reads `data/cache/metadata.parquet` to show data freshness indicators
-- Provides ticker input widget → delegates to `FinancialAgent` for on-demand ETL (via subprocess or direct call)
-- Renders multi-company line charts (Plotly), KPI comparison tables, and year filters
-- Caches Parquet reads with `@st.cache_data` to avoid re-reading on every interaction
+### Structure Rationale
 
-Has NO knowledge of SEC URLs, XBRL concepts, or raw JSON formats.
+- **Parallel module structure:** Each new LATAM module has a clear US counterpart. `latam_scraper.py` mirrors `scraper.py`'s responsibility (extraction); `latam_processor.py` mirrors `processor.py`'s responsibility (transformation). This makes the codebase navigable for anyone who already understands the US pipeline.
+- **`data/latam/{country}/{slug}/`:** Using country + slug (not ticker) as the directory key reflects how LATAM companies are identified: by name and country, not stock ticker. The slug is derived deterministically from `company_name.lower().replace(" ", "-")`.
+- **Same Parquet schema in `data/latam/`:** `financials.parquet` and `kpis.parquet` use identical column schemas as the US equivalents. The dashboard reads both with the same loader functions. Only the source pipeline differs.
+- **`meta.json` per company:** A lightweight JSON file (not Parquet) stores non-time-series metadata: company name, country, regulatory ID (NIT/RUC/RUT), source URL, regulatory authority, and last updated timestamp. JSON is chosen over Parquet here because this is a single-row record that changes rarely and needs to be human-readable.
+- **`raw/` subfolder (optional):** Downloaded PDFs are stored for audit purposes — they are the source-of-truth equivalent of `data/raw/{TICKER}/facts.json` in the US pipeline. They allow re-extraction if the extractor logic improves without re-downloading.
 
 ---
 
-### 4. `FinancialAgent` class — Orchestration Layer
+## Architectural Patterns
 
-**Sole responsibility:** Coordinate scraper and processor for a given ticker. The single entry point for adding a new company.
+### Pattern 1: Shared KPI Schema (Schema Compatibility Contract)
 
-Lives in its own module: `agent.py` (or as a class within `scraper.py` if the project stays small — see Build Order).
+**What:** `latam_processor.py` produces `financials.parquet` and `kpis.parquet` with identical column names and dtypes as `processor.py` does for US companies. The dashboard reads both without knowing the source pipeline.
 
+**When to use:** Any time two data sources need to share downstream consumers (dashboard, comparison logic).
+
+**Trade-offs:** Forces LATAM data to fit the US KPI schema. Fields that don't exist in LATAM reports become `NaN` — the same graceful degradation pattern used for `BRK.B` in the US pipeline (e.g., `current_assets` is NaN for insurance companies). This is acceptable and consistent.
+
+**Example:**
 ```python
-class FinancialAgent:
-    def __init__(self, ticker: str, api_key: str, data_dir: Path):
-        self.ticker = ticker
-        self.cik = resolve_cik(ticker)          # uses cached tickers.json
+# latam_processor.py — required output contract
+def produce_financials(company_slug: str, country: str, data: dict) -> pd.DataFrame:
+    """
+    Must return DataFrame with columns matching processor.py's output:
+    [ticker_or_slug, fiscal_year, revenue, gross_profit, cogs, operating_income,
+     net_income, interest_expense, depreciation_amortization, total_assets,
+     total_liabilities, total_equity, current_assets, current_liabilities,
+     cash, short_term_investments, receivables, inventory, long_term_debt,
+     short_term_debt, accounts_payable, shares_outstanding, operating_cash_flow, capex]
+    All monetary values in USD (float). Missing fields: NaN, not 0.
+    """
+```
+
+### Pattern 2: LatamAgent Mirrors FinancialAgent Interface
+
+**What:** `LatamAgent.py` exposes the same public methods as `agent.py`'s `FinancialAgent` class: `run()`, `needs_update()`. The dashboard can call either agent through the same call pattern.
+
+**When to use:** When two pipelines produce the same output type and need to be interchangeable from the caller's perspective.
+
+**Trade-offs:** Enforces interface discipline on `LatamAgent`. The internal implementations differ significantly (no EDGAR, PDF-based extraction, FX conversion), but the contract from `app.py`'s perspective is identical.
+
+**Example:**
+```python
+# LatamAgent.py
+class LatamAgent:
+    def __init__(self, company_name: str, country: str, source_url: str, data_dir: Path = DATA_DIR):
+        self.slug = slugify(company_name)
+        self.country = country.lower()
+        self.source_url = source_url
         self.data_dir = data_dir
 
-    def run(self, mode: str = "incremental") -> None:
-        """mode: 'incremental' | 'full_refresh'"""
-        ...
-
     def needs_update(self) -> bool:
-        """Check metadata.parquet for last-updated year vs current year"""
-        ...
+        """Returns True if last_processed is not current-quarter (same logic as FinancialAgent)."""
+        meta_path = self.data_dir / "latam" / self.country / self.slug / "meta.json"
+        if not meta_path.exists():
+            return True
+        meta = json.loads(meta_path.read_text())
+        last = pd.Timestamp(meta.get("last_processed", "2000-01-01"))
+        return not _same_quarter(last, pd.Timestamp.now())
 
-    def extract(self) -> Path:
-        """Calls scraper functions, returns path to raw facts.json"""
-        ...
-
-    def transform(self) -> None:
-        """Calls processor functions on raw facts.json"""
+    def run(self, force_refresh: bool = False) -> dict:
+        """Full LATAM ETL: scrape → extract → process → save. Returns status dict."""
         ...
 ```
 
----
+### Pattern 3: Currency Normalization as a Pure Function Module
 
-### 5. Data Store — `/data/` directory
+**What:** `currency.py` is a stateless module that takes `(amount, currency_code, fiscal_year)` and returns `amount_usd`. It fetches period-average rates from the Frankfurter API and caches results locally to avoid repeated API calls.
 
-Not a running process, but a first-class architectural component:
+**When to use:** Any time monetary values from multiple currencies need to be compared or aggregated.
 
-```
-data/
-  raw/
-    {TICKER}/
-      facts.json          # verbatim XBRL company facts from SEC
-  clean/
-    {TICKER}/
-      financials.parquet  # normalized base statements (10 years)
-      kpis.parquet        # 20 KPIs per year
-  cache/
-    tickers.json          # SEC ticker→CIK map (refreshed quarterly)
-    metadata.parquet      # run log: ticker, last_run, last_year_available, completeness %
+**Trade-offs:** Period-average rates (not year-end rates) are used by convention for income statement items. Balance sheet items ideally use year-end rates — but for this pipeline, period-average is applied uniformly across all statement types for simplicity. This is a documented approximation, not an error.
+
+**Example:**
+```python
+# currency.py
+import json
+import requests
+from pathlib import Path
+from functools import lru_cache
+
+CACHE_FILE = Path("data/cache/fx_rates.json")
+
+@lru_cache(maxsize=256)
+def get_period_average_rate(currency: str, year: int) -> float:
+    """
+    Returns USD/currency rate for the given calendar year (annual average).
+    Uses frankfurter.app API. Results cached to disk.
+    Raises ValueError if currency or year is not available.
+    """
+    url = f"https://api.frankfurter.app/{year}-01-01..{year}-12-31?from={currency}&to=USD"
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    rates = resp.json()["rates"]
+    # Average all daily rates for the year
+    usd_rates = [day_rates["USD"] for day_rates in rates.values()]
+    return sum(usd_rates) / len(usd_rates)
+
+def to_usd(amount: float, currency: str, year: int) -> float:
+    if currency == "USD":
+        return amount
+    rate = get_period_average_rate(currency, year)
+    return amount * rate
 ```
 
 ---
 
 ## Data Flow
 
+### US Pipeline (Existing — Unchanged)
+
 ```
-SEC EDGAR API
+SEC EDGAR API (rate-limited, 8 req/s)
     |
-    | HTTP (rate-limited, 10 req/s)
     v
 scraper.py
-    |
-    | writes verbatim JSON
+    |  writes verbatim JSON
     v
 data/raw/{TICKER}/facts.json
-    |
-    | reads raw JSON
+    |  reads raw JSON
     v
-processor.py (XBRL Normalizer)
-    |
-    | normalized DataFrame (in memory)
-    v
-processor.py (Cleaner)
-    |
-    | clean DataFrame (in memory)
-    v
-processor.py (KPI Calculator)
-    |
-    | writes Parquet
+processor.py (XBRL normalize → clean → KPIs)
+    |  writes atomic Parquet
     v
 data/clean/{TICKER}/financials.parquet
 data/clean/{TICKER}/kpis.parquet
 data/cache/metadata.parquet
-    |
-    | reads Parquet (cached)
+    |  reads Parquet (st.cache_data)
     v
-app.py (Streamlit)
-    |
-    | renders
-    v
-Browser (localhost:8501)
+app.py — S&P 500 section
 ```
 
-The raw→clean split is intentional and critical: if the XBRL normalizer logic needs to be fixed (common), you re-run only `processor.py` without hitting SEC again. Raw JSON is a local checkpoint that protects against re-scraping.
+### LATAM Pipeline (New)
 
-### Incremental Update Logic
+```
+User provides: company name + country + corporate website URL
+    |
+    v
+web_search.py (optional: find regulatory source URL via DuckDuckGo)
+    |
+    v
+latam_scraper.py (Playwright: navigate to URL, find PDF links, download PDFs)
+    |  writes PDF files (optional)
+    v
+data/latam/{country}/{slug}/raw/{year}_report.pdf
+    |  reads PDFs
+    v
+latam_extractor.py (pdfplumber → table extraction; pytesseract → OCR fallback; pymupdf → text)
+    |  returns: dict of {fiscal_year: {field: value_in_local_currency}}
+    v
+latam_processor.py (map fields to KPI schema → currency.py → USD normalization → calculate KPIs)
+    |  calls currency.py for each monetary field
+    v
+currency.py (frankfurter API → period-average FX rate → in-memory cache)
+    |  returns: USD-normalized financial DataFrame
+    v
+latam_processor.py
+    |  writes atomic Parquet (same save_parquet() pattern as processor.py)
+    v
+data/latam/{country}/{slug}/financials.parquet
+data/latam/{country}/{slug}/kpis.parquet
+data/latam/{country}/{slug}/meta.json
+    |  reads Parquet (st.cache_data)
+    v
+app.py — LATAM section (company cards, red flags, executive report)
+```
 
-`metadata.parquet` stores `last_year_available` per ticker. On each run:
+### Orchestration: LatamAgent coordinates the LATAM flow
 
-1. `FinancialAgent.needs_update()` compares `last_year_available` with `current_year - 1` (10-K for year N is filed in early N+1)
-2. If stale: re-download `facts.json` (single file, contains all years) → re-run processor
-3. If current: skip extraction, optionally re-run processor only if KPI definitions changed
+```
+app.py (user submits URL input)
+    |
+    v
+LatamAgent.run()
+    ├── needs_update()? → reads meta.json
+    ├── latam_scraper.find_pdf_urls(source_url)
+    ├── latam_extractor.extract_tables(pdf_paths)
+    ├── latam_processor.process(extracted_data, company_slug, country)
+    │       └── currency.to_usd(amount, currency, year) [per field per year]
+    └── write financials.parquet, kpis.parquet, meta.json
+```
 
-Because EDGAR's `companyfacts` endpoint returns ALL historical years in one JSON file, "incremental" in this system means "re-download and re-process only the tickers that are stale" — not streaming row-level deltas. This is simpler and correct for annual data.
+### Key Data Flows
 
-### Full Refresh
-
-Deletes `data/raw/{TICKER}/facts.json` and `data/clean/{TICKER}/` before running. Triggered manually or when a schema change in `processor.py` requires reprocessing all data.
+1. **On-demand LATAM ETL:** User enters URL in dashboard → `app.py` calls `LatamAgent.run()` → full pipeline executes → `st.cache_data.clear()` → dashboard re-renders with new LATAM company.
+2. **Dashboard read path (LATAM):** `app.py` scans `data/latam/*/*/kpis.parquet` with glob → loads each → identical display logic as US section.
+3. **Cross-pipeline comparison:** If a future feature compares US vs. LATAM, both pipelines already produce the same Parquet schema — no transformation needed.
 
 ---
 
-## FinancialAgent Design
+## Integration Points
 
-### Design Goals
+### New vs. Modified vs. Unchanged Components
 
-- **Extensible**: Adding a new KPI = add one function to the KPI calculator module, zero changes to `FinancialAgent`
-- **Testable**: Each stage (extract, normalize, clean, calculate) is independently callable
-- **Transparent**: Every step logs what it wrote and why it skipped
+| File | Action | What Changes |
+|------|--------|-------------|
+| `scraper.py` | UNCHANGED | None |
+| `processor.py` | UNCHANGED | None |
+| `agent.py` | UNCHANGED | None |
+| `scheduler.bat` | UNCHANGED | None (LATAM runs on-demand, not scheduled in v2.0) |
+| `requirements.txt` | MODIFIED | Add: playwright, pdfplumber, pytesseract, pymupdf, duckduckgo-search, weasyprint, requests |
+| `app.py` | MODIFIED | Add LATAM section: URL input widget, company card rendering, red flag display, PDF report download button |
+| `latam_scraper.py` | NEW | Playwright scraper |
+| `latam_extractor.py` | NEW | PDF extraction pipeline |
+| `latam_processor.py` | NEW | Financial mapping + KPI calculation + USD normalization |
+| `currency.py` | NEW | Frankfurter FX wrapper |
+| `web_search.py` | NEW | DuckDuckGo search wrapper |
+| `LatamAgent.py` | NEW | LATAM orchestrator |
 
-### Recommended Class Structure
+### External Services
 
-```python
-# agent.py
-from pathlib import Path
-from scraper import download_facts, resolve_cik
-from processor import normalize_xbrl, clean_financials, calculate_kpis, save_parquet
-from metadata import load_metadata, update_metadata
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| LATAM corporate websites | Playwright (headless Chromium) via `latam_scraper.py` | JS-rendered pages require Playwright, not requests+BeautifulSoup |
+| Frankfurter API (`api.frankfurter.app`) | Simple REST GET in `currency.py` | Free, no API key, returns historical daily rates; cache results in `data/cache/fx_rates.json` to avoid repeated calls |
+| DuckDuckGo Search | `duckduckgo-search` Python library in `web_search.py` | Free, no API key, rate-limit: add 1s delay between searches; used for regulatory source discovery |
+| Regulatory portals (Supersalud, SMV, SFC, CMF, CNV, CNBV) | HTTP download via `requests` in `latam_scraper.py` | Static PDFs from government sites; simpler than corporate sites |
+| SEC EDGAR | Unchanged — `scraper.py` handles this independently | US pipeline unaffected |
 
-class FinancialAgent:
-    """
-    Orchestrates the full ETL pipeline for one ticker.
-    Stateless between instantiations — all state lives in /data/.
-    """
+### Internal Boundaries
 
-    DEFAULT_YEARS = 10  # 10-K lookback window
-
-    def __init__(self, ticker: str, api_key: str, data_dir: Path = Path("data")):
-        self.ticker = ticker.upper()
-        self.api_key = api_key
-        self.data_dir = data_dir
-        self.cik = resolve_cik(ticker, cache_path=data_dir / "cache" / "tickers.json")
-
-    def run(self, mode: str = "incremental", force: bool = False) -> dict:
-        """
-        Returns a result dict: {status, ticker, years_processed, errors}
-        mode: 'incremental' skips up-to-date tickers
-              'full_refresh' reprocesses regardless
-        """
-        if mode == "incremental" and not force and not self.needs_update():
-            return {"status": "skipped", "ticker": self.ticker, "reason": "up_to_date"}
-
-        raw_path = self.extract()
-        df_clean = self.transform(raw_path)
-        update_metadata(self.ticker, df_clean, self.data_dir)
-        return {"status": "success", "ticker": self.ticker, "years_processed": len(df_clean)}
-
-    def needs_update(self) -> bool:
-        meta = load_metadata(self.data_dir / "cache" / "metadata.parquet")
-        if self.ticker not in meta.index:
-            return True
-        last_year = meta.loc[self.ticker, "last_year_available"]
-        return last_year < (pd.Timestamp.now().year - 1)
-
-    def extract(self) -> Path:
-        out_path = self.data_dir / "raw" / self.ticker / "facts.json"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        download_facts(self.cik, self.api_key, out_path)
-        return out_path
-
-    def transform(self, raw_path: Path) -> pd.DataFrame:
-        raw = load_json(raw_path)
-        df_norm = normalize_xbrl(raw, self.ticker)
-        df_clean = clean_financials(df_norm)
-        df_kpis = calculate_kpis(df_clean)
-        save_parquet(df_clean, self.data_dir / "clean" / self.ticker / "financials.parquet")
-        save_parquet(df_kpis,  self.data_dir / "clean" / self.ticker / "kpis.parquet")
-        return df_clean
-```
-
-### Extensibility Patterns
-
-**Adding a new KPI** (e.g., Free Cash Flow Yield):
-- Add one function `def calc_fcf_yield(df) -> pd.Series` in `processor.py`
-- Register it in a `KPI_REGISTRY` dict: `{"fcf_yield": calc_fcf_yield}`
-- `calculate_kpis()` iterates the registry — no other changes needed
-
-**Adding a new data source** (e.g., quarterly data from a different endpoint):
-- Subclass `FinancialAgent`:
-  ```python
-  class QuarterlyAgent(FinancialAgent):
-      def extract(self) -> Path:
-          # override to hit quarterly endpoint
-          ...
-  ```
-
-**Batch processing** (all 20 base companies):
-```python
-agents = [FinancialAgent(t, api_key) for t in TOP_20_TICKERS]
-results = [a.run(mode="incremental") for a in agents]  # sequential, respects rate limit
-```
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| `latam_scraper.py` → `latam_extractor.py` | File paths to downloaded PDFs | Scraper writes PDFs to `data/latam/{country}/{slug}/raw/`; extractor reads them |
+| `latam_extractor.py` → `latam_processor.py` | Python dict: `{fiscal_year: {field: (value, currency)}}` | Raw extracted values with original currency codes; processor handles USD conversion |
+| `latam_processor.py` → `currency.py` | Function call: `to_usd(amount, currency, year)` | Pure function; `currency.py` has no knowledge of Parquet or company structure |
+| `LatamAgent.py` → all LATAM modules | Direct Python imports (same pattern as `agent.py` → `scraper.py` + `processor.py`) | LatamAgent is the single caller; modules don't call each other directly |
+| `app.py` → `LatamAgent.py` | `LatamAgent(name, country, url).run()` — mirrors `FinancialAgent(ticker).run()` | Same call pattern; app doesn't need to know which pipeline is being used |
+| `app.py` → `data/latam/` | `pd.read_parquet()` via `st.cache_data` loader — same as US | `load_latam_kpis(slug, country)` mirrors existing `load_kpis(ticker)` function |
 
 ---
 
-## XBRL Concept Normalization
+## Build Order
 
-### The Problem
+Dependencies between components determine what must exist before what can be built. The LATAM pipeline has its own internal dependency chain that is independent of the US pipeline.
 
-SEC XBRL filings use US-GAAP taxonomy concept names, but companies have discretion in which specific concept they use for the same economic quantity. Revenue alone has 7+ valid XBRL tags:
+### Recommended Build Order (LATAM v2.0)
 
-| Company | XBRL Tag Used |
-|---------|---------------|
-| Apple | `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax` |
-| ExxonMobil | `us-gaap:Revenues` |
-| JPMorgan | `us-gaap:InterestAndDividendIncomeOperating` (banking) |
-| Berkshire | `us-gaap:Revenues` + segment overrides |
+**Step 1 — `currency.py`**
+- No dependencies on other LATAM modules
+- Tests with static inputs (e.g., `to_usd(1000, "COP", 2023)`) before any scraping is needed
+- Unblocks: `latam_processor.py`
 
-### Solution: Priority-Order Concept Lookup
+**Step 2 — `web_search.py`**
+- No dependencies on other LATAM modules
+- Simple wrapper; test with known company names
+- Unblocks: `LatamAgent.py` (used for regulatory source discovery)
 
-Define a `CONCEPT_MAP` dictionary that maps canonical field names to an ordered list of XBRL concepts, tried in order until one is found with data:
+**Step 3 — `latam_scraper.py`**
+- Depends on: a known corporate URL to test against
+- Uses `currency.py` indirectly (not directly — scraper is extraction-only)
+- Test: given a LATAM healthcare company URL, returns a list of PDF download URLs
+- Unblocks: `latam_extractor.py`
 
-```python
-# processor.py
-CONCEPT_MAP = {
-    # --- Income Statement ---
-    "revenue": [
-        "RevenueFromContractWithCustomerExcludingAssessedTax",
-        "RevenueFromContractWithCustomerIncludingAssessedTax",
-        "Revenues",
-        "SalesRevenueNet",
-        "SalesRevenueGoodsNet",
-        "RevenueFromRelatedParties",  # last resort
-    ],
-    "net_income": [
-        "NetIncomeLoss",
-        "NetIncomeLossAvailableToCommonStockholdersBasic",
-        "ProfitLoss",
-    ],
-    "operating_income": [
-        "OperatingIncomeLoss",
-        "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
-    ],
-    "gross_profit": [
-        "GrossProfit",
-    ],
-    "ebitda_proxy": [
-        # No direct EBITDA in XBRL — must calculate: OperatingIncome + D&A
-        # Flag this field as "calculated", not "extracted"
-    ],
+**Step 4 — `latam_extractor.py`**
+- Depends on: at least one real PDF downloaded by `latam_scraper.py`
+- Three extraction modes in priority order: pdfplumber (structured tables), pymupdf (text extraction), pytesseract (OCR fallback)
+- Test: given a real annual report PDF, extracts revenue, net income, total assets for at least one fiscal year
+- Unblocks: `latam_processor.py`
 
-    # --- Balance Sheet ---
-    "total_assets": ["Assets"],
-    "total_liabilities": ["Liabilities"],
-    "total_equity": [
-        "StockholdersEquity",
-        "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
-    ],
-    "cash_and_equivalents": [
-        "CashAndCashEquivalentsAtCarryingValue",
-        "CashCashEquivalentsAndShortTermInvestments",
-    ],
-    "current_assets": ["AssetsCurrent"],
-    "current_liabilities": ["LiabilitiesCurrent"],
-    "long_term_debt": [
-        "LongTermDebt",
-        "LongTermDebtNoncurrent",
-        "LongTermNotesPayable",
-    ],
+**Step 5 — `latam_processor.py`**
+- Depends on: `latam_extractor.py` (input data), `currency.py` (FX conversion), `processor.py`'s `KPI_REGISTRY` and `calculate_kpis()` (reused directly)
+- Maps extracted fields to the canonical schema; calls `currency.py`; reuses `calculate_kpis()` from `processor.py` unchanged
+- Writes `financials.parquet` and `kpis.parquet` with identical schema to US output
+- Unblocks: `LatamAgent.py`, `app.py` LATAM section
 
-    # --- Cash Flow Statement ---
-    "operating_cash_flow": [
-        "NetCashProvidedByUsedInOperatingActivities",
-        "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
-    ],
-    "capex": [
-        "PaymentsToAcquirePropertyPlantAndEquipment",
-        "PaymentsForCapitalImprovements",
-    ],
+**Step 6 — `LatamAgent.py`**
+- Depends on: all LATAM modules above
+- Mirrors `FinancialAgent` interface: `run()`, `needs_update()`
+- Test end-to-end on one real LATAM healthcare company
+- Unblocks: `app.py` LATAM section
 
-    # --- Share Data ---
-    "shares_outstanding": [
-        "CommonStockSharesOutstanding",
-        "WeightedAverageNumberOfSharesOutstandingBasic",
-    ],
-    "eps_basic": ["EarningsPerShareBasic"],
-    "eps_diluted": ["EarningsPerShareDiluted"],
+**Step 7 — `app.py` LATAM section**
+- Depends on: `LatamAgent.py`, at least one LATAM company with Parquet data written
+- Add: URL input widget, `LatamAgent.run()` call, company card display, red flag engine, executive report + weasyprint PDF download
+- Does not break existing S&P 500 section (additive modification only)
+
+### Dependency Graph
+
+```
+currency.py
+    └── latam_processor.py
+            └── LatamAgent.py
+                    └── app.py (LATAM section)
+
+web_search.py
+    └── LatamAgent.py
+
+latam_scraper.py
+    └── latam_extractor.py
+            └── latam_processor.py
+
+processor.py (existing)
+    └── calculate_kpis() reused by latam_processor.py [import, not modification]
+```
+
+Each arrow is a hard dependency. The US pipeline (`scraper.py`, `processor.py`, `agent.py`) runs in parallel and has no dependency on any LATAM module.
+
+---
+
+## Storage Schema
+
+### LATAM Storage: `data/latam/{country}/{slug}/`
+
+**Backwards-compatible:** The LATAM storage tree lives under `data/latam/` — a new subtree that does not touch `data/raw/`, `data/clean/`, or `data/cache/`. The US pipeline cannot accidentally overwrite LATAM data.
+
+**`financials.parquet` — identical column schema to US `data/clean/{TICKER}/financials.parquet`:**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `ticker` | str | For LATAM: use `{slug}` (e.g., `grupo-keralty`) |
+| `fiscal_year` | int | Calendar year of fiscal year end (same convention as US) |
+| `revenue` | float (USD) | After FX conversion; NaN if not extractable |
+| `gross_profit` | float (USD) | NaN if not in report |
+| `cogs` | float (USD) | NaN if not in report |
+| `operating_income` | float (USD) | NaN if not in report |
+| `net_income` | float (USD) | NaN if not in report |
+| `interest_expense` | float (USD) | NaN if not in report |
+| `depreciation_amortization` | float (USD) | NaN if not in report |
+| `total_assets` | float (USD) | |
+| `total_liabilities` | float (USD) | |
+| `total_equity` | float (USD) | |
+| `current_assets` | float (USD) | NaN for companies that don't report separately |
+| `current_liabilities` | float (USD) | NaN for companies that don't report separately |
+| `cash` | float (USD) | |
+| `short_term_investments` | float (USD) | NaN if not in report |
+| `receivables` | float (USD) | |
+| `inventory` | float (USD) | NaN for service companies |
+| `long_term_debt` | float (USD) | |
+| `short_term_debt` | float (USD) | |
+| `accounts_payable` | float (USD) | |
+| `shares_outstanding` | float | NaN for private companies |
+| `operating_cash_flow` | float (USD) | |
+| `capex` | float (USD) | |
+
+**`kpis.parquet` — identical column schema to US `data/clean/{TICKER}/kpis.parquet`:**
+
+Same 20 KPI columns. `calculate_kpis()` from `processor.py` is called directly on the LATAM `financials.parquet` — no separate KPI implementation needed.
+
+**`meta.json` — LATAM-specific metadata (no US equivalent):**
+
+```json
+{
+  "company_name": "Grupo Keralty",
+  "slug": "grupo-keralty",
+  "country": "colombia",
+  "regulatory_id": "NIT 860.007.336-4",
+  "regulatory_authority": "Supersalud",
+  "source_url": "https://keralty.com/informes-financieros",
+  "regulatory_url": "https://supersalud.gov.co/...",
+  "currency_original": "COP",
+  "last_scraped": "2026-03-03T10:00:00",
+  "last_processed": "2026-03-03T10:05:00",
+  "fiscal_years_available": [2020, 2021, 2022, 2023, 2024],
+  "extraction_quality": "high",
+  "fields_extracted": ["revenue", "net_income", "total_assets", "total_equity"],
+  "fields_missing": ["shares_outstanding", "short_term_investments"]
 }
 ```
 
-### Extraction Function
+---
 
-```python
-def extract_concept(facts: dict, concept_name: str, form: str = "10-K") -> pd.Series:
-    """
-    Try each XBRL tag in priority order.
-    Returns annual values indexed by fiscal year end date.
-    """
-    us_gaap = facts.get("facts", {}).get("us-gaap", {})
-    for tag in CONCEPT_MAP.get(concept_name, []):
-        if tag in us_gaap:
-            units = us_gaap[tag].get("units", {})
-            # Most financial values are in USD
-            for unit_key in ["USD", "shares", "USD/shares"]:
-                if unit_key in units:
-                    entries = [
-                        e for e in units[unit_key]
-                        if e.get("form") == form and e.get("fp") == "FY"
-                    ]
-                    if entries:
-                        return _entries_to_series(entries, concept_name)
-    return pd.Series(dtype=float, name=concept_name)  # empty — log warning
-```
+## Anti-Patterns
 
-### Handling Financial Sector Companies
+### Anti-Pattern 1: Modifying `processor.py` to Handle LATAM Data
 
-Banks (JPM), insurers (BRK.B), and diversified financials have fundamentally different statement structures. Their "revenue" is `NetInterestIncome` or `PremiumsEarned`, not `RevenueFromContractWithCustomer`. Two approaches:
+**What people do:** Add LATAM-specific logic (PDF parsing, FX conversion, name-based lookups) directly into `processor.py` to avoid creating a new module.
 
-1. **Sector-aware CONCEPT_MAP**: Add a `CONCEPT_MAP_FINANCIALS` dict with bank-specific tags, select based on SIC code from the submission JSON
-2. **Graceful degradation**: If all tags for a concept return empty, set the field to `NaN` and flag `completeness` in metadata — the KPI that depends on it will also be `NaN` but won't crash
+**Why it's wrong:** `processor.py` is the validated, working US KPI engine. Any modification risks breaking the existing S&P 500 pipeline. The separation of concerns is explicit and intentional: `processor.py` knows only XBRL JSON; `latam_processor.py` knows only LATAM financial tables.
 
-Recommendation: Start with graceful degradation (simpler), add sector-specific maps in phase 2 once you see which companies have the most gaps.
-
-### Period Deduplication
-
-EDGAR facts include data from multiple filings (annual + amended). For each concept, multiple entries may cover the same fiscal year. Deduplication rule:
-
-1. Filter to `form == "10-K"` and `fp == "FY"` (fiscal year, full period)
-2. Among duplicates for the same `fy` year, prefer the entry with the latest `filed` date (most recent amendment)
-3. Convert `end` date to `fiscal_year` integer (`end.year` or `end.year - 1` if `end.month < 6`)
+**Do this instead:** Create `latam_processor.py` as a separate module. Have it `import processor` and call `processor.calculate_kpis()` — reusing the KPI calculation logic without touching the US module.
 
 ---
 
-## Suggested Build Order
+### Anti-Pattern 2: Using a Different Parquet Schema for LATAM Data
 
-Dependencies between components determine what must exist before what can be built.
+**What people do:** Add LATAM-specific columns (`currency_original`, `fx_rate_used`) to the `financials.parquet` schema so LATAM files have a different shape than US files.
 
-### Phase 1: Data Foundation (build first)
+**Why it's wrong:** The dashboard's data loaders expect a single consistent schema. Two different schemas require branching logic everywhere that reads Parquet — in chart builders, in KPI selectors, in comparison views. This doubles maintenance burden immediately and grows with every new feature.
 
-**Build `scraper.py` core first** because all other components depend on having local data to work with.
-
-1. `resolve_cik()` function + tickers.json download
-   - Unblocks: all subsequent work
-   - Test: `resolve_cik("AAPL")` returns `"0000320193"`
-
-2. `download_facts()` function for a single ticker
-   - Unblocks: processor development with real data
-   - Test: `data/raw/AAPL/facts.json` exists and is ~5MB
-
-3. Batch download for the Top 20 tickers
-   - Unblocks: full-scale processor testing
-
-### Phase 2: Transformation Core
-
-**Build `processor.py` XBRL normalizer second**, once you have real `facts.json` files to test against.
-
-4. `CONCEPT_MAP` + `extract_concept()` for 5-6 key fields (revenue, net_income, total_assets, cash, operating_cash_flow, capex)
-   - Test against AAPL and JPM — two structurally different companies
-   - Unblocks: KPI calculation
-
-5. `clean_financials()` — deduplication, missing value handling, year selection
-   - Unblocks: reliable KPI inputs
-
-6. `calculate_kpis()` — implement all 20 KPIs
-   - Unblocks: dashboard development
-
-7. Parquet write/read round-trip verification
-   - Unblocks: app.py reads
-
-### Phase 3: Orchestration
-
-**Build `FinancialAgent` third**, after scraper and processor are independently verified.
-
-8. `FinancialAgent` class with `run()`, `needs_update()`, `extract()`, `transform()`
-9. `metadata.parquet` write/read for incremental logic
-10. Batch run of all 20 base tickers end-to-end
-
-### Phase 4: Dashboard
-
-**Build `app.py` last**, because it depends on all Parquet files existing.
-
-11. Static dashboard: load existing Parquet files, render basic charts
-12. Multi-company line chart with year filter (Plotly)
-13. KPI comparison table
-14. Dynamic ticker input → trigger `FinancialAgent.run()` → refresh dashboard data
-15. Data freshness indicators from `metadata.parquet`
-
-### Dependency Graph Summary
-
-```
-tickers.json resolution
-    → download_facts()
-        → CONCEPT_MAP + extract_concept()
-            → clean_financials()
-                → calculate_kpis()
-                    → Parquet files
-                        → FinancialAgent orchestration
-                            → app.py dashboard
-```
-
-Each arrow is a hard dependency. Nothing to the right can be meaningfully built without everything to its left.
+**Do this instead:** Keep the identical schema. Store FX metadata in `meta.json` (not in the Parquet). The Parquet files contain USD-normalized values only. Any audit trail (original values, FX rate used) lives in `meta.json` or a separate audit log, not in the primary analytics tables.
 
 ---
 
-## Key Findings
+### Anti-Pattern 3: Storing LATAM Data Under `data/clean/{SLUG}/`
 
-- **The raw/clean split is the single most important architectural decision**: storing `facts.json` verbatim before transformation means XBRL normalization bugs (which will happen) can be fixed by re-running `processor.py` alone, with zero SEC API calls. Without this, every bug fix requires re-scraping.
+**What people do:** Use the existing `data/clean/` tree to store LATAM output alongside US tickers (e.g., `data/clean/KERALTY/`).
 
-- **XBRL concept inconsistency is the primary technical risk**: The 20 companies in scope span tech, energy, banking, healthcare, and retail — sectors with fundamentally different GAAP presentation choices. A priority-ordered `CONCEPT_MAP` with graceful degradation to `NaN` (rather than crashing) is the correct response; it makes gaps visible in the dashboard rather than silent.
+**Why it's wrong:** `data/clean/` is populated exclusively by the US pipeline (via `processor.py` which uses `data/raw/{TICKER}/facts.json` as input). Putting LATAM data there creates a naming conflict risk, mixes the two pipelines' audit trails, and makes it impossible to determine which data came from EDGAR vs. PDF extraction.
 
-- **`FinancialAgent` should be stateless and file-backed**: all state (last run, years available, completeness) lives in `metadata.parquet`, not in memory. This means the dashboard can inspect pipeline state without running the agent, and the agent can be safely re-run without in-memory coordination.
-
-- **Incremental updates in this system mean ticker-level skipping, not row-level deltas**: EDGAR's `companyfacts` endpoint returns all years in one JSON blob. "Incremental" = only re-download and re-process tickers whose last available year is behind the current fiscal year. This is simpler and correct for annual-only data.
-
-- **Build scraper → processor → agent → dashboard in strict order**: each layer can only be tested meaningfully once the layer below it produces real output. Attempting to build `app.py` before `processor.py` produces Parquet files leads to placeholder data that masks real normalization problems.
+**Do this instead:** Use `data/latam/{country}/{slug}/` as the LATAM storage root. The separation is explicit in the directory tree. `app.py` scans both trees separately with different glob patterns: `data/clean/*/kpis.parquet` for US and `data/latam/*/*/kpis.parquet` for LATAM.
 
 ---
 
-*Research conducted: 2026-02-24. Based on SEC EDGAR XBRL API structure, edgartools library design patterns, and established ETL pipeline architecture for financial data systems.*
+### Anti-Pattern 4: Calling `LatamAgent.run()` Synchronously in the Dashboard for Slow Extractions
+
+**What people do:** Call `LatamAgent.run()` directly in the Streamlit main thread, blocking the UI for the entire PDF download + OCR extraction time (potentially 30-120 seconds).
+
+**Why it's wrong:** Streamlit's execution model re-runs the entire script. A blocking call of 30-120 seconds freezes the browser tab with a spinner and provides no progress feedback. Users assume it crashed.
+
+**Do this instead:** Wrap the `LatamAgent.run()` call in `st.spinner()` with a descriptive message. For very long extractions, consider running `LatamAgent` as a subprocess or background thread and polling `meta.json` for completion status. At minimum, break the call into stages with intermediate `st.status()` updates (Playwright navigation, PDF download, extraction, processing).
+
+---
+
+## Scaling Considerations
+
+This is a local professional tool, not a multi-tenant SaaS product. Scaling considerations are limited to practical file/performance limits on a single machine.
+
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| 1-10 LATAM companies | Current design is optimal. Per-company Parquet files, no aggregation needed. |
+| 10-50 LATAM companies | Add `data/latam/cache/metadata.parquet` (mirrors US `data/cache/metadata.parquet`) to track LATAM company registry. Glob-based discovery becomes slower; a registry is faster. |
+| 50+ LATAM companies | Consider a DuckDB layer that queries `data/latam/*/*/kpis.parquet` via glob for cross-company LATAM analysis — same pattern recommended in existing STACK.md research for US pipeline at scale. |
+
+### Scaling Priorities
+
+1. **First bottleneck:** PDF extraction time. OCR (pytesseract) is slow — 30-90 seconds per page for scanned documents. Mitigation: cache extracted tables (not just raw PDFs) in a `tables.json` alongside the PDF so re-extraction is not needed on re-runs.
+2. **Second bottleneck:** Playwright startup time. Each `LatamAgent.run()` starts a new Playwright browser instance. If multiple LATAM companies are processed in a batch, reuse a single browser context across all scraping calls in the batch run.
+
+---
+
+## Sources
+
+- Direct code analysis of existing `agent.py`, `processor.py`, `scraper.py`, `app.py` (HIGH confidence — source of truth)
+- PROJECT.md milestone specification (HIGH confidence — authoritative requirements)
+- Frankfurter API documentation: `api.frankfurter.app` — free REST API for historical FX rates (MEDIUM confidence — verified endpoint exists, rate limits not formally documented)
+- Playwright Python docs: `playwright.dev/python` — headless browser automation (HIGH confidence — standard tool, well-documented)
+- `duckduckgo-search` Python library: `pypi.org/project/duckduckgo-search` — DDG API wrapper (MEDIUM confidence — free, no API key, rate-limit behavior requires empirical testing)
+- pdfplumber documentation: `github.com/jsvine/pdfplumber` — structured table extraction from PDFs (HIGH confidence — widely used, well-maintained)
+- weasyprint documentation: `weasyprint.org` — HTML to PDF for Python (MEDIUM confidence — known Windows dependency complexity with GTK)
+
+---
+
+*Architecture research for: LATAM Financial Analysis Pipeline (v2.0) — integration with existing SP500 dashboard*
+*Researched: 2026-03-03*
