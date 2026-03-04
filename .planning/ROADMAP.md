@@ -116,11 +116,12 @@ Plans:
   3. `data/latam/{country}/{slug}/` directories are created correctly and the Parquet schema (column names and dtypes) matches the US `data/clean/{TICKER}/` schema exactly
   4. Calling the Playwright scraper function from a Streamlit button click (inside ThreadPoolExecutor) does not raise NotImplementedError or hang — thread isolation is confirmed working on Windows 11
   5. Argentine peso (ARS) companies surface a baja-confianza warning flag in the returned metadata
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — currency.py: tiered FX normalizer (Frankfurter primary + secondary API fallback) with lru_cache and disk cache; unit tests for all 6 currency codes
-- [ ] 06-02-PLAN.md — Company registry: COMP schema (name, country, slug, regulatory_id, regulator), make_slug(), storage layout data/latam/{country}/{slug}/; Playwright thread-isolation smoke test from Streamlit button
+- [ ] 06-01-PLAN.md — currency.py TDD: tiered FX normalizer (Frankfurter BRL/MXN, open.er-api.com ARS/CLP/COP/PEN) with lru_cache + disk cache; 11 tests
+- [ ] 06-02-PLAN.md — company_registry.py TDD: CompanyRecord dataclass, make_slug() (python-slugify), make_storage_path(), Parquet schema parity validation; 10 tests
+- [ ] 06-03-PLAN.md — Playwright thread isolation: latam_scraper.py ThreadPoolExecutor wrapper, smoke test, Streamlit latam_ button; human verification gate
 
 ### Phase 7: LATAM Scraper
 **Goal**: Given a company name or regulatory ID, the scraper discovers and downloads the annual financial report PDF using semantic ddgs site-search as primary strategy and Playwright as fallback — plus a drag & drop upload path for when automated scraping is blocked
