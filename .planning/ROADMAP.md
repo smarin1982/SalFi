@@ -98,10 +98,11 @@ Plans:
 **Milestone Goal:** Extend the system with a complete LATAM pipeline — web scraping + PDF extraction, USD normalization, KPI calculation, red flags, and a downloadable executive report — integrated into the existing Streamlit dashboard as an additive LATAM section. The US S&P 500 pipeline is never modified.
 
 - [ ] **Phase 6: Foundation** - currency.py + company registry + storage schema + Playwright ThreadPoolExecutor proof-of-concept
-- [ ] **Phase 7: LATAM Scraper** - Playwright scraper for corporate websites + adapters for six LATAM regulatory portals
-- [ ] **Phase 8: PDF Extraction & KPI Mapping** - Three-level extraction pipeline (pdfplumber → PyMuPDF → pytesseract) + latam_processor.py reusing calculate_kpis()
+- [ ] **Phase 7: LATAM Scraper** - Semantic search (ddgs site:) as primary + Playwright fallback + drag & drop PDF upload
+- [ ] **Phase 8: PDF Extraction & KPI Mapping** - Three-level extraction (pdfplumber → PyMuPDF → pytesseract) + evidence trail + LATAM health sector CONCEPT_MAP
 - [ ] **Phase 9: Orchestration & Red Flags** - LatamAgent orchestrator, web search (ddgs), red flags engine with YAML thresholds
-- [ ] **Phase 10: Dashboard & Report** - Additive LATAM section in app.py, executive report (weasyprint spike), PDF download button
+- [ ] **Phase 10: Human Validation Lite** - Analyst confirmation screen for extracted key values before writing to Parquet
+- [ ] **Phase 11: Dashboard & Report** - Additive LATAM section in app.py, multi-currency toggle, evidence viewer, executive report (Claude API), PDF download
 
 ## Phase Details
 
@@ -122,34 +123,36 @@ Plans:
 - [ ] 06-02-PLAN.md — Company registry: COMP schema (name, country, slug, regulatory_id, regulator), make_slug(), storage layout data/latam/{country}/{slug}/; Playwright thread-isolation smoke test from Streamlit button
 
 ### Phase 7: LATAM Scraper
-**Goal**: Given a corporate URL or regulatory portal, the scraper navigates the site with Playwright and downloads the annual financial report PDF to the correct storage path — working for direct corporate URLs and for at least three of the six target regulatory portals
+**Goal**: Given a company name or regulatory ID, the scraper discovers and downloads the annual financial report PDF using semantic ddgs site-search as primary strategy and Playwright as fallback — plus a drag & drop upload path for when automated scraping is blocked
 **Depends on**: Phase 6
-**Requirements**: SCRAP-01, SCRAP-02
+**Requirements**: SCRAP-01, SCRAP-02, SCRAP-04
 **Success Criteria** (what must be TRUE):
-  1. Passing a direct corporate investor-relations URL to `latam_scraper.scrape(url, slug, country)` navigates the page, finds a PDF link matching financial report heuristics, and saves the file to `data/latam/{country}/{slug}/raw/`
-  2. Passing a company's regulatory ID to the portal adapter for Supersalud (CO), SMV (PE), or CMF (CL) locates and downloads the most recent annual financial report PDF without manual URL construction
-  3. The scraper runs inside ThreadPoolExecutor and does not interfere with the Streamlit event loop — the UI remains responsive during a scrape operation
-  4. If no PDF is found after following heuristics, the scraper returns a structured error (not an exception) indicating what was attempted and where it failed
+  1. Given a corporate domain, `latam_scraper.search(domain, year)` constructs a `site:empresa.com filetype:pdf "Estado de Situación Financiera" {year}` query, retrieves the direct PDF URL, and downloads it to `data/latam/{country}/{slug}/raw/` — without launching a browser
+  2. When semantic search returns no direct PDF URL, Playwright launches as fallback, navigates the corporate site, finds the PDF link using heuristics, and downloads the file
+  3. Passing a company's regulatory ID to the portal adapter for Supersalud (CO), SMV (PE), or CMF (CL) locates and downloads the most recent annual financial report PDF
+  4. The dashboard accepts a manually uploaded PDF (drag & drop via `st.file_uploader`) and routes it through the same extraction pipeline as an automatically scraped PDF — no code divergence
+  5. If no PDF is found via any path, the scraper returns a structured error (not an exception) with a clear message indicating what was attempted
 **Plans**: TBD
 
 Plans:
-- [ ] 07-01-PLAN.md — latam_scraper.py: Playwright browser setup, PDF link heuristics, download to raw/, ThreadPoolExecutor wrapper; smoke test against one live corporate URL
-- [ ] 07-02-PLAN.md — Regulatory portal adapters: Supersalud (CO), SMV (PE), CMF (CL), SFC (CO), CNV (AR), CNBV (MX) — URL patterns, search by regulatory ID, live portal validation
+- [ ] 07-01-PLAN.md — latam_scraper.py: ddgs semantic search primary → Playwright fallback, PDF download to raw/, ThreadPoolExecutor wrapper; smoke test against one live corporate URL
+- [ ] 07-02-PLAN.md — Regulatory portal adapters (Supersalud, SMV, CMF, SFC, CNV, CNBV) + drag & drop PDF upload handler in dashboard (st.file_uploader routing to same pipeline)
 
 ### Phase 8: PDF Extraction & KPI Mapping
-**Goal**: Given a downloaded PDF (digital or scanned), the extractor returns structured financial data mapped to the 20-KPI schema — with an observable confidence score — and latam_processor.py produces valid financials.parquet and kpis.parquet by reusing calculate_kpis() without modifying processor.py
+**Goal**: Given a downloaded PDF (digital or scanned), the extractor returns structured financial data with page-level source tracking — mapped through the LATAM health sector CONCEPT_MAP to the 20-KPI schema — and latam_processor.py produces valid Parquet by reusing calculate_kpis() without modifying processor.py
 **Depends on**: Phase 7
-**Requirements**: PDF-01, PDF-02, PDF-03, KPI-01
+**Requirements**: PDF-01, PDF-02, PDF-03, PDF-04, KPI-01, KPI-03
 **Success Criteria** (what must be TRUE):
   1. Running `latam_extractor.extract(pdf_path)` on a born-digital PDF returns a dict with balance sheet, P&L, and cash flow fields populated — verified against a real PDF from at least one of Supersalud (CO), SMV (PE), or CMF (CL)
-  2. Running `latam_extractor.extract(pdf_path)` on a scanned-image PDF automatically activates the pytesseract OCR path (triggered by fewer than 50 characters extracted by pdfplumber) and still returns structured data — no user intervention required
-  3. Every extraction result includes a confidence score (Alta / Media / Baja) that is visible in the dashboard — Alta means digital extraction with full field coverage, Baja means OCR with incomplete fields
-  4. Running `latam_processor.process(company)` produces `financials.parquet` and `kpis.parquet` under `data/latam/{country}/{slug}/` with column names and dtypes identical to US output — verified by comparing DataFrame schemas side by side
+  2. Running `latam_extractor.extract(pdf_path)` on a scanned-image PDF automatically activates the pytesseract OCR path and returns structured data without user intervention
+  3. Every extraction result includes a confidence score (Alta / Media / Baja) and a source map — each extracted field records the page number and section heading where it was found in the PDF
+  4. `latam_concept_map.py` maps at least 5 known Spanish healthcare revenue synonyms ("Ingresos por prestación de servicios", "Ventas de servicios de salud", "Ingresos operacionales", etc.) to the correct KPI schema field — validated against real extracted labels from at least one CO/PE/CL report
+  5. Running `latam_processor.process(company)` produces `financials.parquet` and `kpis.parquet` with column names and dtypes identical to US output
 **Plans**: TBD
 
 Plans:
-- [ ] 08-01-PLAN.md — latam_extractor.py: PyMuPDF triage → pdfplumber table extraction → pytesseract OCR fallback; Spanish/Portuguese IFRS label mapper; confidence score; Tesseract startup validation
-- [ ] 08-02-PLAN.md — latam_processor.py: field-to-schema mapping, currency.to_usd() per field per fiscal year, calculate_kpis() call without modifying processor.py, atomic Parquet write to data/latam/
+- [ ] 08-01-PLAN.md — latam_extractor.py: PyMuPDF triage → pdfplumber multi-column table extraction → pytesseract OCR fallback; page+section source tracking per field; confidence score; Tesseract startup validation
+- [ ] 08-02-PLAN.md — latam_concept_map.py (health sector synonym dictionary) + latam_processor.py: field-to-schema mapping via CONCEPT_MAP, currency.to_usd() per field per year, calculate_kpis() reuse, atomic Parquet write
 
 ### Phase 9: Orchestration & Red Flags
 **Goal**: LatamAgent orchestrates the full LATAM pipeline end-to-end (scrape → extract → normalize → process) mirroring the FinancialAgent interface, and the red flags engine automatically evaluates every processed company's KPIs against YAML-configurable healthcare thresholds
@@ -167,22 +170,37 @@ Plans:
 - [ ] 09-01-PLAN.md — LatamAgent.py: orchestrate scrape→extract→process→save, needs_update() staleness detection, meta.json with company metadata and extraction quality; ddgs web_search.py wrapper with exponential backoff
 - [ ] 09-02-PLAN.md — Red flags engine: FLAG evaluation against 20 KPIs, Alta/Media/Baja severity, YAML threshold file per sector (config/red_flags.yaml), ARS devaluation warning flag; validate against one real company's KPI output
 
-### Phase 10: Dashboard & Report
-**Goal**: The Streamlit dashboard has a dedicated LATAM section where an analyst can add a company by URL, view its KPI cards and red flags, and download a formatted executive report as PDF — all without affecting the existing S&P 500 section
+### Phase 10: Human Validation Lite
+**Goal**: Before any LATAM extraction is written to Parquet, the analyst sees the key financial values detected by the extractor and explicitly confirms or corrects them — creating a human checkpoint that compensates for the inherent uncertainty of LATAM PDF extraction vs. the structured SEC data of the US pipeline
 **Depends on**: Phase 9
-**Requirements**: RPT-01, RPT-02, RPT-03, DASHL-01, DASHL-02, DASHL-03
+**Requirements**: VAL-01
 **Success Criteria** (what must be TRUE):
-  1. An analyst can enter a corporate URL in the LATAM section, click Run, and see KPI cards, trend charts, and severity-coded red flags for that company rendered in the dashboard — using the same visual components as the S&P 500 section
-  2. The LATAM section displays a confidence score badge (Alta / Media / Baja) per company sourced from the extraction metadata
-  3. The executive report renders in the dashboard with four sections — Resumen de Gestion, KPIs destacados, Red Flags activas, Contexto Sectorial — including 2-3 comparable companies from the same sector obtained via web search
-  4. Clicking the Download PDF button produces a downloadable PDF file containing the executive report without requiring any action beyond the button click
-  5. The S&P 500 section loads and operates correctly with all LATAM packages installed — no widget key collisions, no import errors, no regression in existing functionality (verified by explicit backward-compatibility test)
+  1. After `latam_extractor.extract()` completes, the dashboard displays a validation panel showing the four key detected values: Ingresos, Utilidad Neta, Total Activos, Deuda Total — each with its source page number and confidence score
+  2. The analyst can edit any value directly in the validation panel before confirming — corrected values are flagged as "human-validated" in the metadata
+  3. Clicking "Confirmar y guardar" writes the (possibly corrected) data to Parquet and proceeds to KPI calculation — the pipeline does not write to disk before this confirmation
+  4. If the analyst closes the dashboard before confirming, no partial data is written — the extraction result is held in session state only
 **Plans**: TBD
 
 Plans:
-- [ ] 10-01-PLAN.md — WeasyPrint spike: install GTK3 via MSYS2 on Windows and run write_pdf() smoke test; if MSYS2 fails, commit to reportlab/fpdf2 fallback; build HTML report template (company overview, KPI table, red flags, embedded chart PNGs via kaleido)
-- [ ] 10-02-PLAN.md — app.py LATAM section: URL input widget (key prefix latam_), LatamAgent.run() in st.spinner(), KPI cards + trend charts + red flag display with severity colors, PDF download button; all LATAM imports lazy with try/except ImportError
-- [ ] 10-03-PLAN.md — Backward-compatibility verification: S&P 500 section smoke test with LATAM packages present, widget key collision audit, LATAM import failure simulation, full pitfall checklist from PITFALLS.md
+- [ ] 10-01-PLAN.md — Validation panel UI: st.form with editable fields for 4 key values, source page display, confidence badge, "Confirmar y guardar" / "Descartar" buttons; session state management; human-validated flag in meta.json
+
+### Phase 11: Dashboard & Report
+**Goal**: The Streamlit dashboard has a dedicated LATAM section where an analyst can add a company by URL or PDF upload, view KPI cards with evidence links and a multi-currency toggle, see severity-coded red flags, and download a Claude-generated executive report as PDF — all without affecting the existing S&P 500 section
+**Depends on**: Phase 10
+**Requirements**: FX-03, RPT-01, RPT-02, RPT-03, DASHL-01, DASHL-02, DASHL-03, DASHL-04
+**Success Criteria** (what must be TRUE):
+  1. An analyst can enter a corporate URL (or drag & drop a PDF) in the LATAM section, click Run, pass the validation panel, and see KPI cards, trend charts, and severity-coded red flags rendered in the dashboard
+  2. A currency toggle (Moneda Original / USD) switches all KPI values in the LATAM section; ARS companies show the exchange rate type (promedio anual) and a low-confidence warning
+  3. Each KPI card in the LATAM section displays a "fuente: pág. X" indicator linking the displayed value back to the PDF page where it was extracted
+  4. The executive report renders in the dashboard with four sections — Resumen de Gestión, KPIs destacados, Red Flags activas, Contexto Sectorial — with narrative text generated by Claude API (claude-opus-4-6) using the actual KPI and red flag data; includes 2-3 comparable companies from web search
+  5. Clicking the Download PDF button produces a downloadable PDF of the executive report
+  6. The S&P 500 section loads and operates correctly with all LATAM packages installed — no widget key collisions, no import errors, no regression (verified by explicit backward-compatibility test)
+**Plans**: TBD
+
+Plans:
+- [ ] 11-01-PLAN.md — WeasyPrint spike (GTK3 via MSYS2 smoke test) or fallback to reportlab/fpdf2; Claude API report generator (claude-opus-4-6): narrative sections from KPI + red flags + ddgs comparables; HTML report template with static chart PNGs via kaleido
+- [ ] 11-02-PLAN.md — app.py LATAM section: URL input + st.file_uploader drag & drop (key prefix latam_), LatamAgent.run() in st.spinner(), KPI cards + evidence page links + multi-currency toggle + red flag severity display; all LATAM imports lazy with try/except ImportError
+- [ ] 11-03-PLAN.md — Backward-compatibility verification: S&P 500 smoke test with LATAM packages, widget key audit, LATAM import failure simulation, full pitfall checklist from PITFALLS.md
 
 ## Progress
 
