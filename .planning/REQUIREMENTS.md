@@ -61,9 +61,9 @@
 
 ### Registro de Empresas LATAM (COMP)
 
-- [ ] **COMP-01**: El analista identifica una empresa LATAM por nombre + país; el sistema genera un slug URL-safe para almacenamiento
-- [ ] **COMP-02**: El sistema almacena el ID regulatorio (NIT/RUC/RUT) como identificador secundario para búsqueda en portales
-- [ ] **COMP-03**: Los datos LATAM se persisten en `data/latam/{country}/{slug}/` con el mismo esquema Parquet que el pipeline US
+- [x] **COMP-01**: El analista identifica una empresa LATAM por nombre + país; el sistema genera un slug URL-safe para almacenamiento
+- [x] **COMP-02**: El sistema almacena el ID regulatorio (NIT/RUC/RUT) como identificador secundario para búsqueda en portales
+- [x] **COMP-03**: Los datos LATAM se persisten en `data/latam/{country}/{slug}/` con el mismo esquema Parquet que el pipeline US
 
 ### Integración KPI (KPI)
 
@@ -128,7 +128,7 @@
 | SCHED-01 | Phase 5 | Complete |
 | DASH-01..04 | Phase 4 | Complete |
 | FX-01, FX-02 | Phase 6 | Complete |
-| COMP-01, COMP-02, COMP-03 | Phase 6 | Pending |
+| COMP-01, COMP-02, COMP-03 | Phase 6 | Complete |
 | SCRAP-01, SCRAP-02, SCRAP-04 | Phase 7 | Pending |
 | PDF-01, PDF-02, PDF-03, PDF-04 | Phase 8 | Pending |
 | KPI-01, KPI-03 | Phase 8 | Pending |
