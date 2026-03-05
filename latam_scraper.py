@@ -2,38 +2,46 @@
 latam_scraper.py — LATAM PDF discovery and download (Phase 7+).
 Phase 6: ThreadPoolExecutor smoke test pattern only.
 
-CRITICAL: Never call sync_playwright() from the Streamlit main thread.
-Streamlit runs an asyncio (Tornado) event loop; Windows SelectorEventLoop
-cannot handle subprocess communication. Always use ThreadPoolExecutor.
-Each worker thread MUST create its own sync_playwright() instance.
-Source: playwright.dev/python/docs/library — "create a playwright instance per thread"
+CRITICAL: Never call async_playwright() from the Streamlit main thread.
+Streamlit runs a Tornado event loop; on Windows, Tornado may override the
+asyncio policy to SelectorEventLoop, which cannot launch subprocesses.
+
+Fix: Use async_playwright (not sync_playwright) inside a ThreadPoolExecutor
+worker that creates its own ProactorEventLoop via loop.run_until_complete().
+This bypasses any process-level policy overrides entirely.
 """
+import asyncio
 import concurrent.futures
+import sys
 from loguru import logger
 
 
-def _playwright_worker(url: str) -> str:
-    """
-    Runs in its own thread. Each thread creates its own playwright instance.
-    Do NOT share playwright/browser instances across threads.
+async def _async_playwright_worker(url: str) -> str:
+    """Async implementation — runs inside an explicitly created ProactorEventLoop."""
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.goto(url, timeout=30_000, wait_until="domcontentloaded")
+        title = await page.title()
+        await browser.close()
+    return title
 
-    Windows fix: Streamlit/Tornado overrides the asyncio policy to SelectorEventLoop,
-    which cannot launch subprocesses. We explicitly set ProactorEventLoop per thread.
+
+def _thread_worker(url: str) -> str:
     """
-    import asyncio
-    import sys
+    Runs in its own ThreadPoolExecutor thread.
+    Creates a fresh ProactorEventLoop explicitly — bypasses any policy set
+    by Streamlit/Tornado on the main thread.
+    """
     if sys.platform == "win32":
         loop = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(loop)
-
-    from playwright.sync_api import sync_playwright  # lazy import inside thread
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(url, timeout=30_000, wait_until="domcontentloaded")
-        title = page.title()
-        browser.close()
-    return title
+    else:
+        loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_async_playwright_worker(url))
+    finally:
+        loop.close()
 
 
 def scrape_url_title(url: str) -> str:
@@ -43,5 +51,5 @@ def scrape_url_title(url: str) -> str:
     """
     logger.info(f"Playwright: fetching title for {url}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_playwright_worker, url)
+        future = executor.submit(_thread_worker, url)
         return future.result(timeout=60)
