@@ -16,7 +16,16 @@ def _playwright_worker(url: str) -> str:
     """
     Runs in its own thread. Each thread creates its own playwright instance.
     Do NOT share playwright/browser instances across threads.
+
+    Windows fix: Streamlit/Tornado overrides the asyncio policy to SelectorEventLoop,
+    which cannot launch subprocesses. We explicitly set ProactorEventLoop per thread.
     """
+    import asyncio
+    import sys
+    if sys.platform == "win32":
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+
     from playwright.sync_api import sync_playwright  # lazy import inside thread
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
