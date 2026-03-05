@@ -334,15 +334,17 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     # KPI selection: one expander per category, per-group multiselect
+    DEFAULT_KPIS = {"revenue_cagr_10y", "ebitda_margin", "quick_ratio", "debt_to_ebitda", "dso"}
     selected_kpis: list[str] = []
     for group_name, group_keys in KPI_GROUPS.items():
         remaining = MAX_KPIS - len(selected_kpis)
-        expanded = group_name == "Rentabilidad"
+        group_default = [k for k in group_keys if k in DEFAULT_KPIS]
+        expanded = bool(group_default) or group_name == "Rentabilidad"
         with st.expander(group_name, expanded=expanded):
             group_selected = st.multiselect(
                 label=group_name,
                 options=group_keys,
-                default=[],
+                default=group_default,
                 format_func=lambda k: KPI_META[k]["label"],
                 label_visibility="collapsed",
                 max_selections=min(remaining, len(group_keys)),
