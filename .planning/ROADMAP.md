@@ -133,7 +133,7 @@ Plans:
   3. Passing a company's regulatory ID to the portal adapter for Supersalud (CO), SMV (PE), or CMF (CL) locates and downloads the most recent annual financial report PDF
   4. The dashboard accepts a manually uploaded PDF (drag & drop via `st.file_uploader`) and routes it through the same extraction pipeline as an automatically scraped PDF — no code divergence
   5. If no PDF is found via any path, the scraper returns a structured error (not an exception) with a clear message indicating what was attempted
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 07-01-PLAN.md — latam_scraper.py: ddgs semantic search primary → Playwright fallback, PDF download to raw/, ThreadPoolExecutor wrapper; smoke test against one live corporate URL
@@ -165,11 +165,11 @@ Plans:
   3. After a successful pipeline run, the red flags engine evaluates all 20 KPIs and returns at least the mandatory flags (Deuda/EBITDA > 4x, FCO negativo con utilidad positiva, perdidas consecutivas >= 2 anos) with Alta/Media/Baja severity
   4. Changing a threshold in `config/red_flags.yaml` is reflected in the next pipeline run without modifying any Python file
   5. When `ddgs` web search returns no results (rate-limited or no matches), the pipeline completes successfully — web search is optional and degradable, not a blocking dependency
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — LatamAgent.py: orchestrate scrape→extract→process→save, needs_update() staleness detection, meta.json with company metadata and extraction quality; ddgs web_search.py wrapper with exponential backoff
-- [ ] 09-02-PLAN.md — Red flags engine: FLAG evaluation against 20 KPIs, Alta/Media/Baja severity, YAML threshold file per sector (config/red_flags.yaml), ARS devaluation warning flag; validate against one real company's KPI output
+- [ ] 09-01-PLAN.md — web_search.py (ddgs+tenacity SCRAP-03) + red_flags.py (YAML-configurable engine FLAG-01/FLAG-02) + config/red_flags.yaml
+- [ ] 09-02-PLAN.md — LatamAgent.py: full pipeline orchestrator mirroring FinancialAgent (KPI-02), meta.json, staleness detection, red flag integration
 
 ### Phase 10: Human Validation Lite
 **Goal**: Before any LATAM extraction is written to Parquet, the analyst sees the key financial values detected by the extractor and explicitly confirms or corrects them — creating a human checkpoint that compensates for the inherent uncertainty of LATAM PDF extraction vs. the structured SEC data of the US pipeline
