@@ -530,3 +530,16 @@ else:
                 for i, kpi in enumerate(selected_kpis):
                     with cols[i]:
                         render_kpi_card(kpi, df, year_range, ticker)
+
+# --- LATAM Section (Phase 6+) ---
+# LATAM imports are lazy (inside try/except ImportError) per v2.0 architecture decision.
+# This prevents any LATAM package failure from breaking the S&P 500 section.
+with st.expander("LATAM — Developer Tools (Phase 6 Smoke Test)", expanded=False):
+    if st.button("Test Playwright Thread Isolation", key="latam_playwright_test"):
+        with st.spinner("Launching Playwright in ThreadPoolExecutor..."):
+            try:
+                from latam_scraper import scrape_url_title  # lazy import
+                title = scrape_url_title("https://example.com")
+                st.success(f"Thread isolation OK — page title: {title}")
+            except Exception as e:
+                st.error(f"Playwright smoke test FAILED: {e}")
