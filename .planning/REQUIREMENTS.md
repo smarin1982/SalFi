@@ -55,8 +55,8 @@
 
 ### Normalización de Moneda (FX)
 
-- [ ] **FX-01**: El sistema convierte valores LATAM a USD usando el tipo de cambio promedio del período reportado con estrategia tiered: frankfurter (BRL/MXN) → API secundaria estable (COP/PEN/CLP/ARS)
-- [ ] **FX-02**: Las empresas con datos en ARS muestran un banner de baja confianza sobre la volatilidad cambiaria argentina
+- [x] **FX-01**: El sistema convierte valores LATAM a USD usando el tipo de cambio promedio del período reportado con estrategia tiered: frankfurter (BRL/MXN) → API secundaria estable (COP/PEN/CLP/ARS)
+- [x] **FX-02**: Las empresas con datos en ARS muestran un banner de baja confianza sobre la volatilidad cambiaria argentina
 - [ ] **FX-03**: La sección LATAM del dashboard permite alternar entre vista en moneda original y vista en USD, mostrando el tipo de tasa aplicada (promedio anual / cierre de período) como nota junto a cada valor
 
 ### Registro de Empresas LATAM (COMP)
@@ -127,7 +127,7 @@
 | ORCHS-01..03 | Phase 3 | Complete |
 | SCHED-01 | Phase 5 | Complete |
 | DASH-01..04 | Phase 4 | Complete |
-| FX-01, FX-02 | Phase 6 | Pending |
+| FX-01, FX-02 | Phase 6 | Complete |
 | COMP-01, COMP-02, COMP-03 | Phase 6 | Pending |
 | SCRAP-01, SCRAP-02, SCRAP-04 | Phase 7 | Pending |
 | PDF-01, PDF-02, PDF-03, PDF-04 | Phase 8 | Pending |

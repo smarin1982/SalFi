@@ -119,7 +119,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — currency.py TDD: tiered FX normalizer (Frankfurter BRL/MXN, open.er-api.com ARS/CLP/COP/PEN) with lru_cache + disk cache; 11 tests
+- [x] 06-01-PLAN.md — currency.py TDD: tiered FX normalizer (Frankfurter BRL/MXN, open.er-api.com ARS/CLP/COP/PEN) with lru_cache + disk cache; 11 tests
 - [ ] 06-02-PLAN.md — company_registry.py TDD: CompanyRecord dataclass, make_slug() (python-slugify), make_storage_path(), Parquet schema parity validation; 10 tests
 - [ ] 06-03-PLAN.md — Playwright thread isolation: latam_scraper.py ThreadPoolExecutor wrapper, smoke test, Streamlit latam_ button; human verification gate
 
@@ -215,7 +215,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Orchestration & Batch | v1.0 | 3/3 | Complete | 2026-02-26 |
 | 4. Dashboard | v1.0 | 3/3 | Complete | 2026-02-26 |
 | 5. Scheduling | v1.0 | 2/2 | Complete | 2026-02-28 |
-| 6. Foundation | v2.0 | 0/2 | Not started | - |
+| 6. Foundation | v2.0 | 1/3 | In progress | - |
 | 7. LATAM Scraper | v2.0 | 0/2 | Not started | - |
 | 8. PDF Extraction & KPI Mapping | v2.0 | 0/2 | Not started | - |
 | 9. Orchestration & Red Flags | v2.0 | 0/2 | Not started | - |

@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 6 of 10 (Foundation)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-03-04 — v2.0 roadmap created (Phases 6-10), ready to begin Phase 6
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-03-05 — Phase 6 Plan 01 complete (currency.py FX normalizer — 11 tests green)
 
-Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped)
+Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.0 in progress)
 
 ## Performance Metrics
 
@@ -24,8 +24,12 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped)
 - Total execution time: ~0.28 hours
 
 **v2.0:**
-- Plans completed: 0
-- Status: Not started
+- Plans completed: 1
+- Status: In progress
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 06-foundation | 01 | 25min | 2 | 4 |
 
 ## Accumulated Context
 
@@ -44,6 +48,9 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped)
 - [v2.0 Roadmap]: LATAM imports in app.py must be lazy (inside functions, try/except ImportError) — import failure must not break S&P 500 section
 - [v2.0 Roadmap]: LATAM widget keys prefixed latam_ to avoid DuplicateWidgetID collisions
 - [v2.0 Roadmap]: WeasyPrint GTK3 is a spike in Phase 10 session 1 — decision finalizes before any template work; fallback is reportlab or fpdf2
+- [06-01 FX]: Frankfurter annual average (true daily ECB mean) used for BRL/MXN; open.er-api.com spot rate for ARS/CLP/COP/PEN — approximated_fx=true required in meta.json
+- [06-01 FX]: is_low_confidence_currency() flags only ARS — CLP/COP/PEN stable enough to not warn
+- [06-01 FX]: Disk cache (fx_rates.json) is NOT thread-safe by design — single-threaded processor context; filelock deferred
 
 ### Pending Todos
 
@@ -59,6 +66,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04
-Stopped at: v2.0 roadmap written — ROADMAP.md and STATE.md updated, ready to plan Phase 6
+Last session: 2026-03-05
+Stopped at: Completed 06-01-PLAN.md — currency.py FX normalizer implemented, 11 tests green
 Resume file: None
