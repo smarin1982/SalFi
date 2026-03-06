@@ -550,6 +550,87 @@ with st.expander("LATAM — Developer Tools (Phase 6 Smoke Test)", expanded=Fals
                 st.error(f"Playwright smoke test FAILED: {e}")
 
 
+def _latam_confidence_badge(company_slug: str, country: str, data_dir: str = "data") -> None:
+    """
+    Render a visible warning badge on the LATAM company card when:
+    - ExtractionResult confidence == "Baja", OR
+    - Any country-specific critical field is absent from kpis.parquet
+
+    When confidence is "Baja", also renders a PDF download button so the analyst
+    can open the source document and manually verify extracted values.
+
+    Called immediately after a successful PDF upload+extraction in render_latam_upload_section().
+    Degrades gracefully if kpis.parquet is missing or has no 'confidence' column.
+    """
+    try:
+        from latam_concept_map import COUNTRY_CRITICAL_FIELDS, DEFAULT_CRITICAL_FIELDS
+        import pandas as pd
+        from pathlib import Path
+
+        kpis_path = Path(data_dir) / "latam" / country / company_slug / "kpis.parquet"
+        if not kpis_path.exists():
+            return  # No data yet — nothing to badge
+
+        df = pd.read_parquet(kpis_path)
+        if df.empty:
+            return
+
+        # Determine confidence level
+        confidence = None
+        if "confidence" in df.columns:
+            confidence = str(df["confidence"].iloc[-1])  # most recent row
+
+        # Determine if critical fields are missing
+        critical_set = COUNTRY_CRITICAL_FIELDS.get(country.upper(), DEFAULT_CRITICAL_FIELDS)
+        # kpis.parquet columns map to the same canonical names as financials.parquet for base fields
+        present_cols = set(df.columns)
+        missing_critical = critical_set - present_cols
+
+        show_badge = (confidence == "Baja") or bool(missing_critical)
+
+        if show_badge:
+            reason_parts = []
+            if confidence == "Baja":
+                reason_parts.append("Confianza de extraccion: **Baja**")
+            if missing_critical:
+                reason_parts.append(f"Campos criticos faltantes: {', '.join(sorted(missing_critical))}")
+
+            st.warning(
+                f"**Revisar datos** — {'; '.join(reason_parts)}. "
+                f"Verifica el informe PDF antes de usar estos KPIs.",
+                icon="⚠️",
+            )
+
+            # When confidence is Baja, offer access to the raw PDF for manual verification
+            if confidence == "Baja":
+                raw_dir = Path(data_dir) / "latam" / country / company_slug / "raw"
+                pdf_files = sorted(raw_dir.glob("*.pdf")) if raw_dir.exists() else []
+                if pdf_files:
+                    pdf_path = pdf_files[0]
+                    try:
+                        pdf_bytes = pdf_path.read_bytes()
+                        st.download_button(
+                            label="Ver PDF original",
+                            data=pdf_bytes,
+                            file_name=pdf_path.name,
+                            mime="application/pdf",
+                            key=f"latam_pdf_download_{company_slug}_{country}",
+                            help="Descarga el informe PDF para verificar los datos extraidos manualmente.",
+                        )
+                    except OSError:
+                        pass  # PDF unreadable — skip button silently
+        else:
+            # Positive indicator — clean extraction
+            label = {"Alta": "Alta", "Media": "Media"}.get(confidence or "", confidence or "—")
+            st.info(f"Confianza de extraccion: **{label}**", icon="ℹ️")
+
+    except ImportError:
+        pass  # LATAM modules not installed — badge silently skipped
+    except Exception as exc:  # noqa: BLE001
+        # Never let badge failure crash the upload section
+        st.caption(f"[Badge error: {exc}]")
+
+
 def render_latam_upload_section() -> None:
     """
     LATAM PDF Upload Section — Phase 7 (SCRAP-04).
@@ -606,6 +687,8 @@ def render_latam_upload_section() -> None:
                     f"PDF guardado: {result.pdf_path.name} "
                     f"({result.pdf_path.stat().st_size // 1024} KB)"
                 )
+                # Show confidence badge if kpis.parquet already exists (e.g. re-upload scenario)
+                _latam_confidence_badge(slug, country)
                 st.info(
                     "PDF listo para extraccion. "
                     "El pipeline de extraccion (Fase 8) procesara este archivo."
@@ -614,6 +697,13 @@ def render_latam_upload_section() -> None:
                 st.error(f"Error al guardar PDF: {result.error}")
         elif uploaded is not None and not company_name:
             st.warning("Ingresa el nombre de la empresa antes de subir el PDF.")
+
+        # Show confidence badge for previously uploaded company when analyst returns to section
+        if st.session_state.get("latam_company_slug") and st.session_state.get("latam_country"):
+            _latam_confidence_badge(
+                st.session_state["latam_company_slug"],
+                st.session_state["latam_country"],
+            )
 
 
 # LATAM section — lazy loaded, does not affect S&P 500 section above
