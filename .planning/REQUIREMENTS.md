@@ -43,7 +43,7 @@
 
 - [x] **SCRAP-01**: El sistema usa búsqueda semántica (`ddgs site:empresa.com filetype:pdf "Estado de Situación Financiera"`) como estrategia primaria de descubrimiento de PDFs — Playwright solo como fallback cuando la búsqueda no produce resultados directos
 - [x] **SCRAP-02**: El sistema puede buscar documentos financieros de una empresa en portales regulatorios (Supersalud CO, SMV PE, SFC CO, CMF CL, CNV AR, CNBV MX) usando el ID regulatorio como clave
-- [ ] **SCRAP-03**: El sistema ejecuta búsquedas web (ddgs) para obtener contexto sectorial y empresas comparables del sector salud
+- [x] **SCRAP-03**: El sistema ejecuta búsquedas web (ddgs) para obtener contexto sectorial y empresas comparables del sector salud
 - [x] **SCRAP-04**: El analista puede subir manualmente un PDF (drag & drop) en el dashboard como fallback de emergencia cuando el scraper falla por captcha o bloqueo de IP — el pipeline de procesamiento es idéntico independientemente del origen del PDF
 
 ### Extracción PDF (PDF)
@@ -73,8 +73,8 @@
 
 ### Red Flags (FLAG)
 
-- [ ] **FLAG-01**: El sistema detecta automáticamente red flags financieras (Deuda/EBITDA > 4x, FCO negativo con utilidad positiva, pérdidas consecutivas ≥ 2 años, etc.) y asigna severidad Alta/Media/Baja
-- [ ] **FLAG-02**: Los umbrales de red flags son configurables por sector en un archivo YAML
+- [x] **FLAG-01**: El sistema detecta automáticamente red flags financieras (Deuda/EBITDA > 4x, FCO negativo con utilidad positiva, pérdidas consecutivas ≥ 2 años, etc.) y asigna severidad Alta/Media/Baja
+- [x] **FLAG-02**: Los umbrales de red flags son configurables por sector en un archivo YAML
 
 ### Validación Humana Lite (VAL)
 
@@ -132,7 +132,7 @@
 | SCRAP-01, SCRAP-02, SCRAP-04 | Phase 7 | Pending |
 | PDF-01, PDF-02, PDF-03, PDF-04 | Phase 8 | Pending |
 | KPI-01, KPI-03 | Phase 8 | Pending |
-| SCRAP-03 | Phase 9 | Pending |
+| SCRAP-03 | Phase 9 | Complete |
 | KPI-02 | Phase 9 | Pending |
 | FLAG-01, FLAG-02 | Phase 9 | Pending |
 | VAL-01 | Phase 10 | Pending |
