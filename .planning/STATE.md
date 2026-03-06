@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 7 of 10 (LATAM Scraper)
-Plan: 1 of 3 in current phase
-Status: Plan 01 complete
-Last activity: 2026-03-06 — Phase 7 Plan 01 complete (latam_scraper.py — 9 tests green, 36 total)
+Plan: 2 of 3 in current phase
+Status: Plan 02 Tasks 1+2 complete — awaiting checkpoint:human-verify (Task 3)
+Last activity: 2026-03-06 — Phase 7 Plan 02: portal_adapters package + LATAM upload section (42 tests green)
 
 Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.0 in progress)
 
@@ -55,6 +55,9 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 - [07-01 Scraper]: sync_playwright in ThreadPoolExecutor thread worker — safe on Windows 11; simpler than async pattern with identical isolation guarantee
 - [07-01 Scraper]: HTML interstitial detection via %PDF magic bytes (4-byte check) — Content-Type not reliable for LATAM servers; post-download validation is the safety net
 - [07-01 Scraper]: All LATAM PDF acquisition returns ScraperResult — callers check .ok; never raises for "not found" conditions
+- [07-02 Adapters]: SMV adapter always returns None — SIMV uses session-dependent ?data=HEX URLs unresolvable from RUC; Playwright is the only path
+- [07-02 Adapters]: CMF adapter HEAD-validates URL before returning — avoids returning 404 URLs to Phase 9 caller
+- [07-02 Adapters]: PORTAL_STATUS dict tracks live validation state per portal — updated post-checkpoint human verification
 
 ### Pending Todos
 
@@ -70,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 07-01-PLAN.md — latam_scraper.py PDF acquisition module implemented, 9 tests green
+Stopped at: 07-02-PLAN.md checkpoint:human-verify — Tasks 1+2 complete (portal_adapters + app.py upload section), Task 3 awaiting verification
 Resume file: None
