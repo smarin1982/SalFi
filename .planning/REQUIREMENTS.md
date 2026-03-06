@@ -41,7 +41,7 @@
 
 ### Scraping LATAM (SCRAP)
 
-- [ ] **SCRAP-01**: El sistema usa búsqueda semántica (`ddgs site:empresa.com filetype:pdf "Estado de Situación Financiera"`) como estrategia primaria de descubrimiento de PDFs — Playwright solo como fallback cuando la búsqueda no produce resultados directos
+- [x] **SCRAP-01**: El sistema usa búsqueda semántica (`ddgs site:empresa.com filetype:pdf "Estado de Situación Financiera"`) como estrategia primaria de descubrimiento de PDFs — Playwright solo como fallback cuando la búsqueda no produce resultados directos
 - [ ] **SCRAP-02**: El sistema puede buscar documentos financieros de una empresa en portales regulatorios (Supersalud CO, SMV PE, SFC CO, CMF CL, CNV AR, CNBV MX) usando el ID regulatorio como clave
 - [ ] **SCRAP-03**: El sistema ejecuta búsquedas web (ddgs) para obtener contexto sectorial y empresas comparables del sector salud
 - [ ] **SCRAP-04**: El analista puede subir manualmente un PDF (drag & drop) en el dashboard como fallback de emergencia cuando el scraper falla por captcha o bloqueo de IP — el pipeline de procesamiento es idéntico independientemente del origen del PDF
