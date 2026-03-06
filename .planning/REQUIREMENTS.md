@@ -67,7 +67,7 @@
 
 ### Integración KPI (KPI)
 
-- [ ] **KPI-01**: `latam_processor.py` mapea los datos extraídos al esquema de los 20 KPIs existentes reutilizando `calculate_kpis()` de `processor.py` sin modificarlo
+- [x] **KPI-01**: `latam_processor.py` mapea los datos extraídos al esquema de los 20 KPIs existentes reutilizando `calculate_kpis()` de `processor.py` sin modificarlo
 - [ ] **KPI-02**: `LatamAgent` orquesta el pipeline completo (scrape → extraer → normalizar → procesar) con detección de datos desactualizados vía `needs_update()`
 - [x] **KPI-03**: `latam_concept_map.py` contiene un diccionario de sinónimos contables en español para el sector salud que mapea términos LATAM variables ("Ingresos por prestación de servicios", "Ventas de servicios de salud", "Ingresos operacionales", etc.) a los campos estándar del pipeline
 

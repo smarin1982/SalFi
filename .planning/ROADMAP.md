@@ -220,6 +220,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Scheduling | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 6. Foundation | v2.0 | 1/3 | In progress | - |
 | 7. LATAM Scraper | 2/2 | Complete   | 2026-03-06 | - |
-| 8. PDF Extraction & KPI Mapping | 1/3 | In Progress|  | - |
+| 8. PDF Extraction & KPI Mapping | 2/3 | In Progress|  | - |
 | 9. Orchestration & Red Flags | v2.0 | 0/2 | Not started | - |
 | 10. Dashboard & Report | v2.0 | 0/3 | Not started | - |

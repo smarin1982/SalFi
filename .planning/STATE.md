@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 8 of 10 (PDF Extraction & KPI Mapping)
-Plan: 2 of 3 in current phase
-Status: Plan 01 complete — latam_concept_map.py + latam_extractor.py implemented; moving to Plan 02
-Last activity: 2026-03-06 — Phase 8 Plan 01: all tasks complete (PDF-01/02/03/04 + KPI-03 met)
+Plan: 3 of 3 in current phase
+Status: Plan 02 Task 1 complete — latam_processor.py implemented; paused at checkpoint:human-verify (Task 2)
+Last activity: 2026-03-06 — Phase 8 Plan 02: latam_processor.py written, automated checks passed; awaiting human PDF verification
 
 Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.0 in progress)
 
@@ -33,6 +33,7 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 | 07-latam-scraper | 01 | 30min | 2 | 4 |
 | 07-latam-scraper | 02 | 45min | 3 | 9 |
 | 08-pdf-extraction-kpi-mapping | 01 | 6min | 2 | 2 |
+| 08-pdf-extraction-kpi-mapping | 02 | 2min | 1 | 1 |
 
 ## Accumulated Context
 
@@ -64,6 +65,10 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 - [08-01 Concept Map]: map_to_canonical() iterates synonyms longest-first; label_in_synonym direction only when len(label)>=len(synonym) — prevents short-synonym false positives
 - [08-01 Extractor]: _score_confidence() uses COUNTRY_CRITICAL_FIELDS.get(country, DEFAULT_CRITICAL_FIELDS) — CO/PE/CL regulator-specific critical field sets
 - [08-01 Extractor]: extract() never writes files; ExtractionResult is in-memory only until latam_processor.py writes Parquet after human validation
+- [08-02 Processor]: latam_processor imports calculate_kpis and save_parquet from processor.py unchanged — processor.py hash must remain identical to guarantee KPI calculation parity between US and LATAM pipelines
+- [08-02 Processor]: All 22 monetary fields converted to USD before Parquet write — not just revenue; partial conversion would make KPI ratios meaningless
+- [08-02 Processor]: Prior-year append uses drop_duplicates(keep='last') — latest ExtractionResult wins on re-run; idempotent with multi-year accumulation
+- [08-02 Processor]: ticker column contains company_slug (not a stock exchange ticker) — LATAM companies identified by slug throughout the pipeline
 
 ### Pending Todos
 
@@ -79,5 +84,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 08-01-PLAN.md — latam_concept_map.py + latam_extractor.py implemented; PDF-01/02/03/04 + KPI-03 met
+Stopped at: 08-02 checkpoint:human-verify (Task 2) — latam_processor.py complete; awaiting human verification against real LATAM PDF
 Resume file: None
