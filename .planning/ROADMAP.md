@@ -151,9 +151,12 @@ Plans:
   5. Running `latam_processor.process(company)` produces `financials.parquet` and `kpis.parquet` with column names and dtypes identical to US output
 **Plans**: TBD
 
+**Plans**: 3 plans
+
 Plans:
-- [ ] 08-01-PLAN.md — latam_extractor.py: PyMuPDF triage → pdfplumber multi-column table extraction → pytesseract OCR fallback; page+section source tracking per field; confidence score; Tesseract startup validation
-- [ ] 08-02-PLAN.md — latam_concept_map.py (health sector synonym dictionary) + latam_processor.py: field-to-schema mapping via CONCEPT_MAP, currency.to_usd() per field per year, calculate_kpis() reuse, atomic Parquet write
+- [ ] 08-01-PLAN.md — latam_concept_map.py (CONCEPT_MAP + COUNTRY_CRITICAL_FIELDS + validate_tesseract) + latam_extractor.py (three-layer cascade, country-aware confidence scoring, unmatched label logging)
+- [ ] 08-02-PLAN.md — latam_processor.py: field-to-schema mapping via CONCEPT_MAP, currency.to_usd() per field per year, calculate_kpis() reuse, atomic Parquet write; human verification checkpoint
+- [ ] 08-03-PLAN.md — app.py: _latam_confidence_badge() on LATAM company card when confidence == Baja or critical fields missing (PDF-03 dashboard visibility)
 
 ### Phase 9: Orchestration & Red Flags
 **Goal**: LatamAgent orchestrates the full LATAM pipeline end-to-end (scrape → extract → normalize → process) mirroring the FinancialAgent interface, and the red flags engine automatically evaluates every processed company's KPIs against YAML-configurable healthcare thresholds
