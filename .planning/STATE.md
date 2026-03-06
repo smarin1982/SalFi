@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 7 of 10 (LATAM Scraper)
-Plan: 2 of 3 in current phase
-Status: Plan 02 Tasks 1+2 complete — awaiting checkpoint:human-verify (Task 3)
-Last activity: 2026-03-06 — Phase 7 Plan 02: portal_adapters package + LATAM upload section (42 tests green)
+Plan: 3 of 3 in current phase
+Status: Plan 02 complete — PORTAL_STATUS live-validated, checkpoint approved; moving to Plan 03
+Last activity: 2026-03-06 — Phase 7 Plan 02: all tasks complete (42 tests pass, SCRAP-02 + SCRAP-04 met)
 
 Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.0 in progress)
 
@@ -31,6 +31,7 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 |-------|------|----------|-------|-------|
 | 06-foundation | 01 | 25min | 2 | 4 |
 | 07-latam-scraper | 01 | 30min | 2 | 4 |
+| 07-latam-scraper | 02 | 45min | 3 | 9 |
 
 ## Accumulated Context
 
@@ -58,6 +59,7 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 - [07-02 Adapters]: SMV adapter always returns None — SIMV uses session-dependent ?data=HEX URLs unresolvable from RUC; Playwright is the only path
 - [07-02 Adapters]: CMF adapter HEAD-validates URL before returning — avoids returning 404 URLs to Phase 9 caller
 - [07-02 Adapters]: PORTAL_STATUS dict tracks live validation state per portal — updated post-checkpoint human verification
+- [07-02 Adapters]: PORTAL_STATUS live results — supersalud_co=partial (ddgs finds planning docs, not EEFF), cmf_cl=broken (bank URL pattern 404s, code is internal CMF ID not RUT), smv_pe=stub by design
 
 ### Pending Todos
 
@@ -67,11 +69,11 @@ None.
 
 - [v2.0 Phase 8]: pytesseract requires Tesseract 5 binary + spa language pack on Windows — validate before Phase 8
 - [v2.0 Phase 10]: WeasyPrint requires GTK3 via MSYS2 on Windows — treat Phase 10 session 1 as validation spike; decide library before building templates
-- [v2.0 Phase 7]: Regulatory portal URL structures are LOW confidence — validate Supersalud, SMV, CMF live during Phase 7 before committing portal scraper logic
+- [v2.0 Phase 7]: Regulatory portal URL structures are LOW confidence — RESOLVED: Supersalud=partial, CMF=broken, SMV=stub by design (validated 2026-03-06)
 - [v2.0 Phase 6]: ARS secondary FX API accuracy vs BCRA official rates is unvalidated — flag in currency.py comments
 
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: 07-02-PLAN.md checkpoint:human-verify — Tasks 1+2 complete (portal_adapters + app.py upload section), Task 3 awaiting verification
+Stopped at: Completed 07-02-PLAN.md — all 3 tasks complete including human-verify checkpoint; PORTAL_STATUS live-validated
 Resume file: None

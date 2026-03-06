@@ -48,27 +48,29 @@ key-files:
     - app.py
 
 key-decisions:
-  - "supersalud adapter uses ddgs site:docs.supersalud.gov.co — may work since docs subdomain appears indexed; live validation required (PORTAL_STATUS='not_validated' until checkpoint)"
-  - "smv adapter always returns None — SMV SIMV uses obfuscated ?data=HEX session parameters unresolvable from RUC alone; Playwright is the only path"
-  - "cmf adapter attempts HEAD validation before returning — prevents returning 404 URLs; if HEAD fails, None is returned cleanly"
-  - "SFC/CNV/CNBV are documented stubs — URL pattern research pending for Phase 9"
+  - "supersalud_co: partial — ddgs returns PDFs from docs.supersalud.gov.co but results are planning documents, not EEFF; precision low"
+  - "smv_pe: stub by design — SMV SIMV uses obfuscated ?data=HEX session parameters unresolvable from RUC alone; Playwright is the only path"
+  - "cmf_cl: broken — bank URL pattern HEAD check returns 404 for tested RUT 97006000-6; {code} is internal CMF identifier, not RUT"
+  - "sfc_co/cnv_ar/cnbv_mx: stub — URL pattern research pending for Phase 9"
   - "Phase 6 smoke test fixed: scrape_url_title() removed in 07-01, updated to scrape_with_playwright()"
 
+requirements-completed: [SCRAP-02, SCRAP-04]
+
 # Metrics
-duration: ~10min
+duration: ~45min
 completed: 2026-03-06
 ---
 
 # Phase 7 Plan 02: Portal Adapter Layer + Dashboard Upload Handler Summary
 
-**portal_adapters/ package with Supersalud/SMV/CMF best-effort adapters and 3 documented stubs, plus app.py LATAM drag-and-drop upload section satisfying SCRAP-04**
+**portal_adapters/ package with Supersalud/SMV/CMF best-effort adapters and 3 documented stubs, live-validated PORTAL_STATUS, and app.py LATAM drag-and-drop upload section satisfying SCRAP-04**
 
 ## Performance
 
-- **Duration:** ~10 min
+- **Duration:** ~45 min
 - **Started:** 2026-03-06T08:34:32Z
-- **Completed:** 2026-03-06T08:44:xx Z (Tasks 1+2; Task 3 = checkpoint:human-verify pending)
-- **Tasks:** 2 auto-tasks complete (Task 3 checkpoint awaiting human verification)
+- **Completed:** 2026-03-06 (all 3 tasks complete including checkpoint)
+- **Tasks:** 3 (2 auto-tasks + 1 human-verify checkpoint)
 - **Files modified:** 9 (7 created in portal_adapters/, 1 test file created, 1 app.py modified)
 
 ## Accomplishments
@@ -88,6 +90,9 @@ completed: 2026-03-06
 
 1. **Task 1: Portal adapter package** — `76226c0` (feat)
 2. **Task 2: LATAM upload section in app.py** — `5667260` (feat)
+3. **Task 3: PORTAL_STATUS live validation (checkpoint approved)** — `8f06c38` (feat)
+
+**Plan metadata:** `51ed7f6` (docs: Tasks 1+2 complete)
 
 ## Files Created/Modified
 
@@ -120,15 +125,17 @@ completed: 2026-03-06
 - **Files modified:** `app.py`
 - **Commit:** `5667260`
 
-## Checkpoint: Task 3 — Awaiting Human Verification
+## Checkpoint: Task 3 — Human Verification APPROVED
 
-Task 3 is a `checkpoint:human-verify` gate. The human verifier must:
-1. Run `python -m pytest tests/ -v` — expect 42 pass
-2. Run a live ddgs smoke test from `latam_scraper.search()`
-3. Launch `streamlit run app.py` and test the upload section
-4. Run live portal adapter tests and update `PORTAL_STATUS` in `portal_adapters/__init__.py`
-
-PORTAL_STATUS will be updated post-checkpoint based on live validation results.
+Task 3 was a `checkpoint:human-verify` gate. Human verifier confirmed:
+1. `python -m pytest tests/ -v` — 42 tests pass (exit 0)
+2. Live ddgs smoke test — ok (no uncaught exceptions)
+3. Dashboard upload section — PDF saves successfully, success message shown
+4. Live portal adapter validation completed; PORTAL_STATUS updated:
+   - supersalud_co: "partial" (ddgs finds PDFs but planning docs, not EEFF)
+   - smv_pe: "stub" (by design — session-dependent URLs)
+   - cmf_cl: "broken" (bank URL pattern returns 404 for tested RUT)
+   - sfc_co/cnv_ar/cnbv_mx: "stub"
 
 ## Self-Check: PASSED
 
@@ -143,6 +150,7 @@ PORTAL_STATUS will be updated post-checkpoint based on live validation results.
 | `portal_adapters/cnbv.py` exists | FOUND |
 | `tests/test_portal_adapters.py` exists | FOUND |
 | PORTAL_STATUS dict has 6 keys | CONFIRMED |
+| PORTAL_STATUS live-validated (no "not_validated" values) | CONFIRMED |
 | get_adapter() function exists | CONFIRMED |
 | `find_pdf()` in each adapter — never raises | CONFIRMED |
 | All 6 portal adapter tests pass | CONFIRMED (6/6) |
@@ -154,7 +162,8 @@ PORTAL_STATUS will be updated post-checkpoint based on live validation results.
 | S&P 500 section unchanged (git diff additions only) | CONFIRMED |
 | Commit `76226c0` (Task 1 portal adapters) | FOUND |
 | Commit `5667260` (Task 2 app.py upload section) | FOUND |
+| Commit `8f06c38` (Task 3 PORTAL_STATUS live validation) | FOUND |
 
 ---
 *Phase: 07-latam-scraper*
-*Completed: 2026-03-06 (Tasks 1+2; Task 3 checkpoint pending)*
+*Completed: 2026-03-06*
