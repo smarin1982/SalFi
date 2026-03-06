@@ -68,7 +68,7 @@
 ### Integración KPI (KPI)
 
 - [x] **KPI-01**: `latam_processor.py` mapea los datos extraídos al esquema de los 20 KPIs existentes reutilizando `calculate_kpis()` de `processor.py` sin modificarlo
-- [ ] **KPI-02**: `LatamAgent` orquesta el pipeline completo (scrape → extraer → normalizar → procesar) con detección de datos desactualizados vía `needs_update()`
+- [x] **KPI-02**: `LatamAgent` orquesta el pipeline completo (scrape → extraer → normalizar → procesar) con detección de datos desactualizados vía `needs_update()`
 - [x] **KPI-03**: `latam_concept_map.py` contiene un diccionario de sinónimos contables en español para el sector salud que mapea términos LATAM variables ("Ingresos por prestación de servicios", "Ventas de servicios de salud", "Ingresos operacionales", etc.) a los campos estándar del pipeline
 
 ### Red Flags (FLAG)
@@ -133,7 +133,7 @@
 | PDF-01, PDF-02, PDF-03, PDF-04 | Phase 8 | Pending |
 | KPI-01, KPI-03 | Phase 8 | Pending |
 | SCRAP-03 | Phase 9 | Complete |
-| KPI-02 | Phase 9 | Pending |
+| KPI-02 | Phase 9 | Complete |
 | FLAG-01, FLAG-02 | Phase 9 | Pending |
 | VAL-01 | Phase 10 | Pending |
 | FX-03 | Phase 11 | Pending |
