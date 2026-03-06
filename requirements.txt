@@ -21,3 +21,6 @@ playwright>=1.48
 
 # Phase 7: LATAM Scraper
 ddgs>=9.0
+
+# Phase 9: Orchestration & Red Flags
+PyYAML>=6.0

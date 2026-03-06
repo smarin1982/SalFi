@@ -1,0 +1,97 @@
+# config/red_flags.yaml
+# Threshold file for red flags engine.
+# Changing values here takes effect on the NEXT pipeline run — no Python changes needed.
+# Severity: Alta (critical), Media (warning), Baja (watch)
+
+version: "1.0"
+default_sector: "healthcare"
+
+sectors:
+  healthcare:
+    flags:
+      # FLAG: Deuda/EBITDA excesivo (FLAG-01 mandatory)
+      - id: FLAG-001
+        name: "Deuda/EBITDA elevado"
+        kpi: "debt_to_ebitda"
+        description: "Ratio de deuda sobre EBITDA excesivo para el sector salud"
+        thresholds:
+          Alta: { gt: 4.0 }
+          Media: { gt: 2.5, lte: 4.0 }
+          Baja:  { gt: 1.5, lte: 2.5 }
+
+      # FLAG: Liquidez critica
+      - id: FLAG-002
+        name: "Liquidez critica"
+        kpi: "current_ratio"
+        description: "Ratio corriente por debajo de niveles saludables"
+        thresholds:
+          Alta: { lt: 1.0 }
+          Media: { gte: 1.0, lt: 1.5 }
+          Baja:  { gte: 1.5, lt: 2.0 }
+
+      # FLAG: Cobertura de intereses insuficiente
+      - id: FLAG-003
+        name: "Cobertura de intereses insuficiente"
+        kpi: "interest_coverage"
+        description: "EBIT no cubre los intereses de deuda"
+        thresholds:
+          Alta: { lt: 1.5 }
+          Media: { gte: 1.5, lt: 2.5 }
+          Baja:  { gte: 2.5, lt: 3.5 }
+
+      # FLAG: Margen operativo negativo
+      - id: FLAG-004
+        name: "Margen operativo negativo"
+        kpi: "operating_margin"
+        description: "La operacion principal genera perdidas"
+        thresholds:
+          Alta: { lt: 0.0 }
+          Media: { gte: 0.0, lt: 0.03 }
+          Baja:  { gte: 0.03, lt: 0.05 }
+
+      # FLAG: Margen neto negativo
+      - id: FLAG-005
+        name: "Margen neto negativo"
+        kpi: "net_profit_margin"
+        description: "La empresa genera perdidas netas"
+        thresholds:
+          Alta: { lt: -0.05 }
+          Media: { gte: -0.05, lt: 0.0 }
+          Baja:  { gte: 0.0, lt: 0.02 }
+
+      # FLAG: Apalancamiento excesivo
+      - id: FLAG-006
+        name: "Apalancamiento excesivo"
+        kpi: "debt_to_equity"
+        description: "Relacion deuda/patrimonio por encima de limites sectoriales"
+        thresholds:
+          Alta: { gt: 2.0 }
+          Media: { gt: 1.0, lte: 2.0 }
+          Baja:  { gt: 0.8, lte: 1.0 }
+
+      # FLAG: Deterioro de ingresos
+      - id: FLAG-007
+        name: "Deterioro de ingresos"
+        kpi: "revenue_growth_yoy"
+        description: "Caida significativa de ingresos anio sobre anio"
+        thresholds:
+          Alta: { lt: -0.10 }
+          Media: { gte: -0.10, lt: 0.0 }
+          Baja:  { gte: 0.0, lt: 0.03 }
+
+# Special flags requiring multi-year logic (not single-KPI threshold)
+# These are evaluated separately in red_flags.py using custom logic
+special_flags:
+  - id: FLAG-S01
+    name: "FCO negativo con utilidad positiva"
+    description: "Flujo de caja operativo negativo mientras la utilidad neta es positiva — posible problema de calidad de ganancias"
+    severity: "Alta"
+    logic: "operating_cash_flow < 0 AND net_income > 0"
+
+  - id: FLAG-S02
+    name: "Perdidas consecutivas"
+    description: "Perdidas netas durante 2 o mas anios consecutivos"
+    thresholds:
+      Alta: { consecutive_loss_years: { gte: 2 } }
+      Media: { consecutive_loss_years: { gte: 1 } }
+    logic: "consecutive years where net_income < 0"
