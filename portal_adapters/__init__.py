@@ -13,9 +13,10 @@ from typing import Optional, Dict
 # Updated during Task 2 live validation spike
 # Status values: "working" | "partial" | "broken" | "not_validated"
 PORTAL_STATUS: Dict[str, str] = {
-    "supersalud_co": "not_validated",
-    "smv_pe": "not_validated",
-    "cmf_cl": "not_validated",
+    # Live-validated 2026-03-06
+    "supersalud_co": "partial",   # ddgs returns PDFs but query precision low (planning docs, not EEFF)
+    "smv_pe": "stub",             # by design: session-dependent URLs, Playwright fallback required
+    "cmf_cl": "broken",           # bank URL pattern HEAD check returns 404 for tested RUT 97006000-6
     "sfc_co": "stub",
     "cnv_ar": "stub",
     "cnbv_mx": "stub",
