@@ -540,8 +540,81 @@ with st.expander("LATAM — Developer Tools (Phase 6 Smoke Test)", expanded=Fals
     if st.button("Test Playwright Thread Isolation", key="latam_playwright_test"):
         with st.spinner("Launching Playwright in ThreadPoolExecutor..."):
             try:
-                from latam_scraper import scrape_url_title  # lazy import
-                title = scrape_url_title("https://example.com")
-                st.success(f"Thread isolation OK — page title: {title}")
+                import tempfile
+                from pathlib import Path as _Path
+                from latam_scraper import scrape_with_playwright  # lazy import
+                with tempfile.TemporaryDirectory() as _tmp:
+                    result = scrape_with_playwright("https://example.com", 2024, _Path(_tmp))
+                st.success(f"Thread isolation OK — strategy={result.strategy} ok={result.ok}")
             except Exception as e:
                 st.error(f"Playwright smoke test FAILED: {e}")
+
+
+def render_latam_upload_section() -> None:
+    """
+    LATAM PDF Upload Section — Phase 7 (SCRAP-04).
+    Analyst can drag & drop a PDF when automated scraping is blocked.
+    All imports are lazy (try/except ImportError) so that import failure
+    does not affect the S&P 500 section above.
+    Widget keys use latam_ prefix to prevent DuplicateWidgetID.
+    """
+    try:
+        import latam_scraper
+        from company_registry import make_slug, make_storage_path, CompanyRecord
+    except ImportError as exc:
+        st.error(f"LATAM modulo no disponible: {exc}. Instala dependencias LATAM.")
+        return
+
+    st.divider()
+    st.header("LATAM — Subida manual de informe anual (SCRAP-04)")
+
+    with st.expander("Subir PDF de informe anual LATAM", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            company_name = st.text_input(
+                "Nombre de empresa",
+                placeholder="Clinica Las Americas",
+                key="latam_company_name_upload",
+            )
+        with col2:
+            country = st.selectbox(
+                "Pais",
+                options=["CO", "PE", "CL", "AR", "MX", "BR"],
+                key="latam_country_upload",
+            )
+
+        uploaded = st.file_uploader(
+            "Subir informe anual PDF",
+            type=["pdf"],
+            key="latam_pdf_upload",         # latam_ prefix mandatory
+            accept_multiple_files=False,
+            help="Sube el PDF del informe anual cuando el scraper automatico falla.",
+        )
+
+        if uploaded is not None and company_name:
+            slug = make_slug(company_name)
+            from pathlib import Path
+            out_dir = make_storage_path(Path("data"), country, slug)
+            result = latam_scraper.handle_upload(uploaded, out_dir)
+
+            if result.ok:
+                st.session_state["latam_scraped_pdf"] = str(result.pdf_path)
+                st.session_state["latam_company_slug"] = slug
+                st.session_state["latam_company_name"] = company_name
+                st.session_state["latam_country"] = country
+                st.success(
+                    f"PDF guardado: {result.pdf_path.name} "
+                    f"({result.pdf_path.stat().st_size // 1024} KB)"
+                )
+                st.info(
+                    "PDF listo para extraccion. "
+                    "El pipeline de extraccion (Fase 8) procesara este archivo."
+                )
+            else:
+                st.error(f"Error al guardar PDF: {result.error}")
+        elif uploaded is not None and not company_name:
+            st.warning("Ingresa el nombre de la empresa antes de subir el PDF.")
+
+
+# LATAM section — lazy loaded, does not affect S&P 500 section above
+render_latam_upload_section()
