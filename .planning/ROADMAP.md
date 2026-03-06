@@ -99,7 +99,7 @@ Plans:
 
 - [ ] **Phase 6: Foundation** - currency.py + company registry + storage schema + Playwright ThreadPoolExecutor proof-of-concept
 - [x] **Phase 7: LATAM Scraper** - Semantic search (ddgs site:) as primary + Playwright fallback + drag & drop PDF upload (completed 2026-03-06)
-- [ ] **Phase 8: PDF Extraction & KPI Mapping** - Three-level extraction (pdfplumber → PyMuPDF → pytesseract) + evidence trail + LATAM health sector CONCEPT_MAP
+- [x] **Phase 8: PDF Extraction & KPI Mapping** - Three-level extraction (pdfplumber → PyMuPDF → pytesseract) + evidence trail + LATAM health sector CONCEPT_MAP (completed 2026-03-06)
 - [ ] **Phase 9: Orchestration & Red Flags** - LatamAgent orchestrator, web search (ddgs), red flags engine with YAML thresholds
 - [ ] **Phase 10: Human Validation Lite** - Analyst confirmation screen for extracted key values before writing to Parquet
 - [ ] **Phase 11: Dashboard & Report** - Additive LATAM section in app.py, multi-currency toggle, evidence viewer, executive report (Claude API), PDF download
@@ -220,6 +220,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Scheduling | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 6. Foundation | v2.0 | 1/3 | In progress | - |
 | 7. LATAM Scraper | 2/2 | Complete   | 2026-03-06 | - |
-| 8. PDF Extraction & KPI Mapping | 2/3 | In Progress|  | - |
+| 8. PDF Extraction & KPI Mapping | 3/3 | Complete   | 2026-03-06 | - |
 | 9. Orchestration & Red Flags | v2.0 | 0/2 | Not started | - |
 | 10. Dashboard & Report | v2.0 | 0/3 | Not started | - |

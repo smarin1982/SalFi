@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Un analista debe poder analizar la salud financiera de cualquier empresa — S&P 500 o LATAM — en segundos, con KPIs calculados automáticamente, red flags detectadas y un reporte ejecutivo listo para presentar.
-**Current focus:** Milestone v2.0 — Phase 8: PDF Extraction & KPI Mapping (in progress)
+**Current focus:** Milestone v2.0 — Phase 9: Validation Orchestrator (next)
 
 ## Current Position
 
-Phase: 8 of 10 (PDF Extraction & KPI Mapping)
-Plan: 3 of 3 in current phase
-Status: Plan 02 complete — human verification approved (Grupo Argos PDF); advancing to Plan 03 (confidence badge checker)
-Last activity: 2026-03-06 — Phase 8 Plan 02: human verification checkpoint approved; latam_processor.py fully validated
+Phase: 8 of 10 (PDF Extraction & KPI Mapping) — COMPLETE
+Plan: 3 of 3 in current phase — ALL PLANS COMPLETE
+Status: Phase 08 complete — confidence badge + PDF download button added to app.py; advancing to Phase 09
+Last activity: 2026-03-06 — Phase 8 Plan 03: confidence badge with PDF download button shipped; PDF-03 requirement satisfied
 
-Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.0 in progress)
+Progress: [######░░░░] 60% (6/10 phases complete — v1.0 shipped; Phase 8 complete)
 
 ## Performance Metrics
 
@@ -34,6 +34,7 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 | 07-latam-scraper | 02 | 45min | 3 | 9 |
 | 08-pdf-extraction-kpi-mapping | 01 | 6min | 2 | 2 |
 | 08-pdf-extraction-kpi-mapping | 02 | 30min | 2 | 1 |
+| 08-pdf-extraction-kpi-mapping | 03 | 4min | 1 | 1 |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 - [08-02 Processor]: All 22 monetary fields converted to USD before Parquet write — not just revenue; partial conversion would make KPI ratios meaningless
 - [08-02 Processor]: Prior-year append uses drop_duplicates(keep='last') — latest ExtractionResult wins on re-run; idempotent with multi-year accumulation
 - [08-02 Processor]: ticker column contains company_slug (not a stock exchange ticker) — LATAM companies identified by slug throughout the pipeline
+- [08-03 Badge]: PDF download button inside _latam_confidence_badge() — st.download_button keyed latam_pdf_download_{slug}_{country} appears when confidence==Baja; discovers PDF via raw_dir.glob('*.pdf') sorted()
+- [08-03 Badge]: Confidence badge second call site uses session-state guard so badge shows on section re-entry without requiring a new upload
 
 ### Pending Todos
 
@@ -84,5 +87,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 08-02-PLAN.md — human verification approved; ready to execute 08-03
+Stopped at: Completed 08-03-PLAN.md — Phase 08 fully complete; ready to start Phase 09
 Resume file: None
