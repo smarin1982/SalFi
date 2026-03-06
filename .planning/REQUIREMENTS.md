@@ -48,10 +48,10 @@
 
 ### Extracción PDF (PDF)
 
-- [ ] **PDF-01**: El extractor lee PDFs digitales y retorna datos estructurados de balance general, P&L y flujo de caja usando pdfplumber y PyMuPDF, manejando layouts de múltiples columnas y notas al pie
-- [ ] **PDF-02**: El extractor activa OCR (pytesseract + Tesseract) automáticamente cuando detecta un PDF escaneado, sin intervención del usuario
-- [ ] **PDF-03**: Cada extracción reporta un score de confianza (Alta/Media/Baja) visible en el dashboard
-- [ ] **PDF-04**: El extractor registra la ubicación fuente de cada valor extraído (número de página, sección del documento) para trazabilidad del dato
+- [x] **PDF-01**: El extractor lee PDFs digitales y retorna datos estructurados de balance general, P&L y flujo de caja usando pdfplumber y PyMuPDF, manejando layouts de múltiples columnas y notas al pie
+- [x] **PDF-02**: El extractor activa OCR (pytesseract + Tesseract) automáticamente cuando detecta un PDF escaneado, sin intervención del usuario
+- [x] **PDF-03**: Cada extracción reporta un score de confianza (Alta/Media/Baja) visible en el dashboard
+- [x] **PDF-04**: El extractor registra la ubicación fuente de cada valor extraído (número de página, sección del documento) para trazabilidad del dato
 
 ### Normalización de Moneda (FX)
 
@@ -69,7 +69,7 @@
 
 - [ ] **KPI-01**: `latam_processor.py` mapea los datos extraídos al esquema de los 20 KPIs existentes reutilizando `calculate_kpis()` de `processor.py` sin modificarlo
 - [ ] **KPI-02**: `LatamAgent` orquesta el pipeline completo (scrape → extraer → normalizar → procesar) con detección de datos desactualizados vía `needs_update()`
-- [ ] **KPI-03**: `latam_concept_map.py` contiene un diccionario de sinónimos contables en español para el sector salud que mapea términos LATAM variables ("Ingresos por prestación de servicios", "Ventas de servicios de salud", "Ingresos operacionales", etc.) a los campos estándar del pipeline
+- [x] **KPI-03**: `latam_concept_map.py` contiene un diccionario de sinónimos contables en español para el sector salud que mapea términos LATAM variables ("Ingresos por prestación de servicios", "Ventas de servicios de salud", "Ingresos operacionales", etc.) a los campos estándar del pipeline
 
 ### Red Flags (FLAG)
 

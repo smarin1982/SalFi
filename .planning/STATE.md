@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Un analista debe poder analizar la salud financiera de cualquier empresa — S&P 500 o LATAM — en segundos, con KPIs calculados automáticamente, red flags detectadas y un reporte ejecutivo listo para presentar.
-**Current focus:** Milestone v2.0 — Phase 7: LATAM Scraper (in progress)
+**Current focus:** Milestone v2.0 — Phase 8: PDF Extraction & KPI Mapping (in progress)
 
 ## Current Position
 
-Phase: 7 of 10 (LATAM Scraper)
-Plan: 3 of 3 in current phase
-Status: Plan 02 complete — PORTAL_STATUS live-validated, checkpoint approved; moving to Plan 03
-Last activity: 2026-03-06 — Phase 7 Plan 02: all tasks complete (42 tests pass, SCRAP-02 + SCRAP-04 met)
+Phase: 8 of 10 (PDF Extraction & KPI Mapping)
+Plan: 2 of 3 in current phase
+Status: Plan 01 complete — latam_concept_map.py + latam_extractor.py implemented; moving to Plan 02
+Last activity: 2026-03-06 — Phase 8 Plan 01: all tasks complete (PDF-01/02/03/04 + KPI-03 met)
 
 Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.0 in progress)
 
@@ -32,6 +32,7 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 | 06-foundation | 01 | 25min | 2 | 4 |
 | 07-latam-scraper | 01 | 30min | 2 | 4 |
 | 07-latam-scraper | 02 | 45min | 3 | 9 |
+| 08-pdf-extraction-kpi-mapping | 01 | 6min | 2 | 2 |
 
 ## Accumulated Context
 
@@ -60,6 +61,9 @@ Progress: [#####░░░░░] 50% (5/10 phases complete — v1.0 shipped; v2.
 - [07-02 Adapters]: CMF adapter HEAD-validates URL before returning — avoids returning 404 URLs to Phase 9 caller
 - [07-02 Adapters]: PORTAL_STATUS dict tracks live validation state per portal — updated post-checkpoint human verification
 - [07-02 Adapters]: PORTAL_STATUS live results — supersalud_co=partial (ddgs finds planning docs, not EEFF), cmf_cl=broken (bank URL pattern 404s, code is internal CMF ID not RUT), smv_pe=stub by design
+- [08-01 Concept Map]: map_to_canonical() iterates synonyms longest-first; label_in_synonym direction only when len(label)>=len(synonym) — prevents short-synonym false positives
+- [08-01 Extractor]: _score_confidence() uses COUNTRY_CRITICAL_FIELDS.get(country, DEFAULT_CRITICAL_FIELDS) — CO/PE/CL regulator-specific critical field sets
+- [08-01 Extractor]: extract() never writes files; ExtractionResult is in-memory only until latam_processor.py writes Parquet after human validation
 
 ### Pending Todos
 
@@ -67,7 +71,7 @@ None.
 
 ### Blockers/Concerns
 
-- [v2.0 Phase 8]: pytesseract requires Tesseract 5 binary + spa language pack on Windows — validate before Phase 8
+- [v2.0 Phase 8]: pytesseract requires Tesseract 5 binary + spa language pack on Windows — CONFIRMED ABSENT: TESSERACT_AVAILABLE=False; OCR path degrades gracefully; install Tesseract 5 to enable OCR
 - [v2.0 Phase 10]: WeasyPrint requires GTK3 via MSYS2 on Windows — treat Phase 10 session 1 as validation spike; decide library before building templates
 - [v2.0 Phase 7]: Regulatory portal URL structures are LOW confidence — RESOLVED: Supersalud=partial, CMF=broken, SMV=stub by design (validated 2026-03-06)
 - [v2.0 Phase 6]: ARS secondary FX API accuracy vs BCRA official rates is unvalidated — flag in currency.py comments
@@ -75,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 07-02-PLAN.md — all 3 tasks complete including human-verify checkpoint; PORTAL_STATUS live-validated
+Stopped at: Completed 08-01-PLAN.md — latam_concept_map.py + latam_extractor.py implemented; PDF-01/02/03/04 + KPI-03 met
 Resume file: None
