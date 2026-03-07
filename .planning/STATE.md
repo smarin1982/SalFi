@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Un analista debe poder analizar la salud financiera de cualquier empresa — S&P 500 o LATAM — en segundos, con KPIs calculados automáticamente, red flags detectadas y un reporte ejecutivo listo para presentar.
-**Current focus:** Milestone v2.0 — Phase 9: Validation Orchestrator (next)
+**Current focus:** Milestone v2.0 — Phase 10: Human Validation Lite
 
 ## Current Position
 
-Phase: 9 of 10 (Orchestration & Red Flags) — IN PROGRESS
-Plan: 2 of 3 in current phase — Plan 02 complete
-Status: Phase 09 Plan 02 complete — LatamAgent.py (KPI-02) shipped; 6-step LATAM orchestrator with meta.json state management
-Last activity: 2026-03-06 — Phase 9 Plan 02: LatamAgent.py LATAM pipeline orchestrator
+Phase: 10 of 10 (Human Validation Lite) — IN PROGRESS
+Plan: 1 of 1 in current phase — Plan 01 complete
+Status: Phase 10 Plan 01 complete — latam_validation.py shipped; LATAM validation gate wired into app.py
+Last activity: 2026-03-07 — Phase 10 Plan 01: latam_validation.py human validation gate
 
-Progress: [######░░░░] 60% (6/10 phases complete — v1.0 shipped; Phase 8 complete; Phase 9 in progress)
+Progress: [#######░░░] 70% (7/10 phases complete — v1.0 shipped; Phase 9 complete; Phase 10 in progress)
 
 ## Performance Metrics
 
@@ -37,6 +37,7 @@ Progress: [######░░░░] 60% (6/10 phases complete — v1.0 shipped; Phase
 | 08-pdf-extraction-kpi-mapping | 03 | 4min | 1 | 1 |
 | 09-orchestration-red-flags | 01 | 4min | 2 | 4 |
 | 09-orchestration-red-flags | 02 | 8min | 1 | 1 |
+| 10-human-validation-lite | 01 | 2min | 2 | 2 |
 
 ## Accumulated Context
 
@@ -81,6 +82,10 @@ Progress: [######░░░░] 60% (6/10 phases complete — v1.0 shipped; Phase
 - [09-02 LatamAgent]: _same_quarter() copied verbatim from agent.py lines 122-136 — quarter-boundary logic must be identical between US and LATAM pipelines
 - [09-02 LatamAgent]: ars_warning=True hardcoded for country=="AR" in _build_meta() — FX-02 requirement; ARS volatility warning always required regardless of confidence level
 - [09-02 LatamAgent]: _process_existing() re-evaluates flags on skip-scrape path — YAML threshold changes take effect even when data is current-quarter
+- [10-01 Validation]: Baja guard in _handle_confirm uses value comparison (not disabled=True) to block silent confirmation — avoids Streamlit bug #8075 with disabled submit buttons
+- [10-01 Validation]: _handle_confirm clears session state ONLY after successful Parquet+meta.json write — analyst can retry on exception without losing extraction result
+- [10-01 Validation]: _handle_discard sets latam_show_rerun=True (not st.info directly) so app.py re-run block owns the discard message UX
+- [10-01 Validation]: active_latam_company captured before clearing pending session keys — navigation state survives the deletion on same rerun
 
 ### Pending Todos
 
@@ -95,6 +100,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06
-Stopped at: Completed 09-02-PLAN.md — LatamAgent.py shipped; ready for Plan 09-03
+Last session: 2026-03-07
+Stopped at: Completed 10-01-PLAN.md — latam_validation.py shipped; LATAM validation gate wired into app.py
 Resume file: None

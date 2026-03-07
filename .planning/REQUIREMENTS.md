@@ -78,7 +78,7 @@
 
 ### Validación Humana Lite (VAL)
 
-- [ ] **VAL-01**: Antes de escribir a Parquet, el sistema presenta al analista los valores financieros clave detectados (Ingresos, Utilidad Neta, Total Activos, Deuda) para confirmación o corrección — el pipeline no avanza sin aprobación explícita en esta etapa
+- [x] **VAL-01**: Antes de escribir a Parquet, el sistema presenta al analista los valores financieros clave detectados (Ingresos, Utilidad Neta, Total Activos, Deuda) para confirmación o corrección — el pipeline no avanza sin aprobación explícita en esta etapa
 
 ### Reporte Ejecutivo (RPT)
 
@@ -135,7 +135,7 @@
 | SCRAP-03 | Phase 9 | Complete |
 | KPI-02 | Phase 9 | Complete |
 | FLAG-01, FLAG-02 | Phase 9 | Pending |
-| VAL-01 | Phase 10 | Pending |
+| VAL-01 | Phase 10 | Complete |
 | FX-03 | Phase 11 | Pending |
 | RPT-01, RPT-02, RPT-03 | Phase 11 | Pending |
 | DASHL-01, DASHL-02, DASHL-03, DASHL-04 | Phase 11 | Pending |
