@@ -710,6 +710,7 @@ def render_latam_upload_section() -> None:
 render_latam_upload_section()
 
 # ── LATAM Validation Gate ────────────────────────────────────────────────────
+
 if "latam_pending_extraction" in st.session_state:
     st.divider()
     st.markdown("### LATAM — Validacion de Extraccion")

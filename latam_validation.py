@@ -27,6 +27,22 @@ _BADGE_MARKDOWN = {
 # Flat list of the 4 validated fields (used in multiple functions)
 _FIELDS = ["ingresos", "utilidad_neta", "total_activos", "deuda_total"]
 
+# Mapping from Spanish display names → latam_processor canonical English field names
+_DISPLAY_TO_CANONICAL = {
+    "ingresos": "revenue",
+    "utilidad_neta": "net_income",
+    "total_activos": "total_assets",
+    "deuda_total": "long_term_debt",
+}
+
+# Keys in the session state dict that are metadata, not financial values
+_META_KEYS = (
+    {"extracted_at", "pdf_path", "currency_code", "fiscal_year",
+     "extraction_method", "confidence"}
+    | {f"confidence_{f}" for f in _FIELDS}
+    | {f"source_page_{f}" for f in _FIELDS}
+)
+
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
@@ -119,11 +135,30 @@ def _handle_confirm(
     try:
         try:
             import latam_processor  # lazy import — S&P 500 section unaffected
+            from latam_extractor import ExtractionResult  # noqa: PLC0415
         except ImportError as imp_err:
             st.error(f"Error de importacion LATAM: {imp_err}. Instale las dependencias LATAM.")
             return
 
-        latam_processor.process_with_validation(company, corrected_values, extraction_result)
+        # Build canonical fields dict for ExtractionResult:
+        # 1. Pass through any numeric canonical fields already in session state
+        # 2. Apply the 4 corrected values mapped to English canonical names
+        fields: dict = {
+            k: v for k, v in extraction_result.items()
+            if k not in _META_KEYS and isinstance(v, (int, float))
+        }
+        for display_name, canonical in _DISPLAY_TO_CANONICAL.items():
+            fields[canonical] = corrected_values[display_name]
+
+        er = ExtractionResult(
+            fields=fields,
+            source_map={},
+            confidence=extraction_result.get("confidence", "Baja"),
+            currency_code=extraction_result.get("currency_code", "USD"),
+            fiscal_year=int(extraction_result.get("fiscal_year") or 0),
+            extraction_method=extraction_result.get("extraction_method", "unknown"),
+        )
+        latam_processor.process(slug, er, country)
         write_meta_json(slug, country, extraction_result, corrected_values, original_values)
         st.cache_data.clear()
 
