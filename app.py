@@ -708,3 +708,38 @@ def render_latam_upload_section() -> None:
 
 # LATAM section — lazy loaded, does not affect S&P 500 section above
 render_latam_upload_section()
+
+# ── LATAM Validation Gate ────────────────────────────────────────────────────
+if "latam_pending_extraction" in st.session_state:
+    st.divider()
+    st.markdown("### LATAM — Validacion de Extraccion")
+    try:
+        import latam_validation  # lazy import — S&P 500 section unaffected
+        latam_validation.render_latam_validation_panel(
+            extraction_result=st.session_state["latam_pending_extraction"],
+            company=st.session_state.get("latam_pending_company", {}),
+        )
+    except ImportError as e:
+        st.error(f"Error de importacion LATAM: {e}. Instale las dependencias LATAM.")
+
+elif st.session_state.get("latam_show_rerun"):
+    # Analyst discarded — show re-run button so they can restart without navigating away
+    st.divider()
+    st.info("Extraccion descartada. No se escribio ningun dato.")
+    if st.button("Volver a extraer", key="latam_rerun_btn"):
+        del st.session_state["latam_show_rerun"]
+        # Trigger new extraction flow by clearing re-run flag and letting the
+        # LATAM orchestration layer re-populate latam_pending_extraction.
+        # (Actual re-trigger mechanism is implemented by the Phase 9 LatamAgent.)
+        st.rerun()
+
+elif st.session_state.get("active_latam_company"):
+    # Analyst just confirmed — navigate to the confirmed company's KPI view
+    _co = st.session_state["active_latam_company"]
+    st.divider()
+    st.success(f"Datos guardados para {_co.get('slug', '')} ({_co.get('country', '')}). Cargando KPIs...")
+    # The dashboard's company selector should be pre-loaded here in Phase 11
+    # when LATAM KPI display is implemented. For now, clear the nav key after
+    # one render cycle so the message is not shown persistently on next rerun.
+    del st.session_state["active_latam_company"]
+    st.rerun()
