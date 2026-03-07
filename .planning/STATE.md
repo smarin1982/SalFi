@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Un analista debe poder analizar la salud financiera de cualquier empresa — S&P 500 o LATAM — en segundos, con KPIs calculados automáticamente, red flags detectadas y un reporte ejecutivo listo para presentar.
-**Current focus:** Milestone v2.0 — Phase 10: Human Validation Lite
+**Current focus:** Milestone v2.0 — Phase 11: Dashboard & Report (next)
 
 ## Current Position
 
-Phase: 10 of 10 (Human Validation Lite) — IN PROGRESS
-Plan: 1 of 1 in current phase — Plan 01 complete
-Status: Phase 10 Plan 01 complete — latam_validation.py shipped; LATAM validation gate wired into app.py
-Last activity: 2026-03-07 — Phase 10 Plan 01: latam_validation.py human validation gate
+Phase: 10 of 10 (Human Validation Lite) — COMPLETE
+Plan: 2 of 2 in current phase — all plans complete
+Status: Phase 10 complete — validation gate verified end-to-end; ExtractionResult reconstruction fixed; v2.0 LATAM pipeline ready for Phase 11
+Last activity: 2026-03-07 — Phase 10 Plan 02: human verification checkpoint passed + _handle_confirm fix
 
-Progress: [#######░░░] 70% (7/10 phases complete — v1.0 shipped; Phase 9 complete; Phase 10 in progress)
+Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
 
 ## Performance Metrics
 
@@ -38,6 +38,7 @@ Progress: [#######░░░] 70% (7/10 phases complete — v1.0 shipped; Phase 9
 | 09-orchestration-red-flags | 01 | 4min | 2 | 4 |
 | 09-orchestration-red-flags | 02 | 8min | 1 | 1 |
 | 10-human-validation-lite | 01 | 2min | 2 | 2 |
+| 10-human-validation-lite | 02 | 45min | 2 | 3 |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Progress: [#######░░░] 70% (7/10 phases complete — v1.0 shipped; Phase 9
 - [10-01 Validation]: _handle_confirm clears session state ONLY after successful Parquet+meta.json write — analyst can retry on exception without losing extraction result
 - [10-01 Validation]: _handle_discard sets latam_show_rerun=True (not st.info directly) so app.py re-run block owns the discard message UX
 - [10-01 Validation]: active_latam_company captured before clearing pending session keys — navigation state survives the deletion on same rerun
+- [10-02 Validation]: _DISPLAY_TO_CANONICAL maps ingresos/utilidad_neta/total_activos/deuda_total to revenue/net_income/total_assets/long_term_debt — session state uses Spanish aliases, latam_processor uses English canonical names; bridge is explicit mapping in _handle_confirm
+- [10-02 Validation]: _META_KEYS set filters extracted_at, pdf_path, currency_code, fiscal_year, extraction_method, confidence, and all confidence_{f}/source_page_{f} keys from session dict before building ExtractionResult.fields
+- [10-02 Validation]: fiscal_year, currency_code, confidence, extraction_method must be present in session state dict for confirm path — latam_extractor / LatamAgent responsibility to populate
 
 ### Pending Todos
 
@@ -101,5 +105,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 10-01-PLAN.md — latam_validation.py shipped; LATAM validation gate wired into app.py
+Stopped at: Completed 10-02-PLAN.md — Phase 10 complete; validation gate verified end-to-end; _handle_confirm ExtractionResult reconstruction fix shipped
 Resume file: None
