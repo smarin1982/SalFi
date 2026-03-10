@@ -74,8 +74,8 @@ def test_tabs_structure_present():
     """app.py must use st.tabs(['S&P 500', 'LATAM']) for section isolation."""
     source = APP_PATH.read_text(encoding="utf-8")
     assert "st.tabs" in source, "st.tabs() call not found in app.py — required for DASHL-03 isolation"
-    assert '"S&P 500"' in source or "'S&P 500'" in source, "S&P 500 tab label not found"
-    assert '"LATAM"' in source or "'LATAM'" in source, "LATAM tab label not found"
+    assert "S&P 500" in source, "S&P 500 tab label not found"
+    assert "LATAM" in source, "LATAM tab label not found"
 
 
 def test_report_generator_syntax_valid():

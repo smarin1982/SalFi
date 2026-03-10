@@ -448,3 +448,52 @@ def _normalize_filename_from_upload(name: str) -> str:
     if not name.lower().endswith(".pdf"):
         name += ".pdf"
     return name
+
+
+# ---------------------------------------------------------------------------
+# Convenience wrapper — called by LatamAgent.run()
+# ---------------------------------------------------------------------------
+
+def search_and_download(
+    domain: str,
+    slug: str,
+    storage_path: Path,
+) -> Optional[Path]:
+    """Search for and download the annual report PDF for a LATAM company.
+
+    Tries ddgs search first (Strategy 1), then Playwright as fallback (Strategy 2).
+    Returns pdf_path on success, None if both strategies fail.
+
+    Args:
+        domain:       Corporate website URL (e.g. "https://keralty.com")
+        slug:         Company slug — used for logging only
+        storage_path: Base storage directory (e.g. data/latam/CO/grupo-keralty/)
+    """
+    from datetime import datetime as _dt
+    year = _dt.now().year - 1  # Target the most recent completed fiscal year
+
+    logger.info(f"search_and_download: starting for {slug} ({domain}) year={year}")
+
+    # Strategy 1: ddgs semantic search
+    result = search(domain=domain, year=year, out_dir=storage_path)
+    if result.ok:
+        logger.info(f"search_and_download: found via ddgs — {result.pdf_path}")
+        return result.pdf_path
+
+    # Strategy 2: Playwright browser fallback
+    logger.info(f"search_and_download: ddgs failed, trying Playwright for {domain}")
+    result = scrape_with_playwright(
+        base_url=domain,
+        year=year,
+        out_dir=storage_path,
+        attempts=result.attempts or [],
+    )
+    if result.ok:
+        logger.info(f"search_and_download: found via Playwright — {result.pdf_path}")
+        return result.pdf_path
+
+    logger.warning(
+        f"search_and_download: all strategies failed for {slug} ({domain}). "
+        f"Attempts: {result.attempts}"
+    )
+    return None

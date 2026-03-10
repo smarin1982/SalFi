@@ -952,7 +952,46 @@ def _render_latam_tab() -> None:
 
 
 # ── Tabbed layout: S&P 500 | LATAM ───────────────────────────────────────────
-tab_sp500, tab_latam = st.tabs(["S&P 500", "LATAM"])
+st.markdown("""
+<style>
+/* Tab bar background — blue strip */
+.stTabs [data-baseweb="tab-list"] {
+    background: linear-gradient(90deg, #1f4e79 0%, #2d6a9f 100%);
+    border-radius: 10px 10px 0 0;
+    padding: 0 1rem;
+    gap: 0;
+}
+/* Individual tab labels */
+.stTabs [data-baseweb="tab"] {
+    color: #b8d4f0 !important;
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    border-radius: 8px 8px 0 0;
+    padding: 0.65rem 1.4rem;
+    border: none !important;
+    background: transparent !important;
+}
+/* Active tab */
+.stTabs [aria-selected="true"] {
+    color: #ffffff !important;
+    background: rgba(255,255,255,0.15) !important;
+    border-bottom: 3px solid #ffffff !important;
+}
+/* Hover */
+.stTabs [data-baseweb="tab"]:hover {
+    color: #ffffff !important;
+    background: rgba(255,255,255,0.08) !important;
+}
+/* Tab content panel — thin blue top border */
+.stTabs [data-baseweb="tab-panel"] {
+    border-top: 2px solid #2d6a9f;
+    padding-top: 1.2rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
+tab_sp500, tab_latam = st.tabs(["📊  S&P 500", "🌎  LATAM"])
 
 with tab_sp500:
     if not selected_kpis:
