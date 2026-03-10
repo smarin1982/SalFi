@@ -36,6 +36,16 @@ from red_flags import evaluate_flags                        # Phase 9 Plan 01
 # resulting in: data/latam/{country}/{slug}/
 DATA_DIR = Path(__file__).parent / "data"
 
+# ISO 4217 currency code per LATAM country code
+COUNTRY_CURRENCY: dict[str, str] = {
+    "CO": "COP",
+    "BR": "BRL",
+    "MX": "MXN",
+    "AR": "ARS",
+    "CL": "CLP",
+    "PE": "PEN",
+}
+
 
 # ---------------------------------------------------------------------------
 # Staleness detection helper — copied VERBATIM from agent.py lines 122-136
@@ -181,7 +191,15 @@ class LatamAgent:
 
         # --- Step 2: Extract ---
         logger.info(f"[{self.name}] Step 2: Extracting from {pdf_path}")
-        extraction_result = latam_extractor.extract(pdf_path)
+        from datetime import datetime as _dt
+        _currency = COUNTRY_CURRENCY.get(self.country, "USD")
+        _fiscal_year = _dt.now().year - 1
+        extraction_result = latam_extractor.extract(
+            pdf_path,
+            currency_code=_currency,
+            fiscal_year=_fiscal_year,
+            country=self.country,
+        )
         # extraction_result: ExtractionResult dataclass (.fields, .confidence, .extraction_method, .source_map)
 
         # --- Step 3: Process (writes financials.parquet and kpis.parquet) ---
