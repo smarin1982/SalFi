@@ -475,80 +475,7 @@ def render_kpi_card(
         st.caption("Sin datos disponibles.")
 
 
-# ── Main canvas ───────────────────────────────────────────────────────────────
-if not selected_kpis:
-    st.info("Selecciona KPIs en la barra lateral para comenzar el análisis.")
-else:
-    n = len(selected_kpis)
-
-    if company_mode == "Comparativo":
-        # Comparativo mode: overlay all loaded tickers on same figure per KPI
-        dfs_comp = {t: load_kpis(t) for t in st.session_state.loaded_tickers}
-        dfs_comp = {t: df for t, df in dfs_comp.items() if not df.empty}
-        if not dfs_comp:
-            st.error("No se encontraron datos. Ejecuta el ETL primero.")
-        else:
-            # Same dynamic grid as single-company mode
-            if n == 5:
-                # 2+3 layout: two separate row calls
-                row1 = st.columns(2, gap="medium")
-                for i in range(2):
-                    with row1[i]:
-                        fig = build_comparativo_figure(dfs_comp, selected_kpis[i], year_range)
-                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-                row2 = st.columns(3, gap="medium")
-                for i in range(3):
-                    with row2[i]:
-                        fig = build_comparativo_figure(dfs_comp, selected_kpis[2 + i], year_range)
-                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-            else:
-                cols = st.columns(n if n <= 4 else 4, gap="medium")
-                for i, kpi in enumerate(selected_kpis):
-                    with cols[i % len(cols)]:
-                        fig = build_comparativo_figure(dfs_comp, kpi, year_range)
-                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    else:
-        # Single-company mode: HD or PG
-        ticker = company_mode  # "HD" or "PG"
-        df = load_kpis(ticker)
-        if df.empty:
-            st.error(f"No se encontraron datos para {ticker}. Ejecuta el ETL primero.")
-        else:
-            if n == 1:
-                render_kpi_card(selected_kpis[0], df, year_range, ticker)
-            elif n == 5:
-                # 2+3 layout: two row calls
-                row1 = st.columns(2, gap="medium")
-                for i in range(2):
-                    with row1[i]:
-                        render_kpi_card(selected_kpis[i], df, year_range, ticker)
-                row2 = st.columns(3, gap="medium")
-                for i in range(3):
-                    with row2[i]:
-                        render_kpi_card(selected_kpis[2 + i], df, year_range, ticker)
-            else:
-                # 2, 3, or 4 KPIs: n equal columns
-                cols = st.columns(n, gap="medium")
-                for i, kpi in enumerate(selected_kpis):
-                    with cols[i]:
-                        render_kpi_card(kpi, df, year_range, ticker)
-
-# --- LATAM Section (Phase 6+) ---
-# LATAM imports are lazy (inside try/except ImportError) per v2.0 architecture decision.
-# This prevents any LATAM package failure from breaking the S&P 500 section.
-with st.expander("LATAM — Developer Tools (Phase 6 Smoke Test)", expanded=False):
-    if st.button("Test Playwright Thread Isolation", key="latam_playwright_test"):
-        with st.spinner("Launching Playwright in ThreadPoolExecutor..."):
-            try:
-                import tempfile
-                from pathlib import Path as _Path
-                from latam_scraper import scrape_with_playwright  # lazy import
-                with tempfile.TemporaryDirectory() as _tmp:
-                    result = scrape_with_playwright("https://example.com", 2024, _Path(_tmp))
-                st.success(f"Thread isolation OK — strategy={result.strategy} ok={result.ok}")
-            except Exception as e:
-                st.error(f"Playwright smoke test FAILED: {e}")
-
+# ── LATAM confidence badge ────────────────────────────────────────────────────
 
 def _latam_confidence_badge(company_slug: str, country: str, data_dir: str = "data") -> None:
     """
@@ -631,116 +558,460 @@ def _latam_confidence_badge(company_slug: str, country: str, data_dir: str = "da
         st.caption(f"[Badge error: {exc}]")
 
 
-def render_latam_upload_section() -> None:
-    """
-    LATAM PDF Upload Section — Phase 7 (SCRAP-04).
-    Analyst can drag & drop a PDF when automated scraping is blocked.
-    All imports are lazy (try/except ImportError) so that import failure
-    does not affect the S&P 500 section above.
-    Widget keys use latam_ prefix to prevent DuplicateWidgetID.
-    """
+# ── LATAM session state helpers ───────────────────────────────────────────────
+
+def _init_latam_session_state() -> None:
+    """Initialize LATAM session state keys once per session."""
+    defaults = {
+        "latam_companies": [],
+        "latam_active_company": None,
+        "latam_kpis": {},
+        "latam_financials": {},
+        "latam_meta": {},
+        "latam_red_flags": {},
+        "latam_report_text": {},
+        "latam_report_pdf": {},
+        "latam_pipeline_running": False,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+# ── LATAM data loaders (not @st.cache_data — dynamic within session) ──────────
+
+def _load_latam_kpis(slug: str, country: str) -> pd.DataFrame:
+    path = Path(f"data/latam/{country}/{slug}/kpis.parquet")
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_parquet(path, engine="pyarrow")
+
+
+def _load_latam_meta(slug: str, country: str) -> dict:
+    import json as _json
+    path = Path(f"data/latam/{country}/{slug}/meta.json")
+    if not path.exists():
+        return {}
     try:
-        import latam_scraper
-        from company_registry import make_slug, make_storage_path, CompanyRecord
-    except ImportError as exc:
-        st.error(f"LATAM modulo no disponible: {exc}. Instala dependencias LATAM.")
+        return _json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _load_latam_financials(slug: str, country: str) -> pd.DataFrame:
+    path = Path(f"data/latam/{country}/{slug}/financials.parquet")
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_parquet(path, engine="pyarrow")
+
+
+# ── LATAM KPI formatting ──────────────────────────────────────────────────────
+
+_NON_MONETARY_FORMATS = {"percentage", "ratio_x", "days"}
+
+# Maps KPI name -> financial field name used for source_map page lookup
+_KPI_TO_SOURCE_FIELD: dict[str, str] = {
+    "revenue_growth_yoy": "revenue",
+    "revenue_cagr_10y": "revenue",
+    "gross_profit_margin": "revenue",
+    "operating_margin": "revenue",
+    "ebitda_margin": "revenue",
+    "net_profit_margin": "net_income",
+    "roe": "net_income",
+    "roa": "total_assets",
+    "current_ratio": "total_assets",
+    "quick_ratio": "total_assets",
+    "cash_ratio": "total_assets",
+    "working_capital": "total_assets",
+    "debt_to_equity": "long_term_debt",
+    "debt_to_ebitda": "long_term_debt",
+    "debt_to_assets": "long_term_debt",
+}
+
+
+def _format_latam_kpi_value(
+    value: float,
+    fmt: str,
+    currency_mode: str,
+    meta_info: dict,
+) -> str:
+    """Format a LATAM KPI value, optionally converting back to original currency."""
+    if currency_mode == "USD" or fmt in _NON_MONETARY_FORMATS:
+        return format_kpi(value, fmt)
+    # Moneda Original — reverse the USD normalisation for dollar_B values
+    fx_rate = meta_info.get("fx_rate_used", 1.0) or 1.0
+    currency_code = meta_info.get("currency_original", "USD")
+    original_value = value * fx_rate
+    return f"{currency_code} {original_value / 1e9:.1f}B"
+
+
+# ── LATAM rendering helpers ────────────────────────────────────────────────────
+
+def _render_latam_kpi_cards(slug: str, country: str, currency_mode: str) -> None:
+    kpis_df = st.session_state["latam_kpis"].get(slug, pd.DataFrame())
+    meta = st.session_state["latam_meta"].get(slug, {})
+    source_map = meta.get("source_map", {})
+
+    if kpis_df.empty:
+        st.warning("KPIs no disponibles.")
         return
 
-    st.divider()
-    st.header("LATAM — Subida manual de informe anual (SCRAP-04)")
+    n = len(selected_kpis)
+    if n == 0:
+        st.caption("Selecciona KPIs en la barra lateral para ver los datos.")
+        return
 
-    with st.expander("Subir PDF de informe anual LATAM", expanded=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            company_name = st.text_input(
-                "Nombre de empresa",
-                placeholder="Clinica Las Americas",
-                key="latam_company_name_upload",
+    if "fiscal_year" in kpis_df.columns:
+        df_sorted = kpis_df.sort_values("fiscal_year")
+    else:
+        df_sorted = kpis_df
+
+    # Build column grid matching S&P 500 layout
+    if n == 1:
+        cols = [st]
+    elif n == 5:
+        row1 = st.columns(2, gap="medium")
+        row2 = st.columns(3, gap="medium")
+        cols = list(row1) + list(row2)
+    else:
+        cols = st.columns(n, gap="medium")
+
+    for i, kpi in enumerate(selected_kpis):
+        col = cols[i] if n > 1 else st
+        with col:
+            if kpi not in df_sorted.columns:
+                st.metric(label=KPI_META.get(kpi, {}).get("label", kpi), value="N/A")
+                continue
+
+            kpi_series = df_sorted[kpi].dropna()
+            latest_val = kpi_series.iloc[-1] if not kpi_series.empty else None
+            prior_val = kpi_series.iloc[-2] if len(kpi_series) >= 2 else None
+
+            delta_pct = None
+            if latest_val is not None and prior_val is not None and prior_val != 0:
+                delta_pct = (latest_val - prior_val) / abs(prior_val)
+
+            kpi_meta = KPI_META.get(kpi, {"label": kpi, "format": "ratio_x"})
+            display_val = _format_latam_kpi_value(latest_val, kpi_meta["format"], currency_mode, meta)
+
+            st.metric(
+                label=f"**{kpi_meta['label']}**",
+                value=display_val,
+                delta=format_delta(delta_pct),
+                delta_color="normal",
+                border=True,
             )
-        with col2:
-            country = st.selectbox(
-                "Pais",
-                options=["CO", "PE", "CL", "AR", "MX", "BR"],
-                key="latam_country_upload",
-            )
 
-        uploaded = st.file_uploader(
-            "Subir informe anual PDF",
-            type=["pdf"],
-            key="latam_pdf_upload",         # latam_ prefix mandatory
-            accept_multiple_files=False,
-            help="Sube el PDF del informe anual cuando el scraper automatico falla.",
-        )
+            source_field = _KPI_TO_SOURCE_FIELD.get(kpi)
+            page = source_map.get(source_field, "?") if source_field else "?"
+            st.caption(f"fuente: pág. {page}")
 
-        if uploaded is not None and company_name:
-            slug = make_slug(company_name)
-            from pathlib import Path
-            out_dir = make_storage_path(Path("data"), country, slug)
-            result = latam_scraper.handle_upload(uploaded, out_dir)
-
-            if result.ok:
-                st.session_state["latam_scraped_pdf"] = str(result.pdf_path)
-                st.session_state["latam_company_slug"] = slug
-                st.session_state["latam_company_name"] = company_name
-                st.session_state["latam_country"] = country
-                st.success(
-                    f"PDF guardado: {result.pdf_path.name} "
-                    f"({result.pdf_path.stat().st_size // 1024} KB)"
-                )
-                # Show confidence badge if kpis.parquet already exists (e.g. re-upload scenario)
-                _latam_confidence_badge(slug, country)
-                st.info(
-                    "PDF listo para extraccion. "
-                    "El pipeline de extraccion (Fase 8) procesara este archivo."
-                )
+            if (
+                len(df_sorted) > 1
+                and "fiscal_year" in df_sorted.columns
+                and kpi in df_sorted.columns
+            ):
+                yr_min = int(df_sorted["fiscal_year"].min())
+                yr_max = int(df_sorted["fiscal_year"].max())
+                fig = build_trend_figure(df_sorted, kpi, (yr_min, yr_max), slug)
+                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
             else:
-                st.error(f"Error al guardar PDF: {result.error}")
-        elif uploaded is not None and not company_name:
-            st.warning("Ingresa el nombre de la empresa antes de subir el PDF.")
+                st.caption("Solo 1 año de datos disponibles.")
 
-        # Show confidence badge for previously uploaded company when analyst returns to section
-        if st.session_state.get("latam_company_slug") and st.session_state.get("latam_country"):
-            _latam_confidence_badge(
-                st.session_state["latam_company_slug"],
-                st.session_state["latam_country"],
+
+def _render_latam_red_flags(slug: str, country: str) -> None:
+    red_flags = st.session_state.get("latam_red_flags", {}).get(slug, [])
+    if not red_flags:
+        st.success("No se detectaron red flags.")
+        return
+
+    _SEVERITY_ICON = {"Alta": "🔴", "Media": "🟡", "Baja": "🟢"}
+    for flag in red_flags:
+        if not flag.get("triggered", True):
+            continue
+        icon = _SEVERITY_ICON.get(flag.get("severity", "Baja"), "⚪")
+        st.markdown(f"{icon} **{flag.get('name', 'Flag')}** — {flag.get('severity', '')}")
+        st.caption(flag.get("description", ""))
+
+
+def _run_latam_pipeline(name: str, country: str, url: str) -> None:
+    try:
+        from LatamAgent import LatamAgent
+    except ImportError as e:
+        st.error(f"LATAM modules not installed: {e}")
+        return
+
+    try:
+        agent = LatamAgent(name=name, country=country, url=url)
+        with st.spinner("Ejecutando pipeline LATAM (scraping → extracción → KPIs)..."):
+            result = agent.run()
+
+        # If Phase 10 validation left a pending extraction, validation panel handles the rest
+        if st.session_state.get("latam_pending_extraction"):
+            return
+
+        # Store results in session state
+        existing_slugs = {c["slug"] for c in st.session_state["latam_companies"]}
+        if agent.slug not in existing_slugs:
+            st.session_state["latam_companies"].append(
+                {"name": name, "country": country, "slug": agent.slug, "url": url}
+            )
+        st.session_state["latam_active_company"] = agent.slug
+        st.session_state["latam_red_flags"][agent.slug] = result.get("red_flags", [])
+        st.session_state["latam_kpis"][agent.slug] = _load_latam_kpis(agent.slug, country)
+        st.session_state["latam_meta"][agent.slug] = _load_latam_meta(agent.slug, country)
+        st.session_state["latam_financials"][agent.slug] = _load_latam_financials(agent.slug, country)
+    except Exception as e:
+        st.error(f"Error en pipeline LATAM: {e}")
+
+
+def _generate_and_cache_report(slug: str, country: str) -> None:
+    try:
+        import report_generator
+    except ImportError as e:
+        st.error(f"report_generator not available: {e}")
+        return
+
+    kpis_df = st.session_state["latam_kpis"].get(slug, pd.DataFrame())
+    meta = st.session_state["latam_meta"].get(slug, {})
+    kpis_dict = kpis_df.iloc[-1].dropna().to_dict() if not kpis_df.empty else {}
+    red_flags = st.session_state["latam_red_flags"].get(slug, [])
+    company_info = {
+        "name": meta.get("name", slug),
+        "country": country,
+        "currency_original": meta.get("currency_original", "USD"),
+        "fiscal_year": meta.get("fiscal_year", 0),
+    }
+
+    with st.spinner("Obteniendo empresas comparables..."):
+        comparables = report_generator.fetch_comparables(meta.get("name", slug), country)
+
+    with st.spinner("Generando reporte con Claude API (claude-opus-4-6)..."):
+        report_text = report_generator.generate_executive_report(
+            kpis_dict, red_flags, comparables, company_info
+        )
+
+    st.session_state["latam_report_text"][slug] = report_text
+
+    with st.spinner("Generando PDF..."):
+        pdf_bytes = report_generator.build_pdf_bytes(
+            report_text, meta.get("name", slug), country, meta.get("fiscal_year", 0)
+        )
+    st.session_state["latam_report_pdf"][slug] = pdf_bytes
+    st.rerun()
+
+
+def _render_latam_tab() -> None:
+    st.markdown("### Análisis Financiero LATAM")
+
+    # --- Input section ---
+    col_url, col_country, col_btn = st.columns([3, 1, 1])
+    with col_url:
+        latam_url = st.text_input(
+            "URL o dominio corporativo",
+            placeholder="https://empresa.com",
+            key="latam_url_input",
+            label_visibility="visible",
+        )
+    with col_country:
+        latam_country = st.selectbox(
+            "País",
+            options=["CO", "BR", "MX", "AR", "CL", "PE"],
+            key="latam_country_select",
+        )
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        run_clicked = st.button("Ejecutar", key="latam_run_btn", use_container_width=True)
+
+    # PDF upload alternative
+    uploaded_pdf = st.file_uploader(
+        "O arrastra un PDF directamente",
+        type=["pdf"],
+        key="latam_pdf_upload",
+        help="Si el scraper falla, sube el PDF del reporte anual manualmente.",
+    )
+
+    # Company name (required for both URL and PDF paths)
+    latam_name = st.text_input(
+        "Nombre de la empresa",
+        placeholder="Ej: Clínica Las Américas",
+        key="latam_name_input",
+    )
+
+    # Validation panel — Phase 10 pending extraction intercept
+    if st.session_state.get("latam_pending_extraction"):
+        try:
+            from latam_validation import render_latam_validation_panel
+            render_latam_validation_panel(
+                extraction_result=st.session_state["latam_pending_extraction"],
+                company=st.session_state.get("latam_pending_company", {}),
+            )
+        except ImportError:
+            pass
+
+    # Discard rerun flow
+    if st.session_state.get("latam_show_rerun"):
+        st.info("Extracción descartada. No se escribió ningún dato.")
+        if st.button("Volver a extraer", key="latam_rerun_btn"):
+            del st.session_state["latam_show_rerun"]
+            st.rerun()
+
+    # Handle Run button
+    if run_clicked and latam_name:
+        if not latam_url and not uploaded_pdf:
+            st.warning("Ingresa una URL corporativa o sube un PDF.")
+        elif uploaded_pdf and not latam_url:
+            try:
+                from company_registry import make_slug
+                slug = make_slug(latam_name)
+                raw_dir = Path("data/latam") / latam_country / slug / "raw"
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                pdf_dest = raw_dir / uploaded_pdf.name
+                pdf_dest.write_bytes(uploaded_pdf.read())
+                _run_latam_pipeline(latam_name, latam_country, str(pdf_dest))
+            except Exception as e:
+                st.error(f"Error al procesar PDF: {e}")
+        else:
+            _run_latam_pipeline(latam_name, latam_country, latam_url)
+
+    st.divider()
+
+    # --- Company selector ---
+    companies = st.session_state.get("latam_companies", [])
+    if not companies:
+        st.info(
+            "Ingresa una URL corporativa o sube un PDF y haz clic en 'Ejecutar' "
+            "para analizar una empresa LATAM."
+        )
+        return
+
+    company_options = {f"{c['name']} ({c['country']})": c["slug"] for c in companies}
+    selected_label = st.selectbox(
+        "Empresa LATAM activa",
+        options=list(company_options.keys()),
+        key="latam_company_selector",
+    )
+    active_slug = company_options[selected_label]
+    active_company = next((c for c in companies if c["slug"] == active_slug), {})
+    active_country = active_company.get("country", "CO")
+
+    # --- Currency toggle (FX-03) ---
+    currency_mode = st.radio(
+        "Moneda",
+        options=["USD", "Moneda Original"],
+        horizontal=True,
+        key="latam_currency_toggle",
+    )
+    meta = st.session_state["latam_meta"].get(active_slug, {})
+    if meta.get("currency_original") == "ARS":
+        st.warning(
+            "Tipo de cambio: promedio anual oficial (BCRA/open.er-api.com). "
+            "ARS muestra alta volatilidad cambiaria — los valores en USD son estimados de baja confianza.",
+            icon="⚠️",
+        )
+    elif currency_mode == "Moneda Original" and meta.get("currency_original"):
+        curr = meta["currency_original"]
+        rate_type = (
+            "promedio anual (Frankfurter)" if curr in ("BRL", "MXN")
+            else "tasa spot (open.er-api.com)"
+        )
+        st.caption(f"Moneda original: {curr} · Tipo de cambio: {rate_type}")
+
+    # Confidence badge
+    _latam_confidence_badge(active_slug, active_country)
+
+    # --- KPI cards (DASHL-02, DASHL-04) ---
+    st.markdown("#### KPIs Financieros")
+    kpis_df = st.session_state["latam_kpis"].get(active_slug, pd.DataFrame())
+    if kpis_df.empty:
+        st.warning("KPIs no disponibles. Ejecuta el pipeline primero.")
+    else:
+        _render_latam_kpi_cards(active_slug, active_country, currency_mode)
+
+    # --- Red flags ---
+    st.markdown("#### Red Flags")
+    _render_latam_red_flags(active_slug, active_country)
+
+    # --- Executive report ---
+    st.markdown("#### Reporte Ejecutivo")
+    if st.button("Generar Reporte", key="latam_generate_report_btn"):
+        _generate_and_cache_report(active_slug, active_country)
+
+    report_text = st.session_state.get("latam_report_text", {}).get(active_slug)
+    if report_text:
+        st.markdown(report_text)
+        report_pdf = st.session_state.get("latam_report_pdf", {}).get(active_slug)
+        if report_pdf:
+            st.download_button(
+                label="Descargar PDF",
+                data=report_pdf,
+                file_name=f"reporte_{active_slug}.pdf",
+                mime="application/pdf",
+                key="latam_download_pdf",
             )
 
 
-# LATAM section — lazy loaded, does not affect S&P 500 section above
-render_latam_upload_section()
+# ── Tabbed layout: S&P 500 | LATAM ───────────────────────────────────────────
+tab_sp500, tab_latam = st.tabs(["S&P 500", "LATAM"])
 
-# ── LATAM Validation Gate ────────────────────────────────────────────────────
+with tab_sp500:
+    if not selected_kpis:
+        st.info("Selecciona KPIs en la barra lateral para comenzar el análisis.")
+    else:
+        n = len(selected_kpis)
 
-if "latam_pending_extraction" in st.session_state:
-    st.divider()
-    st.markdown("### LATAM — Validacion de Extraccion")
-    try:
-        import latam_validation  # lazy import — S&P 500 section unaffected
-        latam_validation.render_latam_validation_panel(
-            extraction_result=st.session_state["latam_pending_extraction"],
-            company=st.session_state.get("latam_pending_company", {}),
-        )
-    except ImportError as e:
-        st.error(f"Error de importacion LATAM: {e}. Instale las dependencias LATAM.")
+        if company_mode == "Comparativo":
+            # Comparativo mode: overlay all loaded tickers on same figure per KPI
+            dfs_comp = {t: load_kpis(t) for t in st.session_state.loaded_tickers}
+            dfs_comp = {t: df for t, df in dfs_comp.items() if not df.empty}
+            if not dfs_comp:
+                st.error("No se encontraron datos. Ejecuta el ETL primero.")
+            else:
+                # Same dynamic grid as single-company mode
+                if n == 5:
+                    # 2+3 layout: two separate row calls
+                    row1 = st.columns(2, gap="medium")
+                    for i in range(2):
+                        with row1[i]:
+                            fig = build_comparativo_figure(dfs_comp, selected_kpis[i], year_range)
+                            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                    row2 = st.columns(3, gap="medium")
+                    for i in range(3):
+                        with row2[i]:
+                            fig = build_comparativo_figure(dfs_comp, selected_kpis[2 + i], year_range)
+                            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                else:
+                    cols = st.columns(n if n <= 4 else 4, gap="medium")
+                    for i, kpi in enumerate(selected_kpis):
+                        with cols[i % len(cols)]:
+                            fig = build_comparativo_figure(dfs_comp, kpi, year_range)
+                            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        else:
+            # Single-company mode: HD or PG
+            ticker = company_mode  # "HD" or "PG"
+            df = load_kpis(ticker)
+            if df.empty:
+                st.error(f"No se encontraron datos para {ticker}. Ejecuta el ETL primero.")
+            else:
+                if n == 1:
+                    render_kpi_card(selected_kpis[0], df, year_range, ticker)
+                elif n == 5:
+                    # 2+3 layout: two row calls
+                    row1 = st.columns(2, gap="medium")
+                    for i in range(2):
+                        with row1[i]:
+                            render_kpi_card(selected_kpis[i], df, year_range, ticker)
+                    row2 = st.columns(3, gap="medium")
+                    for i in range(3):
+                        with row2[i]:
+                            render_kpi_card(selected_kpis[2 + i], df, year_range, ticker)
+                else:
+                    # 2, 3, or 4 KPIs: n equal columns
+                    cols = st.columns(n, gap="medium")
+                    for i, kpi in enumerate(selected_kpis):
+                        with cols[i]:
+                            render_kpi_card(kpi, df, year_range, ticker)
 
-elif st.session_state.get("latam_show_rerun"):
-    # Analyst discarded — show re-run button so they can restart without navigating away
-    st.divider()
-    st.info("Extraccion descartada. No se escribio ningun dato.")
-    if st.button("Volver a extraer", key="latam_rerun_btn"):
-        del st.session_state["latam_show_rerun"]
-        # Trigger new extraction flow by clearing re-run flag and letting the
-        # LATAM orchestration layer re-populate latam_pending_extraction.
-        # (Actual re-trigger mechanism is implemented by the Phase 9 LatamAgent.)
-        st.rerun()
-
-elif st.session_state.get("active_latam_company"):
-    # Analyst just confirmed — navigate to the confirmed company's KPI view
-    _co = st.session_state["active_latam_company"]
-    st.divider()
-    st.success(f"Datos guardados para {_co.get('slug', '')} ({_co.get('country', '')}). Cargando KPIs...")
-    # The dashboard's company selector should be pre-loaded here in Phase 11
-    # when LATAM KPI display is implemented. For now, clear the nav key after
-    # one render cycle so the message is not shown persistently on next rerun.
-    del st.session_state["active_latam_company"]
-    st.rerun()
+with tab_latam:
+    _init_latam_session_state()
+    _render_latam_tab()
