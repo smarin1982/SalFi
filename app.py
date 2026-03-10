@@ -834,7 +834,7 @@ def _render_latam_tab() -> None:
     # --- Currency toggle (FX-03) ---
     currency_mode = st.radio(
         "Moneda",
-        options=["USD", "Moneda Original"],
+        options=["Moneda Original", "USD"],
         horizontal=True,
         key="latam_currency_toggle",
     )
