@@ -221,70 +221,6 @@ def format_delta(delta_pct: float | None) -> str | None:
 if "loaded_tickers" not in st.session_state:
     st.session_state.loaded_tickers = ["HD", "PG"]
 
-# ── Page header bar ───────────────────────────────────────────────────────────
-st.markdown("""
-<div style="
-    background: linear-gradient(90deg, #1f4e79 0%, #2d6a9f 100%);
-    padding: 1.2rem 2rem;
-    border-radius: 10px;
-    margin-bottom: 1.2rem;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-">
-    <h1 style="color: #ffffff; margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: 0.02em;">
-        S&P 500 KPI Dashboard
-    </h1>
-    <p style="color: #b8d4f0; margin: 0.3rem 0 0 0; font-size: 0.85rem; letter-spacing: 0.05em;">
-        Datos oficiales 10-K &nbsp;·&nbsp; SEC EDGAR &nbsp;·&nbsp; Años fiscales 2007–2025
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Ticker search — main area, below header ────────────────────────────────
-with st.container():
-    st.markdown("""
-    <p style="font-size:0.8rem; color:#666; margin-bottom:0.3rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">
-        Agregar compañía al análisis
-    </p>
-    """, unsafe_allow_html=True)
-    col_input, col_btn, col_msg = st.columns([2, 0.6, 3])
-    with col_input:
-        new_ticker_input = st.text_input(
-            "Ticker",
-            placeholder="Ej: AAPL, MSFT, TSLA…",
-            key="new_ticker_input",
-            label_visibility="collapsed",
-        ).upper().strip()
-    with col_btn:
-        load_clicked = st.button("Cargar", key="load_ticker_btn", use_container_width=True)
-    with col_msg:
-        if load_clicked and new_ticker_input:
-            if new_ticker_input in st.session_state.loaded_tickers:
-                st.info(f"{new_ticker_input} ya está cargado.")
-            else:
-                with st.spinner(f"Ejecutando ETL para {new_ticker_input}…"):
-                    try:
-                        import agent as financial_agent
-                        fa = financial_agent.FinancialAgent(new_ticker_input)
-                        fa.run()
-                        st.session_state.loaded_tickers.append(new_ticker_input)
-                        st.cache_data.clear()
-                        st.success(f"✓ {new_ticker_input} cargado.")
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(f"Error: {exc}")
-
-st.divider()
-
-# Company selector — horizontal radio
-company_mode = st.radio(
-    label="Compañía",
-    options=st.session_state.loaded_tickers + ["Comparativo"],
-    horizontal=True,
-    index=0,
-    label_visibility="collapsed",
-)
-st.divider()
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -954,14 +890,14 @@ def _render_latam_tab() -> None:
 # ── Tabbed layout: S&P 500 | LATAM ───────────────────────────────────────────
 st.markdown("""
 <style>
-/* Tab bar background — blue strip */
+/* Tab bar background — blue gradient strip */
 .stTabs [data-baseweb="tab-list"] {
     background: linear-gradient(90deg, #1f4e79 0%, #2d6a9f 100%);
     border-radius: 10px 10px 0 0;
     padding: 0 1rem;
     gap: 0;
 }
-/* Individual tab labels */
+/* Individual tab labels — muted on inactive */
 .stTabs [data-baseweb="tab"] {
     color: #b8d4f0 !important;
     font-weight: 600;
@@ -972,20 +908,23 @@ st.markdown("""
     border: none !important;
     background: transparent !important;
 }
-/* Active tab */
+/* Active tab — near-white chip on the blue bar */
 .stTabs [aria-selected="true"] {
-    color: #ffffff !important;
-    background: rgba(255,255,255,0.15) !important;
-    border-bottom: 3px solid #ffffff !important;
+    color: #1f4e79 !important;
+    background: rgba(255,255,255,0.92) !important;
+    border-bottom: none !important;
+}
+/* Override any Streamlit default underline/indicator */
+.stTabs [data-baseweb="tab-highlight"] {
+    display: none !important;
 }
 /* Hover */
 .stTabs [data-baseweb="tab"]:hover {
     color: #ffffff !important;
-    background: rgba(255,255,255,0.08) !important;
+    background: rgba(255,255,255,0.12) !important;
 }
-/* Tab content panel — thin blue top border */
+/* Tab content panel */
 .stTabs [data-baseweb="tab-panel"] {
-    border-top: 2px solid #2d6a9f;
     padding-top: 1.2rem;
 }
 </style>
@@ -994,6 +933,71 @@ st.markdown("""
 tab_sp500, tab_latam = st.tabs(["📊  S&P 500", "🌎  LATAM"])
 
 with tab_sp500:
+    # ── Page header bar ───────────────────────────────────────────────────────
+    st.markdown("""
+<div style="
+    background: linear-gradient(90deg, #1f4e79 0%, #2d6a9f 100%);
+    padding: 1.2rem 2rem;
+    border-radius: 10px;
+    margin-bottom: 1.2rem;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+">
+    <h1 style="color: #ffffff; margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: 0.02em;">
+        S&P 500 KPI Dashboard
+    </h1>
+    <p style="color: #b8d4f0; margin: 0.3rem 0 0 0; font-size: 0.85rem; letter-spacing: 0.05em;">
+        Datos oficiales 10-K &nbsp;·&nbsp; SEC EDGAR &nbsp;·&nbsp; Años fiscales 2007–2025
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Ticker search ──────────────────────────────────────────────────────────
+    with st.container():
+        st.markdown("""
+    <p style="font-size:0.8rem; color:#666; margin-bottom:0.3rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">
+        Agregar compañía al análisis
+    </p>
+    """, unsafe_allow_html=True)
+        col_input, col_btn, col_msg = st.columns([2, 0.6, 3])
+        with col_input:
+            new_ticker_input = st.text_input(
+                "Ticker",
+                placeholder="Ej: AAPL, MSFT, TSLA…",
+                key="new_ticker_input",
+                label_visibility="collapsed",
+            ).upper().strip()
+        with col_btn:
+            load_clicked = st.button("Cargar", key="load_ticker_btn", use_container_width=True)
+        with col_msg:
+            if load_clicked and new_ticker_input:
+                if new_ticker_input in st.session_state.loaded_tickers:
+                    st.info(f"{new_ticker_input} ya está cargado.")
+                else:
+                    with st.spinner(f"Ejecutando ETL para {new_ticker_input}…"):
+                        try:
+                            import agent as financial_agent
+                            fa = financial_agent.FinancialAgent(new_ticker_input)
+                            fa.run()
+                            st.session_state.loaded_tickers.append(new_ticker_input)
+                            st.cache_data.clear()
+                            st.success(f"✓ {new_ticker_input} cargado.")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Error: {exc}")
+
+    st.divider()
+
+    # Company selector — horizontal radio
+    company_mode = st.radio(
+        label="Compañía",
+        options=st.session_state.loaded_tickers + ["Comparativo"],
+        horizontal=True,
+        index=0,
+        label_visibility="collapsed",
+    )
+    st.divider()
+
     if not selected_kpis:
         st.info("Selecciona KPIs en la barra lateral para comenzar el análisis.")
     else:

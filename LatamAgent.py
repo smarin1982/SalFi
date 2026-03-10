@@ -182,15 +182,15 @@ class LatamAgent:
         # --- Step 2: Extract ---
         logger.info(f"[{self.name}] Step 2: Extracting from {pdf_path}")
         extraction_result = latam_extractor.extract(pdf_path)
-        # extraction_result keys: "data", "confidence", "method", "source_map"
+        # extraction_result: ExtractionResult dataclass (.fields, .confidence, .extraction_method, .source_map)
 
         # --- Step 3: Process (writes financials.parquet and kpis.parquet) ---
         logger.info(f"[{self.name}] Step 3: Processing extracted data")
         process_result = latam_processor.process(
-            company_name=self.name,
+            company_slug=self.slug,
+            extraction_result=extraction_result,
             country=self.country,
-            extracted=extraction_result["data"],
-            storage_path=self.storage_path,
+            data_dir=str(DATA_DIR),
         )
 
         # --- Step 4: Evaluate red flags (ONLY after Parquet files exist on disk) ---
@@ -322,8 +322,8 @@ class LatamAgent:
             "fy_count": len(process_result.get("fiscal_years", [])),
             "status": "success",
             "error_message": None,
-            "extraction_method": extraction_result.get("method", "unknown"),
-            "confidence": extraction_result.get("confidence", "Baja"),
+            "extraction_method": extraction_result.extraction_method,
+            "confidence": extraction_result.confidence,
             "approximated_fx": process_result.get("approximated_fx", False),
             # FX-02: Argentine peso devaluation warning — always True for AR companies
             "ars_warning": self.country == "AR",
