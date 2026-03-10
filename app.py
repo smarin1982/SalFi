@@ -430,23 +430,27 @@ def _latam_confidence_badge(company_slug: str, country: str, data_dir: str = "da
         import pandas as pd
         from pathlib import Path
 
-        kpis_path = Path(data_dir) / "latam" / country / company_slug / "kpis.parquet"
+        company_dir = Path(data_dir) / "latam" / country / company_slug
+        kpis_path = company_dir / "kpis.parquet"
         if not kpis_path.exists():
             return  # No data yet — nothing to badge
 
-        df = pd.read_parquet(kpis_path)
-        if df.empty:
+        df_kpis = pd.read_parquet(kpis_path)
+        if df_kpis.empty:
             return
 
-        # Determine confidence level
+        # Determine confidence level (stored in kpis.parquet)
         confidence = None
-        if "confidence" in df.columns:
-            confidence = str(df["confidence"].iloc[-1])  # most recent row
+        if "confidence" in df_kpis.columns:
+            confidence = str(df_kpis["confidence"].iloc[-1])  # most recent row
 
-        # Determine if critical fields are missing
+        # Determine if critical fields are missing — check financials.parquet (raw statements)
         critical_set = COUNTRY_CRITICAL_FIELDS.get(country.upper(), DEFAULT_CRITICAL_FIELDS)
-        # kpis.parquet columns map to the same canonical names as financials.parquet for base fields
-        present_cols = set(df.columns)
+        fin_path = company_dir / "financials.parquet"
+        if fin_path.exists():
+            present_cols = set(pd.read_parquet(fin_path).columns)
+        else:
+            present_cols = set()
         missing_critical = critical_set - present_cols
 
         show_badge = (confidence == "Baja") or bool(missing_critical)
@@ -592,9 +596,21 @@ def _render_latam_kpi_cards(slug: str, country: str, currency_mode: str) -> None
         st.warning("KPIs no disponibles.")
         return
 
-    n = len(selected_kpis)
+    # For LATAM companies, show all KPIs that have actual data (not NaN).
+    # The sidebar selected_kpis are tuned for S&P 500 (10-year CAGR, EBITDA margin, etc.)
+    # which require multi-year history or fields not always present in LATAM PDFs.
+    _kpi_cols = [c for c in kpis_df.columns if c not in ("ticker", "fiscal_year", "confidence")]
+    _available_kpis = [k for k in _kpi_cols if kpis_df[k].notna().any()]
+
+    # Use sidebar selection only if the user has meaningful coverage (>=2 selected KPIs
+    # with actual data). Otherwise fall back to all available KPIs — the sidebar defaults
+    # are tuned for S&P 500 multi-year data and rarely apply to a first LATAM PDF run.
+    _selected_with_data = [k for k in selected_kpis if k in _available_kpis]
+    display_kpis = _selected_with_data if len(_selected_with_data) >= 2 else _available_kpis[:10]
+
+    n = len(display_kpis)
     if n == 0:
-        st.caption("Selecciona KPIs en la barra lateral para ver los datos.")
+        st.caption("No hay KPIs disponibles con datos para esta empresa.")
         return
 
     if "fiscal_year" in kpis_df.columns:
@@ -602,18 +618,17 @@ def _render_latam_kpi_cards(slug: str, country: str, currency_mode: str) -> None
     else:
         df_sorted = kpis_df
 
-    # Build column grid matching S&P 500 layout
-    if n == 1:
-        cols = [st]
-    elif n == 5:
-        row1 = st.columns(2, gap="medium")
-        row2 = st.columns(3, gap="medium")
-        cols = list(row1) + list(row2)
+    # Build column grid (max 5 per row for readability)
+    per_row = min(n, 5)
+    if n <= 5:
+        cols = st.columns(per_row, gap="medium")
     else:
-        cols = st.columns(n, gap="medium")
+        row1 = st.columns(5, gap="medium")
+        row2 = st.columns(min(n - 5, 5), gap="medium")
+        cols = list(row1) + list(row2)
 
-    for i, kpi in enumerate(selected_kpis):
-        col = cols[i] if n > 1 else st
+    for i, kpi in enumerate(display_kpis):
+        col = cols[i]
         with col:
             if kpi not in df_sorted.columns:
                 st.metric(label=KPI_META.get(kpi, {}).get("label", kpi), value="N/A")
@@ -670,7 +685,7 @@ def _render_latam_red_flags(slug: str, country: str) -> None:
         st.caption(flag.get("description", ""))
 
 
-def _run_latam_pipeline(name: str, country: str, url: str) -> None:
+def _run_latam_pipeline(name: str, country: str, url: str, force_refresh: bool = False) -> None:
     try:
         from LatamAgent import LatamAgent
     except ImportError as e:
@@ -680,7 +695,7 @@ def _run_latam_pipeline(name: str, country: str, url: str) -> None:
     try:
         agent = LatamAgent(name=name, country=country, url=url)
         with st.spinner("Ejecutando pipeline LATAM (scraping → extracción → KPIs)..."):
-            result = agent.run()
+            result = agent.run(force_refresh=force_refresh)
 
         # If Phase 10 validation left a pending extraction, validation panel handles the rest
         if st.session_state.get("latam_pending_extraction"):
@@ -804,7 +819,7 @@ def _render_latam_tab() -> None:
                 raw_dir.mkdir(parents=True, exist_ok=True)
                 pdf_dest = raw_dir / uploaded_pdf.name
                 pdf_dest.write_bytes(uploaded_pdf.read())
-                _run_latam_pipeline(latam_name, latam_country, str(pdf_dest))
+                _run_latam_pipeline(latam_name, latam_country, str(pdf_dest), force_refresh=True)
             except Exception as e:
                 st.error(f"Error al procesar PDF: {e}")
         else:

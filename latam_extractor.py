@@ -442,22 +442,48 @@ def _extract_ocr(
             if not line:
                 continue
 
-            # Split on two-or-more whitespace or tab (OCR text is rarely perfectly aligned)
+            # Strategy 1: split on 2+ spaces or tab (well-formatted OCR)
             parts = re.split(r"\s{2,}|\t", line)
-            if len(parts) < 2:
-                continue
 
-            label = parts[0].strip()
-            if not label:
-                continue
-
+            label: Optional[str] = None
             value: Optional[float] = None
-            for part in reversed(parts[1:]):
-                value = parse_latam_number(part.strip())
-                if value is not None:
-                    break
 
+            if len(parts) >= 2:
+                label = parts[0].strip()
+                for part in reversed(parts[1:]):
+                    value = parse_latam_number(part.strip())
+                    if value is not None:
+                        break
+
+            # Strategy 2: for single-space lines, find the last number in the line
+            # and use everything before the first currency symbol / digit as the label.
+            # Handles Colombian format: "Total activos corrientes $ 116.222.588.859,23 $ ..."
             if value is None:
+                # Only match proper financial numbers: require at least one thousand-separator
+                # group (e.g. "116.222.588.859,23") to avoid capturing note references (21, 22).
+                num_matches = list(re.finditer(
+                    r"[-\u2013]?\$?\s*\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?",
+                    line,
+                ))
+                if num_matches:
+                    first_match = num_matches[0]
+                    label_candidate = line[:first_match.start()].strip()
+                    # Strip trailing noise like "[Nota X)" or "-"
+                    label_candidate = re.sub(r"\s*[\[\(].*$", "", label_candidate).strip()
+                    if label_candidate:
+                        # Take first number (current year column = leftmost)
+                        parsed = parse_latam_number(first_match.group().replace("$", "").strip())
+                        if parsed is not None:
+                            label = label_candidate
+                            value = parsed
+
+            if value is None or not label:
+                continue
+
+            # Exclude non-current subtotals — they substring-match total_assets /
+            # total_liabilities but represent only part of the balance sheet.
+            _label_norm = label.lower()
+            if "no corriente" in _label_norm or "no corrientes" in _label_norm:
                 continue
 
             canonical = map_to_canonical(label)

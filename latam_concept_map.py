@@ -135,6 +135,7 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "total pasivos corrientes",
     ],
     "cash": [
+        "efectivo y equivalentes en efectivo",
         "efectivo y equivalentes de efectivo",
         "efectivo y equivalentes al efectivo",
         "caja y bancos",
@@ -148,6 +149,10 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "valores negociables",
     ],
     "receivables": [
+        "cuentas comerciales - por cobrar y otras cuentas por cobrar corrientes",
+        "cuentas comerciales - por cobrar y otras cuentas por cobrar",
+        "cuentas comerciales - por cobrar",
+        "cuentas por cobrar comerciales y otras cuentas por cobrar",
         "cuentas por cobrar",
         "deudores comerciales",
         "cartera de clientes",
@@ -173,12 +178,14 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
     ],
     "short_term_debt": [
         "obligaciones financieras a corto plazo",
+        "obligaciones financieras corrientes",
         "deuda a corto plazo",
         "pasivos financieros corrientes",
         "prestamos a corto plazo",
         "préstamos a corto plazo",
         "porcion corriente de la deuda",
         "porción corriente de la deuda",
+        "obligaciones financieras",
     ],
     "accounts_payable": [
         "cuentas por pagar",
@@ -383,7 +390,13 @@ def validate_tesseract() -> bool:
     Returns False and logs a warning/error otherwise.
     """
     try:
+        import os
         import pytesseract
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        _cmd = os.environ.get("TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+        pytesseract.pytesseract.tesseract_cmd = _cmd
 
         pytesseract.get_tesseract_version()
 

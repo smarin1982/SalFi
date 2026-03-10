@@ -160,6 +160,7 @@ def process(
     return {
         "slug": company_slug,
         "fiscal_year": extraction_result.fiscal_year,
+        "fiscal_years": sorted(df_combined["fiscal_year"].dropna().astype(int).tolist()),
         "confidence": extraction_result.confidence,
         "fields_extracted": len(extraction_result.fields),
         "rows_in_parquet": len(df_combined),

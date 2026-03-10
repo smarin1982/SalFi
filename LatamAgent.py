@@ -176,18 +176,28 @@ class LatamAgent:
         """
         logger.info(f"[{self.name}] Starting LATAM ETL run (force_refresh={force_refresh})")
 
-        # Skip-scrape path: current-quarter data already present
-        if not force_refresh and not self.needs_update():
+        # Skip-scrape path: current-quarter data already present AND parquets exist
+        parquets_exist = (
+            (self.storage_path / "kpis.parquet").exists()
+            and (self.storage_path / "financials.parquet").exists()
+        )
+        if not force_refresh and not self.needs_update() and parquets_exist:
             logger.info(f"[{self.name}] Current-quarter data found — skipping scrape")
             return self._process_existing(skipped_scrape=True)
 
-        # --- Step 1: Scrape ---
-        logger.info(f"[{self.name}] Step 1: Scraping from {self.url}")
-        pdf_path = latam_scraper.search_and_download(
-            domain=self.url,
-            slug=self.slug,
-            storage_path=self.storage_path,
-        )
+        # --- Step 1: Scrape (or use local PDF if url is a file path) ---
+        from pathlib import Path as _Path
+        _url_path = _Path(self.url)
+        if _url_path.suffix.lower() == ".pdf" and _url_path.exists():
+            logger.info(f"[{self.name}] Step 1: Using uploaded PDF directly — {self.url}")
+            pdf_path = _url_path
+        else:
+            logger.info(f"[{self.name}] Step 1: Scraping from {self.url}")
+            pdf_path = latam_scraper.search_and_download(
+                domain=self.url,
+                slug=self.slug,
+                storage_path=self.storage_path,
+            )
 
         # --- Step 2: Extract ---
         logger.info(f"[{self.name}] Step 2: Extracting from {pdf_path}")
