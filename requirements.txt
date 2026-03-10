@@ -24,3 +24,8 @@ ddgs>=9.0
 
 # Phase 9: Orchestration & Red Flags
 PyYAML>=6.0
+
+# Phase 11: Dashboard & Report
+anthropic>=0.40
+fpdf2>=2.8.7
+kaleido>=1.0.0
