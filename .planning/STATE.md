@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 12 of 12 (Learned Synonyms) — IN PROGRESS
-Plan: 4 of 6 in current phase — 12-04 complete
-Status: Phase 12 in progress — multi-year comparative extraction shipped (12-04 complete)
-Last activity: 2026-03-11 — Phase 12 Plan 04: Multi-Year Extraction from Comparative PDFs
+Plan: 5 of 6 in current phase — 12-05 complete
+Status: Phase 12 in progress — financial summary table + working capital currency fix shipped (12-05 complete)
+Last activity: 2026-03-11 — Phase 12 Plan 05: Financial Summary Table + Working Capital Currency Fix
 
 Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
 
@@ -43,6 +43,7 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 | 12-learned-synonyms | 02 | 4min | 1 | 1 |
 | 12-learned-synonyms | 03 | 2min | 1 | 1 |
 | 12-learned-synonyms | 04 | 26min | 3 | 3 |
+| 12-learned-synonyms | 05 | 8min | 2 | 2 |
 
 ## Accumulated Context
 
@@ -107,6 +108,9 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 - [12-04 Multi-Year]: extract() return type changed to list[ExtractionResult]; digital PDF path wraps single result in list for uniform caller interface
 - [12-04 Multi-Year]: process() accepts Union[ExtractionResult, list[ExtractionResult]] — isinstance check normalises old single-result callers without breaking them; LatamAgent keeps extraction_result[0] alias for _build_meta
 
+- [12-05 Dashboard]: fx_rate_usd stored in meta.json as USD-per-native-unit; reverse conversion uses division (usd/rate = native); LatamAgent._build_meta now writes currency_original and fx_rate_usd
+- [12-05 Dashboard]: _format_latam_kpi_value gracefully degrades to USD when fx_rate_usd absent — existing meta.json files without the key show USD unchanged
+
 ### Pending Todos
 
 None.
@@ -121,5 +125,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-11
-Stopped at: Completed 12-04-PLAN.md — Multi-Year Extraction from Comparative PDFs
+Stopped at: Completed 12-05-PLAN.md — Financial Summary Table + Working Capital Currency Fix
 Resume file: None

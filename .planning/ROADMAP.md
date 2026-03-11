@@ -240,4 +240,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. PDF Extraction & KPI Mapping | 3/3 | Complete   | 2026-03-06 | - |
 | 9. Orchestration & Red Flags | 2/2 | Complete   | 2026-03-06 | - |
 | 10. Dashboard & Report | 2/2 | Complete    | 2026-03-07 | - |
-| 12. Learned Synonyms | 4/6 | In Progress|  | - |
+| 12. Learned Synonyms | 5/6 | In Progress|  | - |
