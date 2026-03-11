@@ -54,6 +54,9 @@ _TESSERACT_CMD = os.environ.get(
 )
 pytesseract.pytesseract.tesseract_cmd = _TESSERACT_CMD
 
+# Path where unmatched labels are recorded for future synonym review
+_CANDIDATES_FILE = Path("data/latam/learned_candidates.jsonl")
+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -206,6 +209,86 @@ def _fields_coverage(result: ExtractionResult) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Candidate capture
+# ---------------------------------------------------------------------------
+
+def _append_candidate(
+    label: str,
+    value: float,
+    page: int,
+    section: str,
+    company: str,
+    country: str,
+    pdf: str,
+) -> None:
+    """Append an unmatched label to learned_candidates.jsonl.
+
+    If the label already exists, increment seen_count and update timestamp.
+    Never raises — extraction must not be blocked by logging failures.
+    """
+    import json
+    from datetime import date
+
+    try:
+        _CANDIDATES_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        # Load existing records
+        records: list[dict] = []
+        if _CANDIDATES_FILE.exists():
+            with open(_CANDIDATES_FILE, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass  # skip corrupt lines
+
+        # Check for existing record with same label (case-insensitive key)
+        label_lower = label.strip().lower()
+        existing_idx = next(
+            (i for i, r in enumerate(records) if r.get("label", "").lower() == label_lower),
+            None,
+        )
+
+        today = str(date.today())
+        if existing_idx is not None:
+            records[existing_idx]["seen_count"] = records[existing_idx].get("seen_count", 1) + 1
+            records[existing_idx]["timestamp"] = today
+            # Track distinct companies
+            companies_seen = records[existing_idx].get("companies_seen", [records[existing_idx].get("company", "")])
+            if company not in companies_seen:
+                companies_seen.append(company)
+            records[existing_idx]["companies_seen"] = companies_seen
+        else:
+            records.append({
+                "label": label.strip(),
+                "value": value,
+                "page": page,
+                "section": section,
+                "company": company,
+                "country": country,
+                "pdf": pdf,
+                "seen_count": 1,
+                "companies_seen": [company],
+                "timestamp": today,
+            })
+
+        # Rewrite file atomically (read-modify-write — single-threaded extraction context)
+        with open(_CANDIDATES_FILE, "w", encoding="utf-8") as fh:
+            for record in records:
+                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    except Exception as exc:  # noqa: BLE001
+        # Log but never propagate — extraction pipeline must not be blocked
+        try:
+            from loguru import logger as _logger
+            _logger.warning(f"learned_candidates write failed (non-blocking): {exc}")
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Extraction layers
 # ---------------------------------------------------------------------------
 
@@ -284,11 +367,24 @@ def _extract_pdfplumber(
                     if value is None:
                         continue
 
+                    if len(label.strip()) < 4:
+                        continue  # too short to be meaningful
+
                     canonical = map_to_canonical(label)
                     if canonical is None:
                         logger.debug(
                             f"[latam_extractor] unmatched label | "
                             f"company={company_slug!r} | page={page_num} | label={label!r}"
+                        )
+                        # Capture unmatched label for future synonym review
+                        _append_candidate(
+                            label=label,
+                            value=float(value),
+                            page=page_num,
+                            section=current_section,
+                            company=company_slug,
+                            country=country,
+                            pdf=str(Path(pdf_path).name),
                         )
                         continue
 
@@ -360,11 +456,24 @@ def _extract_pymupdf_text(
             if value is None:
                 continue
 
+            if len(label.strip()) < 4:
+                continue  # too short to be meaningful
+
             canonical = map_to_canonical(label)
             if canonical is None:
                 logger.debug(
                     f"[latam_extractor] unmatched label | "
                     f"company={company_slug!r} | page={page_num} | label={label!r}"
+                )
+                # Capture unmatched label for future synonym review
+                _append_candidate(
+                    label=label,
+                    value=float(value),
+                    page=page_num,
+                    section=current_section,
+                    company=company_slug,
+                    country=country,
+                    pdf="",
                 )
                 continue
 
@@ -486,11 +595,24 @@ def _extract_ocr(
             if "no corriente" in _label_norm or "no corrientes" in _label_norm:
                 continue
 
+            if len(label.strip()) < 4:
+                continue  # too short to be meaningful
+
             canonical = map_to_canonical(label)
             if canonical is None:
                 logger.debug(
                     f"[latam_extractor] unmatched label | "
                     f"company={company_slug!r} | page={page_num} | label={label!r}"
+                )
+                # Capture unmatched label for future synonym review
+                _append_candidate(
+                    label=label,
+                    value=float(value),
+                    page=page_num,
+                    section=current_section,
+                    company=company_slug,
+                    country=country,
+                    pdf=str(Path(pdf_path).name),
                 )
                 continue
 
