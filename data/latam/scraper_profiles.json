@@ -1,0 +1,13 @@
+{
+  "_schema_version": "1.0",
+  "_description": "Per-provider learned scraper profiles. Updated automatically on each successful PDF acquisition. Keys are company slugs.",
+  "_fields": {
+    "domain": "Corporate website domain used for scraping",
+    "last_success": "ISO date of last successful PDF acquisition",
+    "strategy": "Strategy that last succeeded: profile | corporate_crawl | ddgs | playwright",
+    "pdf_url_pattern": "URL pattern with * replacing the year — used for fast pattern replay",
+    "nav_path": "Ordered list of nav link texts to follow to reach document section",
+    "failed_ddgs_queries": "DDGS query strings that returned irrelevant results — skipped on rerun",
+    "notes": "Free-text notes for manual review"
+  }
+}
