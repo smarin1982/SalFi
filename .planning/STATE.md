@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 12 of 12 (Learned Synonyms) — IN PROGRESS
-Plan: 1 of 6 in current phase — 12-01 complete
-Status: Phase 12 started — candidate capture + concept map loader wired (12-01 complete)
-Last activity: 2026-03-11 — Phase 12 Plan 01: _append_candidate() + learned_synonyms.json loader shipped
+Plan: 2 of 6 in current phase — 12-02 complete
+Status: Phase 12 in progress — suggestion engine shipped (12-02 complete)
+Last activity: 2026-03-11 — Phase 12 Plan 02: latam_synonym_reviewer.py with suggest_mapping() + approve/reject writers
 
 Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
 
@@ -39,6 +39,8 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 | 09-orchestration-red-flags | 02 | 8min | 1 | 1 |
 | 10-human-validation-lite | 01 | 2min | 2 | 2 |
 | 10-human-validation-lite | 02 | 45min | 2 | 3 |
+| 12-learned-synonyms | 01 | 4min | 2 | 3 |
+| 12-learned-synonyms | 02 | 4min | 1 | 1 |
 
 ## Accumulated Context
 
@@ -94,6 +96,9 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 - [12-01 Learned Synonyms]: _append_candidate uses read-modify-write JSONL (safe in single-threaded extraction context) — base LATAM_CONCEPT_MAP always wins on conflict with learned synonyms
 - [12-01 Learned Synonyms]: _LEARNED_SYNONYMS fallback in map_to_canonical uses label.strip().lower() — no accent normalization in learned path (labels pre-normalized in JSON by human reviewer)
 
+- [12-02 Synonym Reviewer]: Module-level latam_concept_map import avoids dotenv side-effects inside suggest_mapping — latam_concept_map triggers python-dotenv at import, which re-populates ANTHROPIC_API_KEY; moved to module level so dotenv runs before caller code modifies environment
+- [12-02 Synonym Reviewer]: suggest_mapping uses module-level _CANONICAL_CHOICES (not local import) — prevents key re-injection from dotenv inside the function body; all error paths return SuggestionResult(canonical=None) instead of raising
+
 ### Pending Todos
 
 None.
@@ -108,5 +113,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-11
-Stopped at: Completed 12-01-PLAN.md — candidate capture + learned synonyms loader; map_to_canonical now synonyms-aware
+Stopped at: Completed 12-02-PLAN.md — suggestion engine latam_synonym_reviewer.py shipped; suggest_mapping() + approve/reject writers ready for Plan 03 review panel
 Resume file: None
