@@ -102,6 +102,27 @@ COMMON_DOC_PATHS = [
     "/relaciones-con-inversionistas/",
 ]
 
+# Keywords to identify financial report PDFs by filename / link text / URL path.
+# Checked against: href (full path), filename (basename), and visible link text.
+PDF_FINANCIAL_FILENAME_KEYWORDS = [
+    # Spanish — states / reports
+    "estado", "estados",
+    "financiero", "financiera", "financieros",
+    "informe", "informes",
+    "reporte", "reportes",
+    "gestion", "gestión",
+    "balance",
+    "memoria",
+    "anual",
+    "resultado", "resultados",
+    "utilidad",
+    "rendicion", "rendición",
+    "transparencia",
+    "sostenibilidad",
+    # English equivalents (multinationals often mix)
+    "annual", "report", "financial", "earnings",
+]
+
 # Nav link text fragments indicating financial document sections
 NAV_FINANCIAL_KEYWORDS = [
     "financiero",
@@ -420,32 +441,93 @@ async def _async_find_financial_nav_links(page, base_origin: str) -> list[str]:
 
 
 async def _async_find_pdf_link_on_page(page, year: int) -> Optional[str]:
-    """Async version of _find_pdf_link_on_page for use with async_playwright."""
-    for selector in PDF_LINK_SELECTORS:
+    """
+    Scan page for the best financial-report PDF link.
+
+    Collects ALL pdf anchors, scores each by financial keywords in href/filename/
+    link text and year match, then returns the highest-scoring href.
+    Returns None if no candidate scores above zero.
+    """
+    candidates: list[tuple[int, str]] = []  # (score, href)
+
+    try:
+        all_links = await page.locator("a[href]").all()
+    except Exception:
+        return None
+
+    for link in all_links:
         try:
-            links = await page.locator(selector).all()
+            href = (await link.get_attribute("href") or "").strip()
         except Exception:
             continue
-        for link in links:
-            try:
-                href = await link.get_attribute("href") or ""
-                text = ""
-                try:
-                    text = await link.inner_text() or ""
-                except Exception:
-                    pass
-                if str(year) in href or str(year) in text:
-                    return href
-            except Exception:
-                continue
-        if links:
-            try:
-                href = await links[0].get_attribute("href") or ""
-                if href:
-                    return href
-            except Exception:
-                continue
-    return None
+        if not href:
+            continue
+        href_lower = href.lower()
+        if not (href_lower.endswith(".pdf") or ".pdf?" in href_lower):
+            continue
+
+        text = ""
+        try:
+            text = (await link.inner_text() or "").lower()
+        except Exception:
+            pass
+
+        score = _score_pdf_link(href, text, year)
+        if score > 0:
+            candidates.append((score, href))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
+
+
+def _score_pdf_link(href: str, link_text: str, year: int) -> int:
+    """
+    Score a PDF href+link_text for financial-report relevance.
+
+    Returns an integer score (higher = more relevant):
+      +3  financial keyword in filename (basename of URL path)
+      +2  financial keyword in link text
+      +1  financial keyword elsewhere in href path
+      +2  target year or prior year in href or text
+      0   no financial signal at all (caller should skip)
+    """
+    score = 0
+    href_lower = href.lower()
+    text_lower = link_text.lower()
+
+    # Extract filename from URL path for targeted matching
+    try:
+        path = urlparse(href).path.lower()
+        filename = path.rsplit("/", 1)[-1]  # e.g. "informe-anual-2024.pdf"
+    except Exception:
+        path = href_lower
+        filename = href_lower
+
+    for kw in PDF_FINANCIAL_FILENAME_KEYWORDS:
+        if kw in filename:
+            score += 3
+            break  # one match in filename is enough
+
+    for kw in PDF_FINANCIAL_FILENAME_KEYWORDS:
+        if kw in text_lower:
+            score += 2
+            break
+
+    if score == 0:
+        # No keyword in filename or text — check rest of path as last resort
+        for kw in PDF_FINANCIAL_FILENAME_KEYWORDS:
+            if kw in path:
+                score += 1
+                break
+
+    # Year bonus — only counts if there's already a financial signal
+    if score > 0 and year:
+        if str(year) in href or str(year - 1) in href or str(year) in text_lower:
+            score += 2
+
+    return score
 
 
 def _make_absolute(href: str, base_origin: str) -> str:
@@ -754,40 +836,43 @@ def _playwright_find_pdf(base_url: str, year: int) -> Optional[str]:
 
 def _find_pdf_link_on_page(page, year: int) -> Optional[str]:
     """
-    Scan current page for PDF anchors. Prefer links containing the year.
+    Scan current page for the best financial-report PDF link.
 
-    Returns href string or None.
+    Scores all PDF anchors by financial keywords in filename/text and year match.
+    Returns the highest-scoring href, or None if no financial-signal PDF found.
     """
-    for selector in PDF_LINK_SELECTORS:
+    candidates: list[tuple[int, str]] = []
+
+    try:
+        all_links = page.locator("a[href]").all()
+    except Exception:
+        return None
+
+    for link in all_links:
         try:
-            links = page.locator(selector).all()
+            href = (link.get_attribute("href") or "").strip()
         except Exception:
             continue
+        if not href:
+            continue
+        href_lower = href.lower()
+        if not (href_lower.endswith(".pdf") or ".pdf?" in href_lower):
+            continue
 
-        # First pass: prefer year-matched links
-        for link in links:
-            try:
-                href = link.get_attribute("href") or ""
-                text = ""
-                try:
-                    text = link.inner_text() or ""
-                except Exception:
-                    pass
-                if str(year) in href or str(year) in text:
-                    return href
-            except Exception:
-                continue
+        text = ""
+        try:
+            text = (link.inner_text() or "").lower()
+        except Exception:
+            pass
 
-        # Second pass: fallback to first link in selector
-        if links:
-            try:
-                href = links[0].get_attribute("href") or ""
-                if href:
-                    return href
-            except Exception:
-                continue
+        score = _score_pdf_link(href, text, year)
+        if score > 0:
+            candidates.append((score, href))
 
-    return None
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
 
 
 # ---------------------------------------------------------------------------
