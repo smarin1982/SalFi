@@ -752,6 +752,128 @@ def _generate_and_cache_report(slug: str, country: str) -> None:
     st.rerun()
 
 
+def _render_synonym_panel() -> None:
+    """Render the 'Terminología Aprendida' collapsible panel inside the LATAM tab.
+
+    Shows unmatched labels collected during extraction, allows Claude-assisted
+    mapping suggestions, and lets the analyst approve or reject each mapping.
+    All reviewer imports are lazy (try/except ImportError).
+    """
+    with st.expander("Terminología Aprendida", expanded=False):
+        try:
+            from latam_synonym_reviewer import (
+                get_review_candidates,
+                suggest_mapping,
+                approve_synonym,
+                reject_synonym,
+            )
+        except ImportError:
+            st.info("Módulo latam_synonym_reviewer no disponible.")
+            return
+
+        # Threshold control
+        col_thresh, _ = st.columns([1, 3])
+        with col_thresh:
+            min_seen = st.number_input(
+                "Visto en mínimo N empresas",
+                min_value=1,
+                max_value=20,
+                value=2,
+                step=1,
+                key="latam_syn_min_seen",
+                help="Solo muestra etiquetas vistas en al menos N empresas distintas.",
+            )
+
+        candidates = get_review_candidates(min_seen_count=int(min_seen))
+
+        if not candidates:
+            st.success(
+                "No hay candidatos pendientes de revisión. "
+                "Las etiquetas no reconocidas se acumulan automáticamente durante la extracción."
+            )
+            return
+
+        st.caption(
+            f"{len(candidates)} etiqueta(s) pendiente(s) de revisión "
+            f"(vista(s) en {int(min_seen)}+ empresa(s))."
+        )
+
+        for i, cand in enumerate(candidates):
+            with st.container():
+                col_label, col_count, col_section = st.columns([3, 1, 2])
+                with col_label:
+                    st.markdown(f"**{cand.label}**")
+                with col_count:
+                    st.caption(f"Vistas: {cand.seen_count}")
+                with col_section:
+                    st.caption(f"Sección: {cand.section or '—'}")
+
+                # Suggestion state stored in session state keyed by label
+                suggestion_key = f"latam_syn_suggestion_{i}"
+                suggestion = st.session_state.get(suggestion_key)
+
+                col_suggest, col_edit, col_approve, col_reject = st.columns([2, 3, 1, 1])
+
+                with col_suggest:
+                    if st.button("Sugerir con Claude", key=f"latam_syn_suggest_{i}"):
+                        with st.spinner("Consultando Claude..."):
+                            result = suggest_mapping(cand)
+                        st.session_state[suggestion_key] = result
+
+                if suggestion is not None:
+                    with col_edit:
+                        # Pre-populate with Claude's suggestion; analyst can edit
+                        mapping_value = st.text_input(
+                            "Campo canónico",
+                            value=suggestion.canonical or "",
+                            key=f"latam_syn_mapping_{i}",
+                            help=f"Confianza: {suggestion.confidence} — {suggestion.reasoning}",
+                            label_visibility="collapsed",
+                            placeholder="ej: net_income",
+                        )
+                    with col_approve:
+                        if st.button("Aprobar", key=f"latam_syn_approve_{i}", type="primary"):
+                            final_mapping = st.session_state.get(f"latam_syn_mapping_{i}", "").strip()
+                            if final_mapping and final_mapping != "__rejected__":
+                                approve_synonym(cand.label, final_mapping, approved_by="user")
+                                # Clear suggestion state and rerun to remove from list
+                                if suggestion_key in st.session_state:
+                                    del st.session_state[suggestion_key]
+                                st.rerun()
+                            else:
+                                st.warning("Ingresa un campo canónico válido antes de aprobar.")
+                    with col_reject:
+                        if st.button("Rechazar", key=f"latam_syn_reject_{i}"):
+                            reject_synonym(cand.label)
+                            if suggestion_key in st.session_state:
+                                del st.session_state[suggestion_key]
+                            st.rerun()
+                else:
+                    # Show approve/reject even without suggestion (analyst may know the mapping)
+                    with col_edit:
+                        st.text_input(
+                            "Campo canónico",
+                            value="",
+                            key=f"latam_syn_mapping_{i}",
+                            label_visibility="collapsed",
+                            placeholder="ej: net_income — o usa Sugerir",
+                        )
+                    with col_approve:
+                        if st.button("Aprobar", key=f"latam_syn_approve_{i}", type="primary"):
+                            final_mapping = st.session_state.get(f"latam_syn_mapping_{i}", "").strip()
+                            if final_mapping and final_mapping != "__rejected__":
+                                approve_synonym(cand.label, final_mapping, approved_by="user")
+                                st.rerun()
+                            else:
+                                st.warning("Ingresa o sugiere un campo canónico primero.")
+                    with col_reject:
+                        if st.button("Rechazar", key=f"latam_syn_reject_{i}"):
+                            reject_synonym(cand.label)
+                            st.rerun()
+
+                st.divider()
+
+
 def _render_latam_tab() -> None:
     st.markdown("### Análisis Financiero LATAM")
 
@@ -900,6 +1022,10 @@ def _render_latam_tab() -> None:
                 mime="application/pdf",
                 key="latam_download_pdf",
             )
+
+    # --- Learned synonyms review panel ---
+    st.divider()
+    _render_synonym_panel()
 
 
 # ── Tabbed layout: S&P 500 | LATAM ───────────────────────────────────────────
