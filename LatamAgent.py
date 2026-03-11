@@ -27,6 +27,7 @@ import latam_processor      # Phase 8 — process()
 import web_search           # Phase 9 Plan 01 — search_sector_context()
 from company_registry import make_slug, make_storage_path  # Phase 6
 from red_flags import evaluate_flags                        # Phase 9 Plan 01
+from currency import get_annual_avg_rate                    # Phase 6 — FX lookup for meta
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -344,6 +345,14 @@ class LatamAgent:
             existing = self._load_meta()
             last_downloaded = existing.get("last_downloaded")
 
+        # FX fields — needed by dashboard to reverse USD normalisation for display
+        currency_original = COUNTRY_CURRENCY.get(self.country, "USD")
+        fiscal_year = extraction_result.fiscal_year
+        try:
+            fx_rate_usd = get_annual_avg_rate(currency_original, fiscal_year)
+        except Exception:
+            fx_rate_usd = None  # Dashboard falls back to 1.0 (shows USD unchanged)
+
         return {
             "name": self.name,
             "country": self.country,
@@ -364,6 +373,10 @@ class LatamAgent:
             "source_pdf_path": str(pdf_path) if pdf_path else None,
             "red_flags_evaluated_at": now_iso,
             "red_flags_count": len(flags),
+            # FX display fields — used by dashboard _format_latam_kpi_value and
+            # _render_latam_financials_table to reverse USD normalisation for local currency
+            "currency_original": currency_original,
+            "fx_rate_usd": fx_rate_usd,
         }
 
     def _save_meta(self, meta: dict) -> None:

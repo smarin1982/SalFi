@@ -575,14 +575,33 @@ def _format_latam_kpi_value(
     currency_mode: str,
     meta_info: dict,
 ) -> str:
-    """Format a LATAM KPI value, optionally converting back to original currency."""
+    """Format a LATAM KPI value, optionally converting back to original currency.
+
+    fx_rate_usd is stored as USD-per-native-unit (e.g. 0.000265 USD per COP).
+    Reverse conversion: native_value = usd_value / fx_rate_usd
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "N/A"
     if currency_mode == "USD" or fmt in _NON_MONETARY_FORMATS:
         return format_kpi(value, fmt)
-    # Moneda Original — reverse the USD normalisation for dollar_B values
-    fx_rate = meta_info.get("fx_rate_used", 1.0) or 1.0
-    currency_code = meta_info.get("currency_original", "USD")
-    original_value = value * fx_rate
-    return f"{currency_code} {original_value / 1e9:.1f}B"
+    # Moneda Original — reverse the USD normalisation for monetary KPIs
+    # fx_rate_usd: USD per 1 unit of native currency (e.g. 0.000265 USD per COP)
+    fx_rate = meta_info.get("fx_rate_usd", None)
+    if fx_rate and fx_rate > 0:
+        display_value = value / fx_rate
+        currency_code = meta_info.get("currency_original", "USD")
+    else:
+        # No FX rate stored — show USD unchanged
+        display_value = value
+        currency_code = "USD"
+    if fmt == "dollar_B":
+        return f"{currency_code} {display_value / 1e9:.1f}B"
+    # Fallback for other monetary formats
+    if abs(display_value) >= 1e9:
+        return f"{currency_code} {display_value / 1e9:.2f}B"
+    if abs(display_value) >= 1e6:
+        return f"{currency_code} {display_value / 1e6:.1f}M"
+    return f"{currency_code} {display_value:,.0f}"
 
 
 # ── LATAM rendering helpers ────────────────────────────────────────────────────
@@ -668,6 +687,57 @@ def _render_latam_kpi_cards(slug: str, country: str, currency_mode: str) -> None
                 st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
             else:
                 st.caption("Solo 1 año de datos disponibles.")
+
+
+_SUMMARY_FIELDS = [
+    ("revenue",           "Ingresos"),
+    ("net_income",        "Utilidad Neta"),
+    ("total_assets",      "Activos Totales"),
+    ("total_liabilities", "Pasivos Totales"),
+    ("total_equity",      "Patrimonio"),
+]
+
+
+def _render_latam_financials_table(slug: str, country: str, currency_mode: str) -> None:
+    """Render a compact table of principal financial statement lines for all fiscal years."""
+    fin_df = st.session_state["latam_financials"].get(slug, pd.DataFrame())
+    meta = st.session_state["latam_meta"].get(slug, {})
+    if fin_df.empty:
+        return
+
+    available = [f for f, _ in _SUMMARY_FIELDS if f in fin_df.columns]
+    if not available:
+        return
+
+    # Build display DataFrame
+    display_cols: dict = {"Año": fin_df["fiscal_year"].astype(str)}
+    # fx_rate_usd is USD-per-native (e.g. 0.000265 USD per COP)
+    # reverse: native = usd / fx_rate_usd
+    fx_rate = meta.get("fx_rate_usd", None)
+    if currency_mode == "Moneda Original" and fx_rate and fx_rate > 0:
+        curr_symbol = meta.get("currency_original", "USD")
+        multiplier = 1.0 / fx_rate
+    else:
+        curr_symbol = "USD"
+        multiplier = 1.0
+
+    for field, label in _SUMMARY_FIELDS:
+        if field in fin_df.columns:
+            display_cols[label] = (fin_df[field] * multiplier).apply(
+                lambda v: (
+                    f"{curr_symbol} {v/1e9:.2f}B" if pd.notna(v) and abs(v) >= 1e9
+                    else f"{curr_symbol} {v/1e6:.1f}M" if pd.notna(v) and abs(v) >= 1e6
+                    else f"{curr_symbol} {v:,.0f}" if pd.notna(v)
+                    else "N/A"
+                )
+            )
+
+    st.markdown("#### Estados Financieros")
+    st.dataframe(
+        pd.DataFrame(display_cols).set_index("Año"),
+        use_container_width=True,
+        hide_index=False,
+    )
 
 
 def _render_latam_red_flags(slug: str, country: str) -> None:
@@ -1003,6 +1073,7 @@ def _render_latam_tab() -> None:
         st.warning("KPIs no disponibles. Ejecuta el pipeline primero.")
     else:
         _render_latam_kpi_cards(active_slug, active_country, currency_mode)
+        _render_latam_financials_table(active_slug, active_country, currency_mode)
 
     # --- Red flags ---
     st.markdown("#### Red Flags")
