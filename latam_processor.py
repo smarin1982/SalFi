@@ -3,8 +3,8 @@ latam_processor.py
 
 KPI mapping layer for LATAM financial filings.
 
-Converts an ExtractionResult (produced by latam_extractor.py) into Parquet files
-that are schema-identical to the US pipeline output (data/clean/{TICKER}/).
+Converts one or more ExtractionResult objects (produced by latam_extractor.py) into
+Parquet files that are schema-identical to the US pipeline output (data/clean/{TICKER}/).
 
 Design constraints:
   - calculate_kpis() and save_parquet() are imported from processor.py — never modified.
@@ -12,6 +12,8 @@ Design constraints:
   - Prior-year rows are appended to enable growth KPI continuity (revenue_growth_yoy, etc.)
   - process() is idempotent: running twice on the same input produces identical output.
   - process() never enforces human-validation gating — that is the caller's responsibility.
+  - process() accepts both a single ExtractionResult and a list[ExtractionResult] — the
+    single-result form is preserved for backwards compatibility with existing call sites.
 
 IMPORTANT: calculate_kpis and save_parquet are imported from processor.py — never copy or modify them here
 
@@ -21,7 +23,7 @@ Exports:
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -55,44 +57,16 @@ _MONETARY_COLUMNS = FINANCIALS_COLUMNS[2:]
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def process(
-    company_slug: str,
-    extraction_result: ExtractionResult,
-    country: str = "",
-    data_dir: str = "data",
-) -> dict:
+def _build_row(extraction_result: ExtractionResult, company_slug: str) -> dict:
+    """Build a single financials row dict from one ExtractionResult.
+
+    Converts all monetary fields from native currency to USD via currency.to_usd().
+    Returns a dict keyed by FINANCIALS_COLUMNS names.
     """
-    Convert an ExtractionResult into financials.parquet and kpis.parquet.
-
-    Steps:
-      1. Build a one-row dict with canonical column names; convert each non-NaN
-         monetary field from native currency to USD via currency.to_usd().
-      2. Enforce schema dtypes (fiscal_year int64, all monetary cols float64).
-      3. Determine output directory under data/latam/{country?}/{slug}/.
-      4. If prior-year Parquet exists, concat + deduplicate so growth KPIs are
-         computable (Pitfall 5: single row always yields NaN for yoy growth).
-      5. Call calculate_kpis() from processor.py (unchanged).
-      6. Write financials.parquet and kpis.parquet atomically via save_parquet().
-      7. Log summary and return a status dict.
-
-    Args:
-        company_slug:      Slug identifier (e.g. "grupo-keralty") — used as ticker.
-        extraction_result: Output of latam_extractor.extract().
-        country:           Country slug (e.g. "colombia"); used in directory path.
-        data_dir:          Root data directory (default "data").
-
-    Returns:
-        dict with keys: slug, fiscal_year, confidence, fields_extracted, rows_in_parquet
-    """
-
-    # ------------------------------------------------------------------
-    # Step 1: Build one-row dict with canonical names + USD conversion
-    # ------------------------------------------------------------------
     row: dict = {
         "ticker": company_slug,
         "fiscal_year": extraction_result.fiscal_year,
     }
-
     for canonical in _MONETARY_COLUMNS:
         native_value = extraction_result.fields.get(canonical, np.nan)
         if native_value is np.nan or (isinstance(native_value, float) and np.isnan(native_value)):
@@ -103,18 +77,66 @@ def process(
                 extraction_result.currency_code,
                 extraction_result.fiscal_year,
             )
+    return row
+
+
+def process(
+    company_slug: str,
+    extraction_result: Union[ExtractionResult, list[ExtractionResult]],
+    country: str = "",
+    data_dir: str = "data",
+) -> dict:
+    """
+    Convert one or more ExtractionResult objects into financials.parquet and kpis.parquet.
+
+    Accepts either a single ExtractionResult (backwards compatible) or a list
+    (returned by latam_extractor.extract() after multi-year support was added in 12-04).
+
+    Steps:
+      1. Normalise input to list[ExtractionResult] for uniform processing.
+      2. Build one row per ExtractionResult with canonical column names; convert each
+         non-NaN monetary field from native currency to USD via currency.to_usd().
+      3. Enforce schema dtypes (fiscal_year int64, all monetary cols float64).
+      4. Determine output directory under data/latam/{country?}/{slug}/.
+      5. If prior-year Parquet exists, concat + deduplicate so growth KPIs are
+         computable (Pitfall 5: single row always yields NaN for yoy growth).
+      6. Call calculate_kpis() from processor.py (unchanged).
+      7. Write financials.parquet and kpis.parquet atomically via save_parquet().
+      8. Log summary and return a status dict.
+
+    Args:
+        company_slug:      Slug identifier (e.g. "grupo-keralty") — used as ticker.
+        extraction_result: Output of latam_extractor.extract() — single or list.
+        country:           Country slug (e.g. "colombia"); used in directory path.
+        data_dir:          Root data directory (default "data").
+
+    Returns:
+        dict with keys: slug, fiscal_year, confidence, fields_extracted, rows_in_parquet
+    """
+    # ------------------------------------------------------------------
+    # Step 1: Normalise to list (backwards compat — single ExtractionResult)
+    # ------------------------------------------------------------------
+    if isinstance(extraction_result, ExtractionResult):
+        extraction_results: list[ExtractionResult] = [extraction_result]
+    else:
+        extraction_results = list(extraction_result)
 
     # ------------------------------------------------------------------
-    # Step 2: Build DataFrame and enforce schema dtypes
+    # Step 2: Build one row per result with canonical names + USD conversion
     # ------------------------------------------------------------------
-    df_new = pd.DataFrame([row], columns=FINANCIALS_COLUMNS)
+    rows = [_build_row(er, company_slug) for er in extraction_results]
+
+    # ------------------------------------------------------------------
+    # Step 3: Build DataFrame and enforce schema dtypes
+    # ------------------------------------------------------------------
+    df_new = pd.DataFrame(rows, columns=FINANCIALS_COLUMNS)
     df_new["fiscal_year"] = df_new["fiscal_year"].astype("int64")
     for col in _MONETARY_COLUMNS:
         df_new[col] = df_new[col].astype("float64")
     df_new["ticker"] = df_new["ticker"].astype("object")
 
     # ------------------------------------------------------------------
-    # Step 3: Determine output directory
+    # Step 4: Determine output directory
     # ------------------------------------------------------------------
     if country:
         out_dir = Path(data_dir) / "latam" / country / company_slug
@@ -152,16 +174,18 @@ def process(
     # ------------------------------------------------------------------
     # Step 7: Log and return summary dict
     # ------------------------------------------------------------------
+    # Use primary result (first in list) for summary fields
+    primary = extraction_results[0]
     logger.info(
         f"latam_processor: wrote {len(df_combined)} rows for {company_slug} "
-        f"({extraction_result.confidence} confidence)"
+        f"({primary.confidence} confidence)"
     )
 
     return {
         "slug": company_slug,
-        "fiscal_year": extraction_result.fiscal_year,
+        "fiscal_year": primary.fiscal_year,
         "fiscal_years": sorted(df_combined["fiscal_year"].dropna().astype(int).tolist()),
-        "confidence": extraction_result.confidence,
-        "fields_extracted": len(extraction_result.fields),
+        "confidence": primary.confidence,
+        "fields_extracted": len(primary.fields),
         "rows_in_parquet": len(df_combined),
     }

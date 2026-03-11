@@ -204,19 +204,24 @@ class LatamAgent:
         from datetime import datetime as _dt
         _currency = COUNTRY_CURRENCY.get(self.country, "USD")
         _fiscal_year = _dt.now().year - 1
-        extraction_result = latam_extractor.extract(
+        # extract() returns list[ExtractionResult] — one per fiscal year found in PDF
+        extraction_results = latam_extractor.extract(
             pdf_path,
             currency_code=_currency,
             fiscal_year=_fiscal_year,
             country=self.country,
         )
-        # extraction_result: ExtractionResult dataclass (.fields, .confidence, .extraction_method, .source_map)
+        logger.info(
+            f"[{self.name}] Extracted {len(extraction_results)} fiscal year(s) from PDF"
+        )
+        # extraction_results: list[ExtractionResult] — primary result is [0]
+        extraction_result = extraction_results[0]  # kept for _build_meta compat
 
         # --- Step 3: Process (writes financials.parquet and kpis.parquet) ---
         logger.info(f"[{self.name}] Step 3: Processing extracted data")
         process_result = latam_processor.process(
             company_slug=self.slug,
-            extraction_result=extraction_result,
+            extraction_result=extraction_results,  # pass full list for multi-year write
             country=self.country,
             data_dir=str(DATA_DIR),
         )

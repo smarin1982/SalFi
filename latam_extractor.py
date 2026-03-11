@@ -27,6 +27,7 @@ import io
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -289,6 +290,30 @@ def _append_candidate(
 
 
 # ---------------------------------------------------------------------------
+# Fiscal year inference
+# ---------------------------------------------------------------------------
+
+def _infer_fiscal_years(ocr_text: str) -> tuple[int, int]:
+    """
+    Scan first 500 chars of OCR text for a year-pair pattern like:
+      "2024 Y 2023", "2024 2023", "DICIEMBRE 2024 DICIEMBRE 2023"
+    Returns (primary_year, comparative_year).
+    Falls back to (current_year-1, current_year-2) if not found.
+    """
+    snippet = ocr_text[:500]
+    # Find all 4-digit years in range 2010-2030
+    years = [int(y) for y in re.findall(r'\b(20[12]\d)\b', snippet)]
+    years = sorted(set(years), reverse=True)
+    if len(years) >= 2:
+        return years[0], years[1]
+    elif len(years) == 1:
+        return years[0], years[0] - 1
+    else:
+        now = datetime.now().year
+        return now - 1, now - 2
+
+
+# ---------------------------------------------------------------------------
 # Extraction layers
 # ---------------------------------------------------------------------------
 
@@ -502,7 +527,7 @@ def _extract_ocr(
     fiscal_year: int,
     company_slug: str = "",
     country: str = "",
-) -> ExtractionResult:
+) -> list["ExtractionResult"]:
     """
     Layer 3: Tesseract OCR for scanned-image PDFs.
 
@@ -510,15 +535,21 @@ def _extract_ocr(
     Converts to grayscale for better OCR accuracy.
     Logs unmatched labels via logger.debug (never silently skips).
 
-    Returns an ExtractionResult with confidence="Baja" and extraction_method="ocr_unavailable"
-    if Tesseract is not available — does not raise.
+    Captures both primary (current year) and comparative (prior year) columns
+    from each OCR line. Infers the actual fiscal year pair from the PDF header text.
+
+    Returns a list of ExtractionResult — one for the primary year, and optionally
+    a second for the comparative year (only when comparative fields were found).
+
+    Returns a single-element list with confidence="Baja" and
+    extraction_method="ocr_unavailable" if Tesseract is not available — does not raise.
     """
     if not TESSERACT_AVAILABLE:
         logger.error(
             "[latam_extractor] OCR requested but Tesseract is not available. "
             "Install Tesseract 5 + spa language pack and set TESSERACT_CMD."
         )
-        return ExtractionResult(
+        return [ExtractionResult(
             fields={},
             source_map={},
             confidence="Baja",
@@ -526,11 +557,14 @@ def _extract_ocr(
             fiscal_year=fiscal_year,
             extraction_method="ocr_unavailable",
             warnings=["tesseract_not_available"],
-        )
+        )]
 
-    fields: dict = {}
+    fields: dict = {}           # primary year (e.g. 2024)
+    fields_comp: dict = {}      # comparative year (e.g. 2023)
     source_map: dict = {}
+    source_map_comp: dict = {}
     current_section = "unknown"
+    first_page_ocr_text: str = ""
 
     for page_num, page in enumerate(doc, start=1):
         # Render page at 300 DPI (minimum for reliable OCR on financial documents)
@@ -540,6 +574,10 @@ def _extract_ocr(
 
         # Run OCR with Spanish language pack; --psm 6 = uniform block of text
         ocr_text = pytesseract.image_to_string(img, lang="spa", config="--psm 6")
+
+        # Capture first page OCR text for fiscal year inference
+        if page_num == 1:
+            first_page_ocr_text = ocr_text
 
         text_lower = ocr_text.lower()
         detected = _detect_section(text_lower)
@@ -556,6 +594,7 @@ def _extract_ocr(
 
             label: Optional[str] = None
             value: Optional[float] = None
+            comparative_value: Optional[float] = None
 
             if len(parts) >= 2:
                 label = parts[0].strip()
@@ -563,6 +602,13 @@ def _extract_ocr(
                     value = parse_latam_number(part.strip())
                     if value is not None:
                         break
+                # Capture second numeric value as comparative if available
+                if value is not None and len(parts) >= 3:
+                    for part in parts[1:-1]:
+                        cv = parse_latam_number(part.strip())
+                        if cv is not None and cv != value:
+                            comparative_value = cv
+                            break
 
             # Strategy 2: for single-space lines, find the last number in the line
             # and use everything before the first currency symbol / digit as the label.
@@ -580,11 +626,17 @@ def _extract_ocr(
                     # Strip trailing noise like "[Nota X)" or "-"
                     label_candidate = re.sub(r"\s*[\[\(].*$", "", label_candidate).strip()
                     if label_candidate:
-                        # Take first number (current year column = leftmost)
-                        parsed = parse_latam_number(first_match.group().replace("$", "").strip())
-                        if parsed is not None:
+                        primary_val = parse_latam_number(first_match.group().replace("$", "").strip())
+                        # Capture comparative year value if a second number exists on the same line
+                        comp_val: Optional[float] = None
+                        if len(num_matches) >= 2:
+                            comp_val = parse_latam_number(
+                                num_matches[1].group().replace("$", "").strip()
+                            )
+                        if primary_val is not None:
                             label = label_candidate
-                            value = parsed
+                            value = primary_val
+                            comparative_value = comp_val  # may be None
 
             if value is None or not label:
                 continue
@@ -623,16 +675,43 @@ def _extract_ocr(
                     section_heading=current_section,
                     extraction_method="ocr_tesseract",
                 )
+                if comparative_value is not None and canonical not in fields_comp:
+                    fields_comp[canonical] = comparative_value
+                    source_map_comp[canonical] = SourceRef(
+                        page_number=page_num,
+                        section_heading=current_section,
+                        extraction_method="ocr_tesseract",
+                    )
 
-    return ExtractionResult(
-        fields=fields,
-        source_map=source_map,
-        confidence=_score_confidence(fields, "ocr_tesseract", country=country),
-        currency_code="",
-        fiscal_year=fiscal_year,
-        extraction_method="ocr_tesseract",
-        warnings=[],
-    )
+    # Infer fiscal year pair from first page OCR text
+    primary_year, comp_year = _infer_fiscal_years(first_page_ocr_text)
+
+    results = [
+        ExtractionResult(
+            fields=fields,
+            source_map=source_map,
+            confidence=_score_confidence(fields, "ocr_tesseract", country=country),
+            currency_code="",
+            fiscal_year=primary_year,
+            extraction_method="ocr_tesseract",
+            warnings=[],
+        )
+    ]
+
+    if fields_comp:
+        results.append(
+            ExtractionResult(
+                fields=fields_comp,
+                source_map=source_map_comp,
+                confidence=_score_confidence(fields_comp, "ocr_tesseract", country=country),
+                currency_code="",
+                fiscal_year=comp_year,
+                extraction_method="ocr_tesseract",
+                warnings=["comparative_year_column"],
+            )
+        )
+
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -644,9 +723,17 @@ def extract(
     currency_code: str = "",
     fiscal_year: int = 0,
     country: str = "",
-) -> ExtractionResult:
+) -> list[ExtractionResult]:
     """
-    Extract financial data from a PDF for a single fiscal year.
+    Extract financial data from a PDF, returning one result per fiscal year found.
+
+    For scanned PDFs (OCR path), captures both the primary year column and the
+    comparative year column that appears in standard LATAM IFRS comparative statements.
+    Returns a list with two ExtractionResult items when comparative data is found,
+    or a single-item list otherwise.
+
+    For digital PDFs (pdfplumber / PyMuPDF path), returns a single-item list for
+    the requested fiscal_year (comparative-column detection is OCR-only for now).
 
     Automatically selects the extraction strategy:
       - Scanned PDF (majority of pages are image-only): OCR via pytesseract
@@ -661,12 +748,13 @@ def extract(
 
     Args:
         pdf_path:      Absolute path to the PDF file.
-        currency_code: ISO currency code (e.g. "COP", "PEN", "CLP"). Set on result.
-        fiscal_year:   The target fiscal year (e.g. 2023). Used for column selection.
+        currency_code: ISO currency code (e.g. "COP", "PEN", "CLP"). Set on each result.
+        fiscal_year:   The target fiscal year (e.g. 2023). Used for column selection in
+                       digital PDFs; OCR path infers fiscal years from PDF header text.
         country:       Two-letter country code ("CO", "PE", "CL") for confidence scoring.
 
     Returns:
-        ExtractionResult with fields, source_map, confidence, and extraction_method.
+        list[ExtractionResult] — one item per fiscal year found (1 or 2 items).
     """
     company_slug = Path(pdf_path).stem  # use filename stem as fallback slug for logging
 
@@ -676,29 +764,33 @@ def extract(
         is_scanned = scanned_count > len(doc) * 0.5
 
         if is_scanned:
-            result = _extract_ocr(
+            results = _extract_ocr(
                 pdf_path, doc, fiscal_year,
                 company_slug=company_slug, country=country,
             )
         else:
-            result = _extract_pdfplumber(
+            single = _extract_pdfplumber(
                 pdf_path, fiscal_year,
                 company_slug=company_slug, country=country,
             )
             # If pdfplumber coverage is poor, try PyMuPDF text fallback
-            if _fields_coverage(result) < 0.4:
+            if _fields_coverage(single) < 0.4:
                 alt_result = _extract_pymupdf_text(
                     doc, fiscal_year,
                     company_slug=company_slug, country=country,
                 )
                 # Use whichever layer returned more fields
-                if len(alt_result.fields) > len(result.fields):
-                    result = alt_result
+                if len(alt_result.fields) > len(single.fields):
+                    single = alt_result
+            results = [single]
     finally:
         doc.close()
 
-    # Set caller-provided metadata
-    result.currency_code = currency_code
-    result.fiscal_year = fiscal_year
+    # Set caller-provided metadata on all results
+    for result in results:
+        result.currency_code = currency_code
+        # Only override fiscal_year for digital PDF path (OCR infers its own years)
+        if result.extraction_method not in ("ocr_tesseract", "ocr_unavailable"):
+            result.fiscal_year = fiscal_year
 
-    return result
+    return results
