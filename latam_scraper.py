@@ -1004,6 +1004,14 @@ def search_and_download(
     logger.info(f"search_and_download: crawling corporate site {domain} for {slug}")
     pdf_url = _crawl_corporate_site(domain, slug, year)
     if pdf_url:
+        crawl_score = _validate_pdf_relevance(pdf_url, domain, slug, year)
+        if crawl_score < 0.5:
+            logger.warning(
+                f"search_and_download: corporate crawl found low-relevance PDF "
+                f"(score={crawl_score:.2f}) — skipping {pdf_url[:80]}"
+            )
+            pdf_url = None
+    if pdf_url:
         result = _download_pdf(pdf_url, out_dir=storage_path, strategy="corporate_crawl", attempts=[f"corporate_crawl:{domain[:60]}"])
         if result.ok:
             logger.info(f"search_and_download: found via corporate crawl — {result.pdf_path}")
