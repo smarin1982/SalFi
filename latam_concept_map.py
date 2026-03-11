@@ -70,6 +70,14 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "resultado de operación",
         "resultado operativo",
         "ebit",
+        # Pre-tax income (closest proxy in current schema)
+        "ganancia antes de impuestos",
+        "ganancia antes de impuesto",
+        "utilidad antes de impuestos",
+        "utilidad antes de impuesto",
+        "resultado antes de impuestos",
+        "resultado antes de impuesto",
+        "utilidad antes de impuesto sobre la renta",
     ],
     "net_income": [
         "utilidad neta",
@@ -84,6 +92,30 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "resultado del ejercicio",
         "perdida neta",
         "pérdida neta",
+        # IFRS / Colombian IPS variants
+        "ganancia o perdida del año",
+        "ganancia o pérdida del año",
+        "ganancia o perdida del ejercicio",
+        "ganancia o pérdida del ejercicio",
+        "ganancia del año",
+        "perdida del año",
+        "pérdida del año",
+        "resultado del año",
+    ],
+    "operating_expenses": [
+        "gastos de administracion",
+        "gastos de administración",
+        "gastos administrativos",
+        "gastos de ventas",
+        "gastos de ventas y administracion",
+        "gastos de ventas y administración",
+        "gastos operacionales",
+        "gastos operacionales de administracion",
+        "gastos operacionales de administración",
+        "gastos de operacion",
+        "gastos de operación",
+        "total gastos operacionales",
+        "costos y gastos operacionales",
     ],
     "interest_expense": [
         "gastos financieros",
@@ -343,7 +375,14 @@ def map_to_canonical(label: str) -> Optional[str]:
             len(normalized_plain) >= len(synonym_plain)
             and normalized_plain in synonym_plain
         )
-        if synonym_in_label or label_in_synonym:
+        # Direction 3: label is a prefix of the synonym — handles pdfplumber truncation
+        #   e.g. "ganancia antes de impue" matches synonym "ganancia antes de impuestos"
+        #   Require at least 12 chars to avoid short false-positive prefixes.
+        label_is_prefix = (
+            len(normalized_plain) >= 12
+            and synonym_plain.startswith(normalized_plain)
+        )
+        if synonym_in_label or label_in_synonym or label_is_prefix:
             return canonical
 
     # Fallback: check human-approved learned synonyms (base map always wins)
