@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: 10 of 10 (Human Validation Lite) — COMPLETE
-Plan: 2 of 2 in current phase — all plans complete
-Status: Phase 10 complete — validation gate verified end-to-end; ExtractionResult reconstruction fixed; v2.0 LATAM pipeline ready for Phase 11
-Last activity: 2026-03-07 — Phase 10 Plan 02: human verification checkpoint passed + _handle_confirm fix
+Phase: 12 of 12 (Learned Synonyms) — IN PROGRESS
+Plan: 1 of 6 in current phase — 12-01 complete
+Status: Phase 12 started — candidate capture + concept map loader wired (12-01 complete)
+Last activity: 2026-03-11 — Phase 12 Plan 01: _append_candidate() + learned_synonyms.json loader shipped
 
 Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
 
@@ -91,6 +91,9 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 - [10-02 Validation]: _META_KEYS set filters extracted_at, pdf_path, currency_code, fiscal_year, extraction_method, confidence, and all confidence_{f}/source_page_{f} keys from session dict before building ExtractionResult.fields
 - [10-02 Validation]: fiscal_year, currency_code, confidence, extraction_method must be present in session state dict for confirm path — latam_extractor / LatamAgent responsibility to populate
 
+- [12-01 Learned Synonyms]: _append_candidate uses read-modify-write JSONL (safe in single-threaded extraction context) — base LATAM_CONCEPT_MAP always wins on conflict with learned synonyms
+- [12-01 Learned Synonyms]: _LEARNED_SYNONYMS fallback in map_to_canonical uses label.strip().lower() — no accent normalization in learned path (labels pre-normalized in JSON by human reviewer)
+
 ### Pending Todos
 
 None.
@@ -104,6 +107,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07
-Stopped at: Completed 10-02-PLAN.md — Phase 10 complete; validation gate verified end-to-end; _handle_confirm ExtractionResult reconstruction fix shipped
+Last session: 2026-03-11
+Stopped at: Completed 12-01-PLAN.md — candidate capture + learned synonyms loader; map_to_canonical now synonyms-aware
 Resume file: None

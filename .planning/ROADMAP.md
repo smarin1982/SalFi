@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v1.0 SP500 Pipeline** - Phases 1-5 (shipped 2026-02-28)
-- [ ] **v2.0 LATAM Financial Analysis Pipeline** - Phases 6-10 (in progress)
+- [ ] **v2.0 LATAM Financial Analysis Pipeline** - Phases 6-12 (in progress)
 
 ## Phases
 
@@ -103,6 +103,7 @@ Plans:
 - [x] **Phase 9: Orchestration & Red Flags** - LatamAgent orchestrator, web search (ddgs), red flags engine with YAML thresholds (completed 2026-03-06)
 - [x] **Phase 10: Human Validation Lite** - Analyst confirmation screen for extracted key values before writing to Parquet (completed 2026-03-07)
 - [ ] **Phase 11: Dashboard & Report** - Additive LATAM section in app.py, multi-currency toggle, evidence viewer, executive report (Claude API), PDF download
+- [ ] **Phase 12: Learned Synonyms** - Adaptive terminology learning: candidate capture, Claude-assisted suggestions, human approval UI
 
 ## Phase Details
 
@@ -206,6 +207,22 @@ Plans:
 - [ ] 11-02-PLAN.md — app.py: st.tabs two-tab layout, full LATAM section (URL input + file uploader, LatamAgent pipeline, KPI cards with fuente: pág. X, currency toggle FX-03, red flag severity display, executive report generation + PDF download)
 - [ ] 11-03-PLAN.md — tests/test_backward_compat.py: 11 automated tests (lazy imports, duplicate keys, PDF output, API key guard) + human verification checkpoint for all 6 success criteria
 
+### Phase 12: Learned Synonyms
+**Goal**: Build an adaptive financial terminology learning system that captures unmatched Spanish labels from PDF extractions, accumulates candidates, and allows human-reviewed expansion of the concept map — improving extraction coverage over time without risk of silent mis-mappings
+**Depends on**: Phase 11
+**Requirements**: SYN-01, SYN-02, SYN-03, SYN-04
+**Success Criteria** (what must be TRUE):
+  1. Unmatched labels with numeric values are captured to data/latam/learned_candidates.jsonl during every extraction run — never blocking the pipeline
+  2. data/latam/learned_synonyms.json is loaded at latam_concept_map import time — approved synonyms immediately affect the next extraction without code changes
+  3. The "Terminología Aprendida" panel in the LATAM tab shows pending candidates with Claude-assisted mapping suggestions (claude-haiku-4-5) on demand
+  4. Clicking Approve writes the mapping to learned_synonyms.json and the label resolves correctly on the next extraction; Reject excludes the label from future review
+**Plans**: 3 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — latam_extractor.py: _append_candidate() capture + latam_concept_map.py: learned_synonyms.json loader + seed 5 MiRed IPS synonyms
+- [ ] 12-02-PLAN.md — latam_synonym_reviewer.py: get_review_candidates() + suggest_mapping() (claude-haiku-4-5) + approve_synonym() + reject_synonym()
+- [ ] 12-03-PLAN.md — app.py: _render_synonym_panel() inside LATAM tab — candidate list, Claude suggestion button, Approve/Reject controls
+
 ## Progress
 
 **Execution Order:**
@@ -223,3 +240,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. PDF Extraction & KPI Mapping | 3/3 | Complete   | 2026-03-06 | - |
 | 9. Orchestration & Red Flags | 2/2 | Complete   | 2026-03-06 | - |
 | 10. Dashboard & Report | 2/2 | Complete    | 2026-03-07 | - |
+| 12. Learned Synonyms | 1/6 | In Progress|  | - |
