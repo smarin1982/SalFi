@@ -16,9 +16,12 @@ Exports:
 """
 
 import re
+from pathlib import Path
 from typing import Optional
 
 from loguru import logger
+
+_LEARNED_SYNONYMS_FILE = Path("data/latam/learned_synonyms.json")
 
 # ---------------------------------------------------------------------------
 # LATAM_CONCEPT_MAP
@@ -247,6 +250,41 @@ DEFAULT_CRITICAL_FIELDS: set[str] = {
 
 
 # ---------------------------------------------------------------------------
+# Learned synonyms loader
+# ---------------------------------------------------------------------------
+
+def _load_learned_synonyms() -> dict[str, str]:
+    """Load approved synonyms from learned_synonyms.json.
+
+    Returns dict mapping lowercase label -> canonical_field.
+    Returns {} if file missing or malformed — never raises.
+
+    File format (list of objects):
+    [{"label": "ganancia antes de impuesto", "canonical": "operating_income", ...}]
+    """
+    import json
+
+    result: dict[str, str] = {}
+    if not _LEARNED_SYNONYMS_FILE.exists():
+        return result
+    try:
+        with open(_LEARNED_SYNONYMS_FILE, "r", encoding="utf-8") as fh:
+            entries = json.load(fh)
+        for entry in entries:
+            label = entry.get("label", "").strip().lower()
+            canonical = entry.get("canonical", "").strip()
+            if label and canonical:
+                result[label] = canonical
+    except Exception:  # noqa: BLE001
+        pass  # corrupt file — silently return empty dict
+    return result
+
+
+# Loaded once at import time. Re-import the module (or call reload) to pick up changes.
+_LEARNED_SYNONYMS: dict[str, str] = _load_learned_synonyms()
+
+
+# ---------------------------------------------------------------------------
 # map_to_canonical
 # ---------------------------------------------------------------------------
 
@@ -307,6 +345,11 @@ def map_to_canonical(label: str) -> Optional[str]:
         )
         if synonym_in_label or label_in_synonym:
             return canonical
+
+    # Fallback: check human-approved learned synonyms (base map always wins)
+    label_lower = label.strip().lower()
+    if label_lower in _LEARNED_SYNONYMS:
+        return _LEARNED_SYNONYMS[label_lower]
 
     return None
 

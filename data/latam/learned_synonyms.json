@@ -1,0 +1,32 @@
+[
+  {
+    "label": "ganancia antes de impuesto",
+    "canonical": "operating_income",
+    "approved_by": "seed",
+    "date": "2026-03-10"
+  },
+  {
+    "label": "ganancia o perdida del año",
+    "canonical": "net_income",
+    "approved_by": "seed",
+    "date": "2026-03-10"
+  },
+  {
+    "label": "ganancia del año",
+    "canonical": "net_income",
+    "approved_by": "seed",
+    "date": "2026-03-10"
+  },
+  {
+    "label": "amornizaciones",
+    "canonical": "depreciation_amortization",
+    "approved_by": "seed",
+    "date": "2026-03-10"
+  },
+  {
+    "label": "amortizaciones",
+    "canonical": "depreciation_amortization",
+    "approved_by": "seed",
+    "date": "2026-03-10"
+  }
+]
