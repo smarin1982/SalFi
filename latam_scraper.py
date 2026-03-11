@@ -102,25 +102,71 @@ COMMON_DOC_PATHS = [
     "/relaciones-con-inversionistas/",
 ]
 
-# Keywords to identify financial report PDFs by filename / link text / URL path.
-# Checked against: href (full path), filename (basename), and visible link text.
-PDF_FINANCIAL_FILENAME_KEYWORDS = [
-    # Spanish — states / reports
-    "estado", "estados",
+# ---------------------------------------------------------------------------
+# Three-tier keyword scoring for PDF filename / link text relevance.
+#
+# Tier 1 — FINANCIAL STATEMENTS (highest priority)
+#   Pure balance sheet / income statement / cash flow documents.
+#   These contain the exact structured data the extractor needs.
+#
+# Tier 2 — ANNUAL / MANAGEMENT REPORTS (medium priority)
+#   Contain financial data but mixed with operational narrative.
+#   Use as fallback when no Tier-1 PDF is found.
+#
+# Tier 3 — GENERIC FINANCIAL SIGNAL (low priority)
+#   Any other document with financial language — last resort.
+# ---------------------------------------------------------------------------
+
+PDF_KEYWORDS_TIER1 = [
+    # Spanish
+    "estados financieros",
+    "estado financiero",
+    "estados-financieros",
+    "estado-financiero",
+    "estados_financieros",
+    "balance general",
+    "balance-general",
+    "balance_general",
+    "estado de situacion financiera",
+    "estado de resultados",
+    "estado de flujo",
+    "estados contables",
+    "cuentas anuales",
+    # English
+    "financial statements",
+    "financial-statements",
+    "balance sheet",
+]
+
+PDF_KEYWORDS_TIER2 = [
+    # Spanish
+    "informe anual",
+    "informe-anual",
+    "informe_anual",
+    "reporte anual",
+    "reporte-anual",
+    "memoria anual",
+    "memoria-anual",
+    "informe de gestion",
+    "informe-de-gestion",
+    "informe_de_gestion",
+    "informe de gestión",
+    "reporte de gestion",
+    "reporte-de-gestion",
+    "rendicion de cuentas",
+    "rendicion-de-cuentas",
+    # English
+    "annual report",
+    "annual-report",
+    "management report",
+]
+
+PDF_KEYWORDS_TIER3 = [
     "financiero", "financiera", "financieros",
-    "informe", "informes",
-    "reporte", "reportes",
-    "gestion", "gestión",
-    "balance",
-    "memoria",
-    "anual",
-    "resultado", "resultados",
-    "utilidad",
-    "rendicion", "rendición",
-    "transparencia",
-    "sostenibilidad",
-    # English equivalents (multinationals often mix)
-    "annual", "report", "financial", "earnings",
+    "informe", "reporte",
+    "balance", "resultado", "utilidad",
+    "transparencia", "sostenibilidad",
+    "annual", "financial", "earnings",
 ]
 
 # Nav link text fragments indicating financial document sections
@@ -484,48 +530,92 @@ async def _async_find_pdf_link_on_page(page, year: int) -> Optional[str]:
 
 def _score_pdf_link(href: str, link_text: str, year: int) -> int:
     """
-    Score a PDF href+link_text for financial-report relevance.
+    Score a PDF href+link_text for financial-report relevance using three tiers.
 
-    Returns an integer score (higher = more relevant):
-      +3  financial keyword in filename (basename of URL path)
-      +2  financial keyword in link text
-      +1  financial keyword elsewhere in href path
-      +2  target year or prior year in href or text
-      0   no financial signal at all (caller should skip)
+    Tier scoring (filename match beats link text, which beats path):
+      Tier 1 — "estados financieros", "balance general", etc.  → +10 filename / +8 text / +5 path
+      Tier 2 — "informe anual", "informe de gestión", etc.     →  +5 filename / +4 text / +2 path
+      Tier 3 — generic ("financiero", "balance", etc.)         →  +2 filename / +1 text
+
+    Year bonus (+3) applied on top when tier > 0.
+
+    Returns 0 when no financial signal found — caller skips this PDF.
+    Highest-scoring candidate wins when multiple PDFs exist on a page.
     """
-    score = 0
-    href_lower = href.lower()
-    text_lower = link_text.lower()
-
-    # Extract filename from URL path for targeted matching
     try:
         path = urlparse(href).path.lower()
-        filename = path.rsplit("/", 1)[-1]  # e.g. "informe-anual-2024.pdf"
+        filename = path.rsplit("/", 1)[-1]
     except Exception:
-        path = href_lower
-        filename = href_lower
+        path = href.lower()
+        filename = href.lower()
 
-    for kw in PDF_FINANCIAL_FILENAME_KEYWORDS:
-        if kw in filename:
-            score += 3
-            break  # one match in filename is enough
+    text_lower = link_text.lower()
+    # Normalise: remove accents for matching (simple fold)
+    import unicodedata
+    def _fold(s: str) -> str:
+        return unicodedata.normalize("NFD", s).encode("ascii", "errors").decode("ascii", "ignore") if False else s.replace("ó","o").replace("é","e").replace("á","a").replace("í","i").replace("ú","u").replace("ñ","n").replace("ü","u")
 
-    for kw in PDF_FINANCIAL_FILENAME_KEYWORDS:
-        if kw in text_lower:
-            score += 2
+    filename_n = _fold(filename)
+    text_n = _fold(text_lower)
+    path_n = _fold(path)
+
+    score = 0
+
+    # --- Tier 1: financial statements ---
+    for kw in PDF_KEYWORDS_TIER1:
+        kw_n = _fold(kw)
+        if kw_n in filename_n:
+            score += 10
             break
-
-    if score == 0:
-        # No keyword in filename or text — check rest of path as last resort
-        for kw in PDF_FINANCIAL_FILENAME_KEYWORDS:
-            if kw in path:
-                score += 1
+    else:
+        for kw in PDF_KEYWORDS_TIER1:
+            kw_n = _fold(kw)
+            if kw_n in text_n:
+                score += 8
                 break
+        else:
+            for kw in PDF_KEYWORDS_TIER1:
+                kw_n = _fold(kw)
+                if kw_n in path_n:
+                    score += 5
+                    break
 
-    # Year bonus — only counts if there's already a financial signal
+    # --- Tier 2: annual/management reports (only if no Tier-1 match yet) ---
+    if score == 0:
+        for kw in PDF_KEYWORDS_TIER2:
+            kw_n = _fold(kw)
+            if kw_n in filename_n:
+                score += 5
+                break
+        else:
+            for kw in PDF_KEYWORDS_TIER2:
+                kw_n = _fold(kw)
+                if kw_n in text_n:
+                    score += 4
+                    break
+            else:
+                for kw in PDF_KEYWORDS_TIER2:
+                    kw_n = _fold(kw)
+                    if kw_n in path_n:
+                        score += 2
+                        break
+
+    # --- Tier 3: generic signal (only if still zero) ---
+    if score == 0:
+        for kw in PDF_KEYWORDS_TIER3:
+            if kw in filename_n:
+                score += 2
+                break
+        if score == 0:
+            for kw in PDF_KEYWORDS_TIER3:
+                if kw in text_n:
+                    score += 1
+                    break
+
+    # Year bonus — only when there's already a financial signal
     if score > 0 and year:
         if str(year) in href or str(year - 1) in href or str(year) in text_lower:
-            score += 2
+            score += 3
 
     return score
 
