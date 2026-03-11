@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 12 of 12 (Learned Synonyms) — IN PROGRESS
-Plan: 2 of 6 in current phase — 12-02 complete
-Status: Phase 12 in progress — suggestion engine shipped (12-02 complete)
-Last activity: 2026-03-11 — Phase 12 Plan 02: latam_synonym_reviewer.py with suggest_mapping() + approve/reject writers
+Plan: 3 of 6 in current phase — 12-03 complete
+Status: Phase 12 in progress — review panel shipped (12-03 complete)
+Last activity: 2026-03-11 — Phase 12 Plan 03: Terminología Aprendida review panel in app.py
 
 Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
 
@@ -41,6 +41,7 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 | 10-human-validation-lite | 02 | 45min | 2 | 3 |
 | 12-learned-synonyms | 01 | 4min | 2 | 3 |
 | 12-learned-synonyms | 02 | 4min | 1 | 1 |
+| 12-learned-synonyms | 03 | 2min | 1 | 1 |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 - [12-02 Synonym Reviewer]: Module-level latam_concept_map import avoids dotenv side-effects inside suggest_mapping — latam_concept_map triggers python-dotenv at import, which re-populates ANTHROPIC_API_KEY; moved to module level so dotenv runs before caller code modifies environment
 - [12-02 Synonym Reviewer]: suggest_mapping uses module-level _CANONICAL_CHOICES (not local import) — prevents key re-injection from dotenv inside the function body; all error paths return SuggestionResult(canonical=None) instead of raising
 
+- [12-03 Review Panel]: _render_synonym_panel() defined before _render_latam_tab() — ensures call site resolves at definition time; approved/rejected state stored in learned_synonyms.json (not session_state) to survive app restarts
+
 ### Pending Todos
 
 None.
@@ -113,5 +116,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-11
-Stopped at: Completed 12-02-PLAN.md — suggestion engine latam_synonym_reviewer.py shipped; suggest_mapping() + approve/reject writers ready for Plan 03 review panel
+Stopped at: Completed 12-03-PLAN.md — Terminología Aprendida review panel in app.py; awaiting human verification of UI (checkpoint: human-verify)
 Resume file: None
