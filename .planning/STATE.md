@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 12 of 12 (Learned Synonyms) — IN PROGRESS
-Plan: 5 of 6 in current phase — 12-05 complete
-Status: Phase 12 in progress — financial summary table + working capital currency fix shipped (12-05 complete)
-Last activity: 2026-03-11 — Phase 12 Plan 05: Financial Summary Table + Working Capital Currency Fix
+Plan: 6 of 6 in current phase — 12-06 complete
+Status: Phase 12 COMPLETE — smart scraper with per-provider learning shipped (12-06 complete)
+Last activity: 2026-03-11 — Phase 12 Plan 06: Smart Web Scraper with Per-Provider Learning
 
 Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
 
@@ -44,6 +44,8 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 | 12-learned-synonyms | 03 | 2min | 1 | 1 |
 | 12-learned-synonyms | 04 | 26min | 3 | 3 |
 | 12-learned-synonyms | 05 | 8min | 2 | 2 |
+| 12-learned-synonyms | 06 | 28min | 3 | 2 |
+| Phase 12-learned-synonyms P06 | 28min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -111,6 +113,11 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 - [12-05 Dashboard]: fx_rate_usd stored in meta.json as USD-per-native-unit; reverse conversion uses division (usd/rate = native); LatamAgent._build_meta now writes currency_original and fx_rate_usd
 - [12-05 Dashboard]: _format_latam_kpi_value gracefully degrades to USD when fx_rate_usd absent — existing meta.json files without the key show USD unchanged
 
+- [12-06 Scraper]: _validate_pdf_relevance scores PDF URLs 0.0-1.0; domain match is +0.5 (dominant signal); threshold 0.5 blocks wrong-domain results like INEGI for a Colombian IPS query
+- [12-06 Scraper]: Corporate site crawl runs before DDGS — same-origin PDFs get highest trust; up to 5 nav links followed + 9 common doc paths tried
+- [12-06 Scraper]: scraper_profiles.json uses append-only merge strategy; pdf_url_pattern/nav_path preserved on empty update; failed_ddgs_queries accumulates as deduplicated list
+- [12-06 Scraper]: search_and_download() strategy order: profile pattern (fastest) → corporate crawl → ddgs (relevance gate >=0.5) → playwright fallback
+
 ### Pending Todos
 
 None.
@@ -125,5 +132,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-11
-Stopped at: Completed 12-05-PLAN.md — Financial Summary Table + Working Capital Currency Fix
+Stopped at: Completed 12-06-PLAN.md — Smart Web Scraper with Per-Provider Learning (Phase 12 COMPLETE)
 Resume file: None

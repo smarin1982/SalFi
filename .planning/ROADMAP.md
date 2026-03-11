@@ -103,7 +103,7 @@ Plans:
 - [x] **Phase 9: Orchestration & Red Flags** - LatamAgent orchestrator, web search (ddgs), red flags engine with YAML thresholds (completed 2026-03-06)
 - [x] **Phase 10: Human Validation Lite** - Analyst confirmation screen for extracted key values before writing to Parquet (completed 2026-03-07)
 - [ ] **Phase 11: Dashboard & Report** - Additive LATAM section in app.py, multi-currency toggle, evidence viewer, executive report (Claude API), PDF download
-- [ ] **Phase 12: Learned Synonyms** - Adaptive terminology learning: candidate capture, Claude-assisted suggestions, human approval UI
+- [x] **Phase 12: Learned Synonyms** - Adaptive terminology learning: candidate capture, Claude-assisted suggestions, human approval UI (completed 2026-03-11)
 
 ## Phase Details
 
@@ -240,4 +240,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. PDF Extraction & KPI Mapping | 3/3 | Complete   | 2026-03-06 | - |
 | 9. Orchestration & Red Flags | 2/2 | Complete   | 2026-03-06 | - |
 | 10. Dashboard & Report | 2/2 | Complete    | 2026-03-07 | - |
-| 12. Learned Synonyms | 5/6 | In Progress|  | - |
+| 12. Learned Synonyms | 6/6 | Complete   | 2026-03-11 | - |
