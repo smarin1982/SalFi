@@ -956,6 +956,9 @@ def _render_latam_tab() -> None:
             "Ingresa una URL corporativa o sube un PDF y haz clic en 'Ejecutar' "
             "para analizar una empresa LATAM."
         )
+        # Still render synonym panel — candidates may exist from a previous session
+        st.divider()
+        _render_synonym_panel()
         return
 
     company_options = {f"{c['name']} ({c['country']})": c["slug"] for c in companies}
