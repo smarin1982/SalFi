@@ -18,9 +18,9 @@ All strategies converge on the same ScraperResult return type and write
 downloaded PDFs to data/latam/{country}/{slug}/raw/{filename}.pdf.
 
 CRITICAL: Playwright is always called via ThreadPoolExecutor — never from the
-Streamlit main thread (asyncio/Tornado conflict on Windows 11). This module
-uses sync_playwright inside the thread worker; the thread has its own fresh
-sync context independent of any event loop on the calling thread.
+Streamlit main thread (asyncio/Tornado conflict on Windows 11). Thread workers
+use async_playwright + asyncio.ProactorEventLoop (sync_playwright raises
+NotImplementedError when called from a ThreadPoolExecutor on Windows).
 """
 from __future__ import annotations
 import concurrent.futures
@@ -39,8 +39,9 @@ import requests
 from ddgs import DDGS
 from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
 from loguru import logger
-from playwright.sync_api import TimeoutError as PlaywrightTimeout
-from playwright.sync_api import sync_playwright
+import asyncio
+from playwright.async_api import TimeoutError as PlaywrightTimeout
+from playwright.async_api import async_playwright
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +168,21 @@ def _validate_pdf_relevance(
     if url_lower.endswith(".pdf") or ".pdf?" in url_lower:
         score += 0.1
 
-    # +0.5 — domain match
+    # +0.2 — financial keywords in URL path
+    url_path = urlparse(pdf_url).path.lower()
+    has_financial_kw = any(kw in url_path for kw in PDF_PATH_RELEVANCE_KEYWORDS)
+    if has_financial_kw:
+        score += 0.2
+
+    # +0.1 — year in URL
+    has_year = bool(year and (str(year) in pdf_url or str(year - 1) in pdf_url))
+    if has_year:
+        score += 0.1
+
+    # +0.5 / +0.2 — domain match
+    #   Full +0.5 only when corroborated by financial keyword or year in URL.
+    #   +0.2 for domain-only match (prevents generic same-domain PDFs like lab
+    #   instruction manuals from clearing the 0.5 download threshold alone).
     try:
         pdf_host = urlparse(pdf_url).netloc.lower().lstrip("www.")
         target_domain = company_domain.lower().lstrip("www.")
@@ -179,21 +194,9 @@ def _validate_pdf_relevance(
             or pdf_host.endswith("." + target_domain)
             or target_domain.endswith("." + pdf_host)
         ):
-            score += 0.5
+            score += 0.5 if (has_financial_kw or has_year) else 0.2
     except Exception:
         pass
-
-    # +0.2 — financial keywords in URL path
-    url_path = urlparse(pdf_url).path.lower()
-    for kw in PDF_PATH_RELEVANCE_KEYWORDS:
-        if kw in url_path:
-            score += 0.2
-            break
-
-    # +0.1 — year in URL
-    if year:
-        if str(year) in pdf_url or str(year - 1) in pdf_url:
-            score += 0.1
 
     # +0.1 — PDF file size > 100KB (HEAD request, best-effort)
     try:
@@ -245,77 +248,91 @@ def _playwright_crawl_corporate(domain: str, year: int) -> Optional[str]:
     """
     Thread worker: crawl corporate website for financial PDF.
 
-    Uses sync_playwright in its own thread context — independent of any
-    event loop on the calling thread.
+    Uses async_playwright + ProactorEventLoop — required on Windows when called
+    from a ThreadPoolExecutor (sync_playwright raises NotImplementedError there).
     """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_async_crawl_corporate(domain, year))
+    finally:
+        loop.close()
+
+
+async def _async_crawl_corporate(domain: str, year: int) -> Optional[str]:
+    """Async implementation of corporate website crawl for financial PDF."""
     # Normalise domain to a full URL
     base_url = domain if domain.startswith("http") else f"https://{domain}"
     parsed = urlparse(base_url)
     base_origin = f"{parsed.scheme}://{parsed.netloc}"
     target_domain = parsed.netloc.lower().lstrip("www.")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
         try:
             # --- Step 1: Visit root and look for financial nav links ---
             try:
-                page.goto(base_url, timeout=30_000, wait_until="domcontentloaded")
+                await page.goto(base_url, timeout=30_000, wait_until="domcontentloaded")
                 try:
-                    page.wait_for_load_state("networkidle", timeout=15_000)
+                    await page.wait_for_load_state("networkidle", timeout=15_000)
                 except PlaywrightTimeout:
                     pass
             except Exception as e:
-                logger.debug(f"_playwright_crawl_corporate: goto {base_url} failed: {e}")
+                logger.debug(f"_async_crawl_corporate: goto {base_url} failed: {e}")
                 return None
 
             # Check for PDFs directly on root page
-            pdf_url = _find_pdf_link_on_page(page, year)
+            pdf_url = await _async_find_pdf_link_on_page(page, year)
             if pdf_url:
                 pdf_url = _make_absolute(pdf_url, base_origin)
                 if _is_on_domain(pdf_url, target_domain):
                     return pdf_url
 
             # --- Step 2: Follow financial section nav links ---
-            financial_links = _find_financial_nav_links(page, base_origin)
-            for link_url in financial_links[:5]:  # Limit depth to avoid infinite loops
+            financial_links = await _async_find_financial_nav_links(page, base_origin)
+            for link_url in financial_links[:5]:
                 try:
-                    page.goto(link_url, timeout=20_000, wait_until="domcontentloaded")
+                    await page.goto(link_url, timeout=20_000, wait_until="domcontentloaded")
                     try:
-                        page.wait_for_load_state("networkidle", timeout=10_000)
+                        await page.wait_for_load_state("networkidle", timeout=10_000)
                     except PlaywrightTimeout:
                         pass
-                    pdf_url = _find_pdf_link_on_page(page, year)
+                    pdf_url = await _async_find_pdf_link_on_page(page, year)
                     if pdf_url:
                         pdf_url = _make_absolute(pdf_url, base_origin)
                         if _is_on_domain(pdf_url, target_domain):
                             return pdf_url
                 except Exception as e:
-                    logger.debug(f"_playwright_crawl_corporate: nav link {link_url} failed: {e}")
+                    logger.debug(f"_async_crawl_corporate: nav link {link_url} failed: {e}")
                     continue
 
             # --- Step 3: Try common document paths ---
             for path in COMMON_DOC_PATHS:
                 candidate_url = base_origin + path
                 try:
-                    resp = page.goto(candidate_url, timeout=15_000, wait_until="domcontentloaded")
+                    resp = await page.goto(candidate_url, timeout=15_000, wait_until="domcontentloaded")
                     if resp and resp.status >= 400:
-                        continue  # Skip 404/403 paths
+                        continue
                     try:
-                        page.wait_for_load_state("networkidle", timeout=10_000)
+                        await page.wait_for_load_state("networkidle", timeout=10_000)
                     except PlaywrightTimeout:
                         pass
-                    pdf_url = _find_pdf_link_on_page(page, year)
+                    pdf_url = await _async_find_pdf_link_on_page(page, year)
                     if pdf_url:
                         pdf_url = _make_absolute(pdf_url, base_origin)
                         if _is_on_domain(pdf_url, target_domain):
                             return pdf_url
                 except Exception as e:
-                    logger.debug(f"_playwright_crawl_corporate: path {path} failed: {e}")
+                    logger.debug(f"_async_crawl_corporate: path {path} failed: {e}")
                     continue
 
         finally:
-            browser.close()
+            await browser.close()
 
     return None
 
@@ -366,6 +383,69 @@ def _find_financial_nav_links(page, base_origin: str) -> list[str]:
             continue
 
     return found
+
+
+async def _async_find_financial_nav_links(page, base_origin: str) -> list[str]:
+    """Async version of _find_financial_nav_links for use with async_playwright."""
+    found: list[str] = []
+    seen: set[str] = set()
+    try:
+        all_links = await page.locator("a[href]").all()
+    except Exception:
+        return found
+    for link in all_links:
+        try:
+            href = await link.get_attribute("href") or ""
+            text = ""
+            try:
+                text = (await link.inner_text() or "").lower()
+            except Exception:
+                pass
+            href_lower = href.lower()
+            is_financial = any(kw in text for kw in NAV_FINANCIAL_KEYWORDS) or \
+                           any(kw.replace(" ", "-") in href_lower or
+                               kw.replace(" ", "_") in href_lower
+                               for kw in NAV_FINANCIAL_KEYWORDS)
+            if not is_financial:
+                continue
+            if href_lower.endswith(".pdf") or ".pdf?" in href_lower:
+                continue
+            abs_url = _make_absolute(href, base_origin)
+            if abs_url and abs_url not in seen:
+                seen.add(abs_url)
+                found.append(abs_url)
+        except Exception:
+            continue
+    return found
+
+
+async def _async_find_pdf_link_on_page(page, year: int) -> Optional[str]:
+    """Async version of _find_pdf_link_on_page for use with async_playwright."""
+    for selector in PDF_LINK_SELECTORS:
+        try:
+            links = await page.locator(selector).all()
+        except Exception:
+            continue
+        for link in links:
+            try:
+                href = await link.get_attribute("href") or ""
+                text = ""
+                try:
+                    text = await link.inner_text() or ""
+                except Exception:
+                    pass
+                if str(year) in href or str(year) in text:
+                    return href
+            except Exception:
+                continue
+        if links:
+            try:
+                href = await links[0].get_attribute("href") or ""
+                if href:
+                    return href
+            except Exception:
+                continue
+    return None
 
 
 def _make_absolute(href: str, base_origin: str) -> str:
