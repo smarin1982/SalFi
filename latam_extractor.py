@@ -374,29 +374,45 @@ def _extract_pdfplumber(
                     if not row or len(row) < 2:
                         continue
 
+                    # Detect header row (all non-numeric cells).
+                    # Year values like '2024' are treated as non-numeric — they are column
+                    # headers, not financial values — so they don't prevent header detection.
+                    # NOTE: process year-header rows BEFORE the empty-label guard so that
+                    # headers like ['', '', '2024', '', '2023', 'Var'] are not skipped.
+                    _YEAR_RE = re.compile(r"^\d{4}$")
+                    is_header = all(
+                        (
+                            cell is None
+                            or _YEAR_RE.match(str(cell).strip())
+                            or not parse_latam_number(str(cell))
+                        )
+                        for cell in row[1:]
+                    )
+                    if is_header and fiscal_year:
+                        # Only update year_col when this row actually contains the target
+                        # year — empty rows also satisfy is_header and must not overwrite
+                        # a year_col that was already correctly detected.
+                        if str(fiscal_year) in str(row):
+                            detected_col = _find_year_column(row, fiscal_year)
+                            if detected_col != 1:
+                                year_col = detected_col
+                            else:
+                                year_col = 1  # year in row but in first column
+                                warnings_list.append("fallback_year_column_used")
+                        continue
+
                     label = str(row[0] or "").strip()
                     if not label:
                         continue
 
-                    # Detect header row (all non-numeric cells)
-                    is_header = all(
-                        (cell is None or not parse_latam_number(str(cell)))
-                        for cell in row[1:]
-                    )
-                    if is_header and fiscal_year:
-                        detected_col = _find_year_column(row, fiscal_year)
-                        if detected_col != 1:
-                            year_col = detected_col
-                        else:
-                            # Fallback used — warn only if we couldn't confirm
-                            if str(fiscal_year) not in str(row):
-                                year_col = 1
-                                warnings_list.append("fallback_year_column_used")
-                        continue
-
-                    # Parse numeric value using year column if known
+                    # Parse numeric value using year column if known.
+                    # Strip trailing footnote markers (e.g. ' #', ' *') that some LATAM
+                    # PDFs append to values before passing to parse_latam_number.
                     if year_col is not None and year_col < len(row):
-                        value = parse_latam_number(str(row[year_col] or ""))
+                        _cell = re.sub(
+                            r"[^0-9.,)(\-]+$", "", str(row[year_col] or "").strip()
+                        )
+                        value = parse_latam_number(_cell)
                         if value is None:
                             value = _find_value_for_year(row, fiscal_year)
                     else:

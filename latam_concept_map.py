@@ -364,9 +364,12 @@ def map_to_canonical(label: str) -> Optional[str]:
     candidates.sort(key=lambda x: len(x[1]), reverse=True)
 
     for canonical, synonym_plain in candidates:
-        # Direction 1: synonym appears within the normalised label
-        #   e.g. "total activos" matches "total activos (nota 3)"
-        synonym_in_label = synonym_plain in normalized_plain
+        # Direction 1: synonym appears as a whole-word sequence within the normalised label
+        #   e.g. "ingresos" matches "ingresos operacionales" but NOT "reingresos..."
+        #   Uses negative lookbehind/lookahead to enforce word boundaries.
+        synonym_in_label = bool(
+            re.search(r"(?<![a-z])" + re.escape(synonym_plain) + r"(?![a-z])", normalized_plain)
+        )
         # Direction 2: label appears within the synonym
         #   Only valid when the label is AT LEAST as long as the synonym.
         #   Prevents a short input like "total activos" from being swallowed by a
