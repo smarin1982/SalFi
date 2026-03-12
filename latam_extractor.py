@@ -58,6 +58,10 @@ pytesseract.pytesseract.tesseract_cmd = _TESSERACT_CMD
 # Path where unmatched labels are recorded for future synonym review
 _CANDIDATES_FILE = Path("data/latam/learned_candidates.jsonl")
 
+# Labels to exclude from candidate capture — year column headers and aggregate totals
+_CANDIDATE_YEAR_RE = re.compile(r"^\d{4}$")
+_CANDIDATE_STOP_WORDS = frozenset({"total", "subtotal", "suma", "neto"})
+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -227,6 +231,15 @@ def _append_candidate(
     If the label already exists, increment seen_count and update timestamp.
     Never raises — extraction must not be blocked by logging failures.
     """
+    # Skip noise labels: year-only strings ('2020') and aggregate stop-words ('Total')
+    _label_stripped = label.strip()
+    if not _label_stripped or len(_label_stripped) < 4:
+        return  # already guarded by callers but belt-and-suspenders
+    if _CANDIDATE_YEAR_RE.match(_label_stripped):
+        return  # column header like '2020', '2021'
+    if _label_stripped.lower() in _CANDIDATE_STOP_WORDS:
+        return  # aggregate row label like 'Total', 'Subtotal'
+
     import json
     from datetime import date
 
