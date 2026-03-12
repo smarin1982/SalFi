@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 12 of 12 (Learned Synonyms) — IN PROGRESS
-Plan: 6 of 6 in current phase — 12-06 complete
-Status: Phase 12 COMPLETE — smart scraper with per-provider learning shipped (12-06 complete)
-Last activity: 2026-03-11 — Phase 12 Plan 06: Smart Web Scraper with Per-Provider Learning
+Plan: 7 of 7 in current phase — 12-07 complete
+Status: Phase 12 gap closure plan 07 complete — candidate queue noise filter shipped
+Last activity: 2026-03-12 — Phase 12 Plan 07: Candidate Queue Noise Filter
 
 Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
 
@@ -46,6 +46,8 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 | 12-learned-synonyms | 05 | 8min | 2 | 2 |
 | 12-learned-synonyms | 06 | 28min | 3 | 2 |
 | Phase 12-learned-synonyms P06 | 28min | 3 tasks | 2 files |
+| 12-learned-synonyms | 07 | 6min | 2 | 2 |
+| Phase 12-learned-synonyms P07 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -118,6 +120,10 @@ Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases
 - [12-06 Scraper]: scraper_profiles.json uses append-only merge strategy; pdf_url_pattern/nav_path preserved on empty update; failed_ddgs_queries accumulates as deduplicated list
 - [12-06 Scraper]: search_and_download() strategy order: profile pattern (fastest) → corporate crawl → ddgs (relevance gate >=0.5) → playwright fallback
 
+- [12-07 Noise Filter]: Write-time guard placed BEFORE try block in _append_candidate() — semantic guard, no I/O for noise labels; year headers (2020-2023) and standalone stop-words (total/subtotal/suma/neto) blocked
+- [12-07 Noise Filter]: 'neto' blocked only as standalone whole-string match — 'ingreso neto' (phrase) still passes through
+- [12-07 Noise Filter]: learned_candidates.jsonl NOT modified — noise excluded at read time via _is_noise_label(); raw data preserved
+
 ### Pending Todos
 
 None.
@@ -131,6 +137,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-11
-Stopped at: Completed 12-06-PLAN.md — Smart Web Scraper with Per-Provider Learning (Phase 12 COMPLETE)
+Last session: 2026-03-12
+Stopped at: Completed 12-07-PLAN.md — Candidate Queue Noise Filter
 Resume file: None
