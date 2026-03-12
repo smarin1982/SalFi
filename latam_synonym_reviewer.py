@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re as _re_reviewer
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -54,6 +55,26 @@ class SuggestionResult:
     alternative_canonicals: list[str] = field(default_factory=list)
 
 
+_NOISE_YEAR_RE = _re_reviewer.compile(r"^\d{4}$")
+_NOISE_STOP_WORDS = frozenset({"total", "subtotal", "suma", "neto"})
+
+
+def _is_noise_label(label: str) -> bool:
+    """Return True if label is a noise entry (year header or aggregate stop-word).
+
+    Used to filter existing learned_candidates.jsonl records that were captured
+    before the write-time filter was added — backwards compatibility clean-up.
+    """
+    stripped = label.strip()
+    if not stripped or len(stripped) < 4:
+        return True
+    if _NOISE_YEAR_RE.match(stripped):
+        return True
+    if stripped.lower() in _NOISE_STOP_WORDS:
+        return True
+    return False
+
+
 def get_review_candidates(
     min_seen_count: int = 2,
     force_labels: Optional[list[str]] = None,
@@ -94,6 +115,9 @@ def get_review_candidates(
                 continue
             # Skip already approved
             if label_lower in approved_labels:
+                continue
+            # Skip noise labels: year column headers and standalone aggregate stop-words
+            if _is_noise_label(rec.get("label", "")):
                 continue
             # Include if meets threshold or explicitly forced
             seen = rec.get("seen_count", 1)
