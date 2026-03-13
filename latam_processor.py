@@ -153,17 +153,59 @@ def process(
         df_combined = pd.concat([df_existing, df_new]).drop_duplicates(
             subset=["fiscal_year"], keep="last"
         )
-        df_combined = df_combined.sort_values("fiscal_year").reset_index(drop=True)
         # Re-enforce float64 dtypes after concat (nullable integer/object pollution guard)
         for col in _MONETARY_COLUMNS:
             df_combined[col] = df_combined[col].astype("float64")
     else:
         df_combined = df_new
 
+    # Always sort ascending by fiscal_year so pct_change() and shift(1) KPIs
+    # (revenue_growth_yoy, DSO, inventory_turnover, etc.) compute in the correct
+    # forward-time direction. This must happen even on first run (else branch above)
+    # because df_new comes from the extractor in [primary, comparative] order which
+    # is typically [2024, 2023] — descending.
+    df_combined = df_combined.sort_values("fiscal_year").reset_index(drop=True)
+
     # ------------------------------------------------------------------
     # Step 5: Calculate KPIs (unchanged call to processor.calculate_kpis)
     # ------------------------------------------------------------------
     df_kpis = calculate_kpis(df_combined)
+
+    # ------------------------------------------------------------------
+    # Step 5b: Override NaN KPIs with directly-extracted indicator values.
+    #
+    # Some T2 management reports (e.g. CO informe de gestión) include a
+    # financial indicators table with pre-computed ratios (razón corriente,
+    # EBITDA, DSO, DPO). These are extracted into ExtractionResult.fields
+    # but are NOT in FINANCIALS_COLUMNS so they don't reach financials.parquet.
+    # When the KPI computation yields NaN (because balance sheet is absent),
+    # use the directly-extracted values as overrides.
+    # ------------------------------------------------------------------
+    _KPI_OVERRIDE_FIELDS = ("current_ratio", "dso", "dpo")
+    for er in extraction_results:
+        fy = er.fiscal_year
+        if fy is None:
+            continue
+        mask = df_kpis["fiscal_year"] == fy
+        if not mask.any():
+            continue
+        for kpi_field in _KPI_OVERRIDE_FIELDS:
+            extracted_val = er.fields.get(kpi_field)
+            if extracted_val is None:
+                continue
+            try:
+                extracted_val = float(extracted_val)
+            except (TypeError, ValueError):
+                continue
+            if kpi_field in df_kpis.columns:
+                existing = df_kpis.loc[mask, kpi_field]
+                # Only override when computed value is NaN
+                if existing.isna().all():
+                    df_kpis.loc[mask, kpi_field] = extracted_val
+                    logger.debug(
+                        f"latam_processor: overriding NaN {kpi_field}={extracted_val} "
+                        f"from extracted indicator (fy={fy}, company={company_slug})"
+                    )
 
     # ------------------------------------------------------------------
     # Step 6: Write Parquet atomically (unchanged processor.save_parquet)
