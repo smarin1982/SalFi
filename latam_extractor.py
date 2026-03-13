@@ -154,14 +154,35 @@ def _detect_section(text_lower: str) -> str:
     return "unknown"
 
 
+def _year_in_cell(year: int, cell_str: str) -> bool:
+    """Return True if cell_str contains the year as a 4-digit string OR
+    as a 2-digit abbreviation with a preceding hyphen or space.
+
+    Examples (year=2024):
+        "2024"    → True   (exact)
+        "dic-24"  → True   (abbreviated: "-24")
+        "dic 24"  → True   (abbreviated: " 24")
+        "dic-2024"→ True   (full year after hyphen)
+        "2023"    → False
+        "1024"    → False  (not a year-like suffix)
+    """
+    s = str(cell_str or "")
+    if str(year) in s:
+        return True
+    # Match 2-digit suffix: hyphen/space + last-two-digits of year
+    suffix = str(year)[2:]  # e.g. "24" for 2024
+    return bool(re.search(r"[-\s]" + re.escape(suffix) + r"\b", s))
+
+
 def _find_year_column(header_row: list, target_year: int) -> int:
     """
     Scan a table header row for a cell containing target_year.
+    Recognises both "2024" and abbreviated "dic-24" / "dic 24" style headers.
     Returns the column index if found.
     Returns 1 as fallback (second column is typically most recent in LATAM reports).
     """
     for i, cell in enumerate(header_row or []):
-        if str(target_year) in str(cell or ""):
+        if _year_in_cell(target_year, str(cell or "")):
             return i
     return 1  # fallback — logged as warning by caller
 
@@ -306,24 +327,29 @@ def _append_candidate(
 # Fiscal year inference
 # ---------------------------------------------------------------------------
 
-def _infer_fiscal_years(ocr_text: str) -> tuple[int, int]:
+def _infer_fiscal_years(ocr_text: str) -> tuple[int, int, bool]:
     """
     Scan first 500 chars of OCR text for a year-pair pattern like:
       "2024 Y 2023", "2024 2023", "DICIEMBRE 2024 DICIEMBRE 2023"
-    Returns (primary_year, comparative_year).
-    Falls back to (current_year-1, current_year-2) if not found.
+    Returns (primary_year, comparative_year, primary_is_left).
+    primary_is_left=True when the more-recent year appears to the LEFT in the header.
+    Falls back to (current_year-1, current_year-2, False) if not found.
     """
     snippet = ocr_text[:500]
-    # Find all 4-digit years in range 2010-2030
-    years = [int(y) for y in re.findall(r'\b(20[12]\d)\b', snippet)]
-    years = sorted(set(years), reverse=True)
-    if len(years) >= 2:
-        return years[0], years[1]
-    elif len(years) == 1:
-        return years[0], years[0] - 1
+    # Find all 4-digit years in range 2010-2030, preserving position
+    year_matches = [(int(m.group()), m.start()) for m in re.finditer(r'\b(20[12]\d)\b', snippet)]
+    unique_years = sorted({y for y, _ in year_matches}, reverse=True)
+    if len(unique_years) >= 2:
+        primary, comp = unique_years[0], unique_years[1]
+        # Determine column order by first occurrence of each year in header
+        primary_pos = min(pos for y, pos in year_matches if y == primary)
+        comp_pos = min(pos for y, pos in year_matches if y == comp)
+        return primary, comp, primary_pos < comp_pos
+    elif len(unique_years) == 1:
+        return unique_years[0], unique_years[0] - 1, False
     else:
         now = datetime.now().year
-        return now - 1, now - 2
+        return now - 1, now - 2, False
 
 
 # ---------------------------------------------------------------------------
@@ -335,17 +361,32 @@ def _extract_pdfplumber(
     fiscal_year: int,
     company_slug: str = "",
     country: str = "",
-) -> ExtractionResult:
+) -> list[ExtractionResult]:
     """
     Layer 1: structured table extraction using pdfplumber.
 
     Tries lined table settings first, then falls back to text-alignment settings.
     Logs unmatched Spanish labels via logger.debug (never silently skips).
+
+    Returns a list with 1 or 2 ExtractionResult items. When a comparative column
+    for fiscal_year-1 is detected in a header row, a second ExtractionResult is
+    included so that revenue_growth_yoy can be computed downstream.
     """
     fields: dict = {}
     source_map: dict = {}
     warnings_list: list = []
     current_section = "unknown"
+    # Comparative (prior) year data — populated when a second year column is detected
+    prior_fields: dict = {}
+    prior_year = fiscal_year - 1 if fiscal_year else 0
+
+    # year_col persists across pages: once detected from a header row, it applies to
+    # all subsequent pages until a new header row overrides it. This is necessary because
+    # balance sheet pages often share the same column layout as the income statement page
+    # but don't repeat the year header row — resetting per-page would lose the column
+    # position and fall back to right-to-left scanning (picking the wrong column).
+    year_col: Optional[int] = None
+    prior_year_col: Optional[int] = None
 
     with pdfplumber.open(pdf_path) as pdf:
         for page_idx, page in enumerate(pdf.pages):
@@ -362,9 +403,6 @@ def _extract_pdfplumber(
             tables = page.extract_tables(TABLE_SETTINGS_LINED) or []
             if not tables:
                 tables = page.extract_tables(TABLE_SETTINGS_TEXT) or []
-
-            # Detect header row for year-column selection
-            year_col: Optional[int] = None
 
             for table in tables:
                 if not table:
@@ -392,16 +430,30 @@ def _extract_pdfplumber(
                         # Only update year_col when this row actually contains the target
                         # year — empty rows also satisfy is_header and must not overwrite
                         # a year_col that was already correctly detected.
-                        if str(fiscal_year) in str(row):
+                        # _year_in_cell() also matches abbreviated forms like "dic-24".
+                        row_str = str(row)
+                        if any(_year_in_cell(fiscal_year, str(c or "")) for c in row):
                             detected_col = _find_year_column(row, fiscal_year)
                             if detected_col != 1:
                                 year_col = detected_col
                             else:
                                 year_col = 1  # year in row but in first column
                                 warnings_list.append("fallback_year_column_used")
+                            # Also detect the comparative (prior) year column
+                            if prior_year and any(_year_in_cell(prior_year, str(c or "")) for c in row):
+                                detected_prior = _find_year_column(row, prior_year)
+                                # Only trust if it's distinct from year_col
+                                if detected_prior != year_col and _year_in_cell(prior_year, str(row[detected_prior] or "")):
+                                    prior_year_col = detected_prior
                         continue
 
+                    # Label is normally in col 0. Some LATAM indicator tables (e.g. CO
+                    # management report page 41) place the label in col 1 with col 0 empty.
                     label = str(row[0] or "").strip()
+                    if not label and len(row) > 1:
+                        col1 = str(row[1] or "").strip()
+                        if col1 and not parse_latam_number(col1):
+                            label = col1
                     if not label:
                         continue
 
@@ -413,10 +465,25 @@ def _extract_pdfplumber(
                             r"[^0-9.,)(\-]+$", "", str(row[year_col] or "").strip()
                         )
                         value = parse_latam_number(_cell)
+                        # When the header column is empty in the data row (pdfplumber merged-cell
+                        # misalignment), try the left neighbor before falling back to right-to-left.
+                        if value is None and year_col > 0:
+                            _cell_left = re.sub(
+                                r"[^0-9.,)(\-]+$", "", str(row[year_col - 1] or "").strip()
+                            )
+                            value = parse_latam_number(_cell_left)
                         if value is None:
                             value = _find_value_for_year(row, fiscal_year)
                     else:
                         value = _find_value_for_year(row, fiscal_year)
+
+                    # Also extract prior year value when comparative column is known
+                    prior_value: Optional[float] = None
+                    if prior_year_col is not None and prior_year_col < len(row):
+                        _prior_cell = re.sub(
+                            r"[^0-9.,)(\-]+$", "", str(row[prior_year_col] or "").strip()
+                        )
+                        prior_value = parse_latam_number(_prior_cell)
 
                     if value is None:
                         continue
@@ -451,7 +518,11 @@ def _extract_pdfplumber(
                             extraction_method="pdfplumber_table",
                         )
 
-    return ExtractionResult(
+                    # Store prior year value (first occurrence only)
+                    if prior_value is not None and canonical not in prior_fields:
+                        prior_fields[canonical] = prior_value
+
+    results = [ExtractionResult(
         fields=fields,
         source_map=source_map,
         confidence=_score_confidence(fields, "pdfplumber_table", country=country),
@@ -459,7 +530,21 @@ def _extract_pdfplumber(
         fiscal_year=fiscal_year,
         extraction_method="pdfplumber_table",
         warnings=warnings_list,
-    )
+    )]
+
+    # Append prior year result when comparative data was found
+    if prior_fields and prior_year:
+        results.append(ExtractionResult(
+            fields=prior_fields,
+            source_map={},
+            confidence=_score_confidence(prior_fields, "pdfplumber_table", country=country),
+            currency_code="",   # set by caller
+            fiscal_year=prior_year,
+            extraction_method="pdfplumber_table",
+            warnings=["comparative_column"],
+        ))
+
+    return results
 
 
 def _extract_pymupdf_text(
@@ -593,21 +678,29 @@ def _extract_ocr(
     source_map: dict = {}
     source_map_comp: dict = {}
     current_section = "unknown"
-    first_page_ocr_text: str = ""
 
-    for page_num, page in enumerate(doc, start=1):
-        # Render page at 300 DPI (minimum for reliable OCR on financial documents)
+    # Pre-render all pages once to avoid double-rendering page 1.
+    # Only match proper financial numbers: require at least one thousand-separator group
+    # (e.g. "116.222.588.859,23") to avoid capturing note references (21, 22).
+    _FIN_NUM_RE = re.compile(r"[-\u2013]?\$?\s*\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?")
+
+    pages_ocr: list[str] = []
+    for page in doc:
         pix = page.get_pixmap(dpi=300)
-        # Convert to PIL image in memory — no disk write, no pdf2image/poppler dependency
         img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("L")  # grayscale
+        pages_ocr.append(pytesseract.image_to_string(img, lang="spa", config="--psm 6"))
 
-        # Run OCR with Spanish language pack; --psm 6 = uniform block of text
-        ocr_text = pytesseract.image_to_string(img, lang="spa", config="--psm 6")
+    # Infer fiscal year pair and column order from page 1 header BEFORE the main loop.
+    # primary_is_left=True means the more-recent (primary) year column is on the LEFT side
+    # of the PDF. This governs which number on each data line is primary vs comparative.
+    first_page_ocr_text = pages_ocr[0] if pages_ocr else ""
+    primary_year, comp_year, primary_is_left = _infer_fiscal_years(first_page_ocr_text)
+    logger.debug(
+        f"[latam_extractor] OCR year inference: primary={primary_year}, "
+        f"comp={comp_year}, primary_is_left={primary_is_left}"
+    )
 
-        # Capture first page OCR text for fiscal year inference
-        if page_num == 1:
-            first_page_ocr_text = ocr_text
-
+    for page_num, ocr_text in enumerate(pages_ocr, start=1):
         text_lower = ocr_text.lower()
         detected = _detect_section(text_lower)
         if detected != "unknown":
@@ -618,54 +711,49 @@ def _extract_ocr(
             if not line:
                 continue
 
-            # Strategy 1: split on 2+ spaces or tab (well-formatted OCR)
-            parts = re.split(r"\s{2,}|\t", line)
+            # Unified number extraction: find all financial numbers on the line.
+            # Use the position of the first number to delimit the label, and capture
+            # the leftmost (val_left) and rightmost (val_right) numeric values.
+            # Then assign primary/comparative based on detected column order.
+            num_matches = list(_FIN_NUM_RE.finditer(line))
 
             label: Optional[str] = None
             value: Optional[float] = None
             comparative_value: Optional[float] = None
 
-            if len(parts) >= 2:
-                label = parts[0].strip()
-                for part in reversed(parts[1:]):
-                    value = parse_latam_number(part.strip())
-                    if value is not None:
-                        break
-                # Capture second numeric value as comparative if available
-                if value is not None and len(parts) >= 3:
-                    for part in parts[1:-1]:
-                        cv = parse_latam_number(part.strip())
-                        if cv is not None and cv != value:
-                            comparative_value = cv
-                            break
+            if num_matches:
+                first_match = num_matches[0]
+                label_candidate = line[:first_match.start()].strip()
+                # Strip trailing noise like "[Nota X)" or "-"
+                label_candidate = re.sub(r"\s*[\[\(].*$", "", label_candidate).strip()
+                if not label_candidate:
+                    # Fallback: try splitting on 2+ spaces for lines where the label
+                    # is separated from numbers by wide spacing only
+                    parts = re.split(r"\s{2,}|\t", line)
+                    if len(parts) >= 2:
+                        label_candidate = parts[0].strip()
+                if label_candidate:
+                    val_left = parse_latam_number(
+                        first_match.group().replace("$", "").strip()
+                    )
+                    val_right: Optional[float] = None
+                    if len(num_matches) >= 2:
+                        val_right = parse_latam_number(
+                            num_matches[-1].group().replace("$", "").strip()
+                        )
+                        if val_right == val_left:
+                            val_right = None
 
-            # Strategy 2: for single-space lines, find the last number in the line
-            # and use everything before the first currency symbol / digit as the label.
-            # Handles Colombian format: "Total activos corrientes $ 116.222.588.859,23 $ ..."
-            if value is None:
-                # Only match proper financial numbers: require at least one thousand-separator
-                # group (e.g. "116.222.588.859,23") to avoid capturing note references (21, 22).
-                num_matches = list(re.finditer(
-                    r"[-\u2013]?\$?\s*\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?",
-                    line,
-                ))
-                if num_matches:
-                    first_match = num_matches[0]
-                    label_candidate = line[:first_match.start()].strip()
-                    # Strip trailing noise like "[Nota X)" or "-"
-                    label_candidate = re.sub(r"\s*[\[\(].*$", "", label_candidate).strip()
-                    if label_candidate:
-                        primary_val = parse_latam_number(first_match.group().replace("$", "").strip())
-                        # Capture comparative year value if a second number exists on the same line
-                        comp_val: Optional[float] = None
-                        if len(num_matches) >= 2:
-                            comp_val = parse_latam_number(
-                                num_matches[1].group().replace("$", "").strip()
-                            )
-                        if primary_val is not None:
-                            label = label_candidate
-                            value = primary_val
-                            comparative_value = comp_val  # may be None
+                    if val_left is not None:
+                        label = label_candidate
+                        if primary_is_left or val_right is None:
+                            # Primary year is left column, or only one number present
+                            value = val_left
+                            comparative_value = val_right
+                        else:
+                            # Primary year is right column
+                            value = val_right
+                            comparative_value = val_left
 
             if value is None or not label:
                 continue
@@ -712,8 +800,7 @@ def _extract_ocr(
                         extraction_method="ocr_tesseract",
                     )
 
-    # Infer fiscal year pair from first page OCR text
-    primary_year, comp_year = _infer_fiscal_years(first_page_ocr_text)
+    # primary_year, comp_year, primary_is_left already computed above before the main loop.
 
     results = [
         ExtractionResult(
@@ -761,8 +848,8 @@ def extract(
     Returns a list with two ExtractionResult items when comparative data is found,
     or a single-item list otherwise.
 
-    For digital PDFs (pdfplumber / PyMuPDF path), returns a single-item list for
-    the requested fiscal_year (comparative-column detection is OCR-only for now).
+    For digital PDFs (pdfplumber path), also returns a two-item list when a
+    comparative column for fiscal_year-1 is detected in a table header row.
 
     Automatically selects the extraction strategy:
       - Scanned PDF (majority of pages are image-only): OCR via pytesseract
@@ -798,28 +885,28 @@ def extract(
                 company_slug=company_slug, country=country,
             )
         else:
-            single = _extract_pdfplumber(
+            results = _extract_pdfplumber(
                 pdf_path, fiscal_year,
                 company_slug=company_slug, country=country,
             )
             # If pdfplumber coverage is poor, try PyMuPDF text fallback
-            if _fields_coverage(single) < 0.4:
+            if _fields_coverage(results[0]) < 0.4:
                 alt_result = _extract_pymupdf_text(
                     doc, fiscal_year,
                     company_slug=company_slug, country=country,
                 )
-                # Use whichever layer returned more fields
-                if len(alt_result.fields) > len(single.fields):
-                    single = alt_result
-            results = [single]
+                # Use whichever layer returned more fields for the primary year
+                if len(alt_result.fields) > len(results[0].fields):
+                    results[0] = alt_result
     finally:
         doc.close()
 
     # Set caller-provided metadata on all results
-    for result in results:
+    for i, result in enumerate(results):
         result.currency_code = currency_code
-        # Only override fiscal_year for digital PDF path (OCR infers its own years)
-        if result.extraction_method not in ("ocr_tesseract", "ocr_unavailable"):
+        # Only override fiscal_year for the primary result — comparative year results
+        # already have their fiscal_year set correctly by _extract_pdfplumber()
+        if i == 0 and result.extraction_method not in ("ocr_tesseract", "ocr_unavailable"):
             result.fiscal_year = fiscal_year
 
     return results
