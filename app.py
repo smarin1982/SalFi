@@ -599,7 +599,7 @@ def _format_latam_kpi_value(
 
 # ── LATAM rendering helpers ────────────────────────────────────────────────────
 
-def _render_latam_kpi_cards(slug: str, country: str, currency_mode: str) -> None:
+def _render_latam_kpi_cards(slug: str, country: str) -> None:
     kpis_df = st.session_state["latam_kpis"].get(slug, pd.DataFrame())
     meta = st.session_state["latam_meta"].get(slug, {})
     source_map = meta.get("source_map", {})
@@ -645,7 +645,7 @@ def _render_latam_kpi_cards(slug: str, country: str, currency_mode: str) -> None
                     delta_pct = (latest_val - prior_val) / abs(prior_val)
 
                 kpi_meta = KPI_META.get(kpi, {"label": kpi, "format": "ratio_x"})
-                display_val = _format_latam_kpi_value(latest_val, kpi_meta["format"], currency_mode, meta)
+                display_val = _format_latam_kpi_value(latest_val, kpi_meta["format"], meta)
 
                 st.metric(
                     label=f"**{kpi_meta['label']}**",
@@ -676,7 +676,7 @@ _SUMMARY_FIELDS = [
 ]
 
 
-def _render_latam_financials_table(slug: str, country: str, currency_mode: str) -> None:
+def _render_latam_financials_table(slug: str, country: str) -> None:
     """Render a compact table of principal financial statement lines for all fiscal years."""
     fin_df = st.session_state["latam_financials"].get(slug, pd.DataFrame())
     meta = st.session_state["latam_meta"].get(slug, {})
@@ -687,23 +687,10 @@ def _render_latam_financials_table(slug: str, country: str, currency_mode: str) 
     if not available:
         return
 
-    # Build display DataFrame
+    # Values stored and displayed in native currency — no FX conversion in dashboard.
     display_cols: dict = {"Año": fin_df["fiscal_year"].astype(str)}
-    curr_symbol = meta.get("currency_original", "USD") if currency_mode == "Moneda Original" else "USD"
-
-    # Values stored in local currency — no conversion needed for Moneda Original.
-    # For USD mode, convert using per-year FX rate.
-    if currency_mode == "USD":
-        from currency import to_usd as _to_usd
-        def _per_year_multiplier(fy: int) -> float:
-            try:
-                return _to_usd(1.0, curr_symbol, int(fy)) if curr_symbol not in ("USD", "EUR") else 1.0
-            except Exception:
-                return meta.get("fx_rate_usd", 1.0) or 1.0
-        multiplier_series = fin_df["fiscal_year"].apply(_per_year_multiplier)
-        curr_symbol = "USD"
-    else:
-        multiplier_series = pd.Series(1.0, index=fin_df.index)
+    curr_symbol = meta.get("currency_original", "USD")
+    multiplier_series = pd.Series(1.0, index=fin_df.index)
 
     _table_large_suffix = "mil M" if curr_symbol not in ("USD", "EUR") else "B"
     for field, label in _SUMMARY_FIELDS:
@@ -1081,28 +1068,16 @@ def _render_latam_tab() -> None:
     active_company = next((c for c in companies if c["slug"] == active_slug), {})
     active_country = active_company.get("country", "CO")
 
-    # --- Currency toggle (FX-03) — defaults to Moneda Original (must) ---
-    currency_mode = st.radio(
-        "Moneda",
-        options=["Moneda Original", "USD"],
-        index=0,
-        horizontal=True,
-        key="latam_currency_toggle",
-    )
     meta = st.session_state["latam_meta"].get(active_slug, {})
     if meta.get("currency_original") == "ARS":
         st.warning(
-            "Tipo de cambio: promedio anual oficial (BCRA/open.er-api.com). "
-            "ARS muestra alta volatilidad cambiaria — los valores en USD son estimados de baja confianza.",
+            "ARS muestra alta volatilidad cambiaria — los valores pueden diferir significativamente "
+            "al convertir a USD.",
             icon="⚠️",
         )
-    elif currency_mode == "Moneda Original" and meta.get("currency_original"):
+    elif meta.get("currency_original"):
         curr = meta["currency_original"]
-        rate_type = (
-            "promedio anual (Frankfurter)" if curr in ("BRL", "MXN")
-            else "tasa spot (open.er-api.com)"
-        )
-        st.caption(f"Moneda original: {curr} · Tipo de cambio: {rate_type}")
+        st.caption(f"Moneda: {curr}")
 
     # Confidence badge
     _latam_confidence_badge(active_slug, active_country)
@@ -1124,8 +1099,8 @@ def _render_latam_tab() -> None:
                 "los **pasivos no corrientes** (Pasivo Total − Pasivo Corriente) como estimación de deuda de largo plazo.",
                 icon=None,
             )
-        _render_latam_kpi_cards(active_slug, active_country, currency_mode)
-        _render_latam_financials_table(active_slug, active_country, currency_mode)
+        _render_latam_kpi_cards(active_slug, active_country)
+        _render_latam_financials_table(active_slug, active_country)
 
     # --- Red flags ---
     st.markdown("#### Red Flags")
