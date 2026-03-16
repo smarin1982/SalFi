@@ -79,6 +79,16 @@ sectors:
           Media: { gte: -0.10, lt: 0.0 }
           Baja:  { gte: 0.0, lt: 0.03 }
 
+      # FLAG: DSO elevado (sector salud — EPS/aseguradoras demoran en pagar)
+      - id: FLAG-008
+        name: "Cartera vencida elevada (DSO)"
+        kpi: "dso"
+        description: "Periodo de cobro superior al benchmark del sector salud — cartera con EPS/aseguradoras"
+        thresholds:
+          Alta:  { gt: 120 }
+          Media: { gt: 90,  lte: 120 }
+          Baja:  { gt: 75,  lte: 90 }
+
 # Special flags requiring multi-year logic (not single-KPI threshold)
 # These are evaluated separately in red_flags.py using custom logic
 special_flags:

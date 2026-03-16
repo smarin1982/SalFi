@@ -335,13 +335,22 @@ def _infer_fiscal_years(ocr_text: str) -> tuple[int, int, bool]:
     primary_is_left=True when the more-recent year appears to the LEFT in the header.
     Falls back to (current_year-1, current_year-2, False) if not found.
     """
-    snippet = ocr_text[:500]
+    snippet = ocr_text[:800]
     # Find all 4-digit years in range 2010-2030, preserving position
     year_matches = [(int(m.group()), m.start()) for m in re.finditer(r'\b(20[12]\d)\b', snippet)]
     unique_years = sorted({y for y, _ in year_matches}, reverse=True)
     if len(unique_years) >= 2:
         primary, comp = unique_years[0], unique_years[1]
-        # Determine column order by first occurrence of each year in header
+        # Determine column order by finding a line that contains BOTH years.
+        # The document title may contain only the primary year (e.g. "DEL 2024") before
+        # any comparative year appears, which would give a wrong position-based answer.
+        # The column-header row contains both years side by side and is authoritative.
+        for line in snippet.splitlines():
+            p_m = re.search(rf'\b{primary}\b', line)
+            c_m = re.search(rf'\b{comp}\b', line)
+            if p_m and c_m:
+                return primary, comp, p_m.start() < c_m.start()
+        # Fallback: no single line has both years — use document-level positions
         primary_pos = min(pos for y, pos in year_matches if y == primary)
         comp_pos = min(pos for y, pos in year_matches if y == comp)
         return primary, comp, primary_pos < comp_pos
@@ -738,8 +747,13 @@ def _extract_ocr(
                     )
                     val_right: Optional[float] = None
                     if len(num_matches) >= 2:
+                        # Use the SECOND number (index 1), not the last.
+                        # In a 2-column PDF: index 1 == index -1 → same result.
+                        # In a 3-column PDF (primary | comparative | delta/variation):
+                        # index -1 would wrongly pick the delta column; index 1 picks
+                        # the comparative year column correctly.
                         val_right = parse_latam_number(
-                            num_matches[-1].group().replace("$", "").strip()
+                            num_matches[1].group().replace("$", "").strip()
                         )
                         if val_right == val_left:
                             val_right = None
@@ -785,20 +799,25 @@ def _extract_ocr(
                 )
                 continue
 
-            if canonical not in fields:
+            # Use max absolute value: in scanned PDFs the same canonical may appear
+            # as a sub-item (smaller) before the section total (larger). Always keep
+            # the largest value seen so totals win over sub-items.
+            if canonical not in fields or abs(value) > abs(fields[canonical]):
                 fields[canonical] = value
                 source_map[canonical] = SourceRef(
                     page_number=page_num,
                     section_heading=current_section,
                     extraction_method="ocr_tesseract",
                 )
-                if comparative_value is not None and canonical not in fields_comp:
-                    fields_comp[canonical] = comparative_value
-                    source_map_comp[canonical] = SourceRef(
-                        page_number=page_num,
-                        section_heading=current_section,
-                        extraction_method="ocr_tesseract",
-                    )
+            if comparative_value is not None and (
+                canonical not in fields_comp or abs(comparative_value) > abs(fields_comp[canonical])
+            ):
+                fields_comp[canonical] = comparative_value
+                source_map_comp[canonical] = SourceRef(
+                    page_number=page_num,
+                    section_heading=current_section,
+                    extraction_method="ocr_tesseract",
+                )
 
     # primary_year, comp_year, primary_is_left already computed above before the main loop.
 

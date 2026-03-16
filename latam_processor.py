@@ -60,8 +60,10 @@ _MONETARY_COLUMNS = FINANCIALS_COLUMNS[2:]
 def _build_row(extraction_result: ExtractionResult, company_slug: str) -> dict:
     """Build a single financials row dict from one ExtractionResult.
 
-    Converts all monetary fields from native currency to USD via currency.to_usd().
-    Returns a dict keyed by FINANCIALS_COLUMNS names.
+    Values are stored in native local currency (COP, BRL, MXN, etc.) — NOT USD.
+    USD conversion is done at display time only, using the per-year FX rate.
+    This preserves the integrity of YoY growth and multi-year KPI calculations,
+    which would be distorted if stored in USD with different annual exchange rates.
     """
     row: dict = {
         "ticker": company_slug,
@@ -72,11 +74,7 @@ def _build_row(extraction_result: ExtractionResult, company_slug: str) -> dict:
         if native_value is np.nan or (isinstance(native_value, float) and np.isnan(native_value)):
             row[canonical] = np.nan
         else:
-            row[canonical] = to_usd(
-                float(native_value),
-                extraction_result.currency_code,
-                extraction_result.fiscal_year,
-            )
+            row[canonical] = float(native_value)  # store in local currency
     return row
 
 
@@ -165,6 +163,28 @@ def process(
     # because df_new comes from the extractor in [primary, comparative] order which
     # is typically [2024, 2023] — descending.
     df_combined = df_combined.sort_values("fiscal_year").reset_index(drop=True)
+
+    # ------------------------------------------------------------------
+    # Step 4b: Balance sheet equation validation — Assets = Liabilities + Equity
+    #
+    # OCR PDFs often map "Total Pasivos y Patrimonio" (= total_assets) to
+    # total_liabilities because the synonym "total pasivos" is a substring.
+    # Detection: if total_liabilities ≈ total_assets (within 1%), the wrong
+    # line was captured.  Correction: total_liabilities = total_assets - total_equity.
+    # ------------------------------------------------------------------
+    for idx in df_combined.index:
+        ta = df_combined.at[idx, "total_assets"]
+        tl = df_combined.at[idx, "total_liabilities"]
+        te = df_combined.at[idx, "total_equity"]
+        fy = df_combined.at[idx, "fiscal_year"]
+        if pd.notna(ta) and pd.notna(tl) and pd.notna(te) and ta != 0:
+            if abs(tl - ta) / abs(ta) < 0.01:          # liabilities ≈ assets → wrong
+                corrected = ta - te
+                df_combined.at[idx, "total_liabilities"] = corrected
+                logger.debug(
+                    f"Balance sheet correction FY{fy}: total_liabilities "
+                    f"{tl:,.0f} → {corrected:,.0f} (= assets − equity)"
+                )
 
     # ------------------------------------------------------------------
     # Step 5: Calculate KPIs (unchanged call to processor.calculate_kpis)

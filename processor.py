@@ -306,16 +306,37 @@ def _col(d: pd.DataFrame, name: str) -> pd.Series:
     return pd.Series(np.nan, index=d.index, dtype=float)
 
 
+def _debt_for_leverage(d: pd.DataFrame) -> pd.Series:
+    """Return debt series for leverage KPIs (debt_to_ebitda, debt_to_assets).
+
+    Primary: long_term_debt + short_term_debt (explicit debt lines).
+    Fallback: total_liabilities - current_liabilities (non-current liabilities)
+              used when LATAM PDF extraction cannot isolate debt line items.
+    """
+    explicit = (
+        _col(d, "long_term_debt").fillna(0) + _col(d, "short_term_debt").fillna(0)
+    ).where(
+        _col(d, "long_term_debt").notna() | _col(d, "short_term_debt").notna(),
+        other=np.nan,
+    )
+    fallback = _col(d, "total_liabilities") - _col(d, "current_liabilities")
+    return explicit.fillna(fallback)
+
+
 def _cagr_10y(s: pd.Series) -> pd.Series:
-    """Compute 10-year CAGR for each year in the Series. NaN if yr-10 not in index."""
+    """Compute 10-year CAGR for each year. Falls back to longest available window
+    (minimum 2 years) when 10-year history is not present — typical for LATAM
+    companies with only 2-3 years of extracted data."""
     result = pd.Series(np.nan, index=s.index, dtype=float)
     for yr in s.index:
-        yr_minus_10 = yr - 10
-        if (yr_minus_10 in s.index
-                and pd.notna(s[yr])
-                and pd.notna(s[yr_minus_10])
-                and s[yr_minus_10] != 0):
-            result[yr] = (s[yr] / s[yr_minus_10]) ** (1 / 10) - 1
+        for n in range(10, 0, -1):
+            yr_minus_n = yr - n
+            if (yr_minus_n in s.index
+                    and pd.notna(s[yr])
+                    and pd.notna(s[yr_minus_n])
+                    and s[yr_minus_n] != 0):
+                result[yr] = (s[yr] / s[yr_minus_n]) ** (1 / n) - 1
+                break
     return result
 
 
@@ -343,28 +364,30 @@ KPI_REGISTRY: dict = {
     # Leverage
     "debt_to_equity":          lambda d: safe_divide(_col(d, "total_liabilities"), _col(d, "total_equity")),
     "debt_to_ebitda":          lambda d: safe_divide(
-                                   (_col(d, "long_term_debt").fillna(0) + _col(d, "short_term_debt").fillna(0)).where(
-                                       _col(d, "long_term_debt").notna() | _col(d, "short_term_debt").notna(), other=np.nan),
+                                   _debt_for_leverage(d),
                                    _col(d, "operating_income") + _col(d, "depreciation_amortization")),
     "interest_coverage":       lambda d: safe_divide(_col(d, "operating_income"), _col(d, "interest_expense")),
     "debt_to_assets":          lambda d: safe_divide(
-                                   (_col(d, "long_term_debt").fillna(0) + _col(d, "short_term_debt").fillna(0)).where(
-                                       _col(d, "long_term_debt").notna() | _col(d, "short_term_debt").notna(), other=np.nan),
+                                   _debt_for_leverage(d),
                                    _col(d, "total_assets")),
     # Efficiency
+    # Note: these KPIs ideally use a 2-year average of balance-sheet positions.
+    # When the prior year is unavailable (oldest row in dataset), shift(1) is NaN;
+    # fillna() falls back to the current year's value so a single-point estimate
+    # is produced rather than a NaN.
     "asset_turnover":          lambda d: safe_divide(
                                    _col(d, "revenue"),
-                                   (_col(d, "total_assets") + _col(d, "total_assets").shift(1)) / 2),
+                                   (_col(d, "total_assets") + _col(d, "total_assets").shift(1).fillna(_col(d, "total_assets"))) / 2),
     "inventory_turnover":      lambda d: safe_divide(
                                    _col(d, "cogs"),
-                                   (_col(d, "inventory") + _col(d, "inventory").shift(1)) / 2),
+                                   (_col(d, "inventory") + _col(d, "inventory").shift(1).fillna(_col(d, "inventory"))) / 2),
     "dso":                     lambda d: safe_divide(
-                                   (_col(d, "receivables") + _col(d, "receivables").shift(1)) / 2,
+                                   (_col(d, "receivables") + _col(d, "receivables").shift(1).fillna(_col(d, "receivables"))) / 2,
                                    _col(d, "revenue")) * 365,
     "cash_conversion_cycle":   lambda d: (
-                                   safe_divide((_col(d, "inventory") + _col(d, "inventory").shift(1)) / 2, _col(d, "cogs")) * 365
-                                   + safe_divide((_col(d, "receivables") + _col(d, "receivables").shift(1)) / 2, _col(d, "revenue")) * 365
-                                   - safe_divide((_col(d, "accounts_payable") + _col(d, "accounts_payable").shift(1)) / 2, _col(d, "cogs")) * 365),
+                                   safe_divide((_col(d, "inventory") + _col(d, "inventory").shift(1).fillna(_col(d, "inventory"))) / 2, _col(d, "cogs")) * 365
+                                   + safe_divide((_col(d, "receivables") + _col(d, "receivables").shift(1).fillna(_col(d, "receivables"))) / 2, _col(d, "revenue")) * 365
+                                   - safe_divide((_col(d, "accounts_payable") + _col(d, "accounts_payable").shift(1).fillna(_col(d, "accounts_payable"))) / 2, _col(d, "cogs")) * 365),
 }
 
 

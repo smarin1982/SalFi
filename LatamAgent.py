@@ -203,8 +203,28 @@ class LatamAgent:
         # --- Step 2: Extract ---
         logger.info(f"[{self.name}] Step 2: Extracting from {pdf_path}")
         from datetime import datetime as _dt
+        import re as _re
         _currency = COUNTRY_CURRENCY.get(self.country, "USD")
-        _fiscal_year = _dt.now().year - 1
+        _default_year = _dt.now().year - 1
+
+        # Infer fiscal year from the PDF filename — the scraper may have downloaded
+        # a prior-year annual report (e.g. 2024) as a fallback when the current-year
+        # document was only a partial (first-semester) report.  Inferring the year
+        # from the filename prevents the extractor from looking for a "2025" column
+        # inside a PDF that only contains 2024 and 2023 data columns.
+        _fiscal_year = _default_year
+        if pdf_path:
+            _year_match = _re.search(r'20(\d{2})', Path(pdf_path).name)
+            if _year_match:
+                _inferred = int(_year_match.group(0))
+                if 2018 <= _inferred <= _dt.now().year:
+                    if _inferred != _default_year:
+                        logger.info(
+                            f"[{self.name}] PDF filename suggests fiscal_year={_inferred} "
+                            f"(default was {_default_year}) — using inferred year"
+                        )
+                    _fiscal_year = _inferred
+
         # extract() returns list[ExtractionResult] — one per fiscal year found in PDF
         extraction_results = latam_extractor.extract(
             pdf_path,
@@ -284,8 +304,10 @@ class LatamAgent:
         """
         logger.info(f"[{self.name}] Re-evaluating red flags from existing Parquet files")
 
-        kpis_df = pd.read_parquet(self.storage_path / "kpis.parquet")
+        from processor import calculate_kpis, save_parquet as _save_parquet
         financials_df = pd.read_parquet(self.storage_path / "financials.parquet")
+        kpis_df = calculate_kpis(financials_df)
+        _save_parquet(kpis_df, self.storage_path / "kpis.parquet")
         flags = evaluate_flags(kpis_df, financials_df)
 
         # Update meta.json: refresh red flags fields only

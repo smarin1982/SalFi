@@ -572,33 +572,26 @@ _KPI_TO_SOURCE_FIELD: dict[str, str] = {
 def _format_latam_kpi_value(
     value: float,
     fmt: str,
-    currency_mode: str,
     meta_info: dict,
 ) -> str:
-    """Format a LATAM KPI value, optionally converting back to original currency.
-
-    fx_rate_usd is stored as USD-per-native-unit (e.g. 0.000265 USD per COP).
-    Reverse conversion: native_value = usd_value / fx_rate_usd
+    """Format a LATAM KPI value in local currency. No FX conversion — values are
+    stored and displayed in the company's native currency (COP, BRL, MXN, etc.).
+    FX only applies in the executive report generator, never in the dashboard.
     """
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return "N/A"
-    if currency_mode == "USD" or fmt in _NON_MONETARY_FORMATS:
+    if fmt in _NON_MONETARY_FORMATS:
         return format_kpi(value, fmt)
-    # Moneda Original — reverse the USD normalisation for monetary KPIs
-    # fx_rate_usd: USD per 1 unit of native currency (e.g. 0.000265 USD per COP)
-    fx_rate = meta_info.get("fx_rate_usd", None)
-    if fx_rate and fx_rate > 0:
-        display_value = value / fx_rate
-        currency_code = meta_info.get("currency_original", "USD")
-    else:
-        # No FX rate stored — show USD unchanged
-        display_value = value
-        currency_code = "USD"
+    display_value = value
+    currency_code = meta_info.get("currency_original", "—")
+    # LATAM currencies use "mil M" (miles de millones) instead of "B" (billions)
+    _is_latam_currency = currency_code not in ("USD", "EUR")
+    _large_suffix = "mil M" if _is_latam_currency else "B"
     if fmt == "dollar_B":
-        return f"{currency_code} {display_value / 1e9:.1f}B"
+        return f"{currency_code} {display_value / 1e9:.1f} {_large_suffix}"
     # Fallback for other monetary formats
     if abs(display_value) >= 1e9:
-        return f"{currency_code} {display_value / 1e9:.2f}B"
+        return f"{currency_code} {display_value / 1e9:.2f} {_large_suffix}"
     if abs(display_value) >= 1e6:
         return f"{currency_code} {display_value / 1e6:.1f}M"
     return f"{currency_code} {display_value:,.0f}"
@@ -632,61 +625,46 @@ def _render_latam_kpi_cards(slug: str, country: str, currency_mode: str) -> None
         st.caption("No hay KPIs disponibles con datos para esta empresa.")
         return
 
-    if "fiscal_year" in kpis_df.columns:
-        df_sorted = kpis_df.sort_values("fiscal_year")
-    else:
-        df_sorted = kpis_df
+    df_sorted = kpis_df.sort_values("fiscal_year") if "fiscal_year" in kpis_df.columns else kpis_df
 
-    # Build column grid (max 5 per row for readability)
-    per_row = min(n, 5)
-    if n <= 5:
-        cols = st.columns(per_row, gap="medium")
-    else:
-        row1 = st.columns(5, gap="medium")
-        row2 = st.columns(min(n - 5, 5), gap="medium")
-        cols = list(row1) + list(row2)
+    # Rows of max 3 KPI cards each
+    for row_kpis in [display_kpis[i:i+3] for i in range(0, n, 3)]:
+        cols = st.columns(len(row_kpis), gap="medium")
+        for col, kpi in zip(cols, row_kpis):
+            with col:
+                if kpi not in df_sorted.columns:
+                    st.metric(label=KPI_META.get(kpi, {}).get("label", kpi), value="N/A")
+                    continue
 
-    for i, kpi in enumerate(display_kpis):
-        col = cols[i]
-        with col:
-            if kpi not in df_sorted.columns:
-                st.metric(label=KPI_META.get(kpi, {}).get("label", kpi), value="N/A")
-                continue
+                kpi_series = df_sorted[kpi].dropna()
+                latest_val = kpi_series.iloc[-1] if not kpi_series.empty else None
+                prior_val = kpi_series.iloc[-2] if len(kpi_series) >= 2 else None
 
-            kpi_series = df_sorted[kpi].dropna()
-            latest_val = kpi_series.iloc[-1] if not kpi_series.empty else None
-            prior_val = kpi_series.iloc[-2] if len(kpi_series) >= 2 else None
+                delta_pct = None
+                if latest_val is not None and prior_val is not None and prior_val != 0:
+                    delta_pct = (latest_val - prior_val) / abs(prior_val)
 
-            delta_pct = None
-            if latest_val is not None and prior_val is not None and prior_val != 0:
-                delta_pct = (latest_val - prior_val) / abs(prior_val)
+                kpi_meta = KPI_META.get(kpi, {"label": kpi, "format": "ratio_x"})
+                display_val = _format_latam_kpi_value(latest_val, kpi_meta["format"], currency_mode, meta)
 
-            kpi_meta = KPI_META.get(kpi, {"label": kpi, "format": "ratio_x"})
-            display_val = _format_latam_kpi_value(latest_val, kpi_meta["format"], currency_mode, meta)
+                st.metric(
+                    label=f"**{kpi_meta['label']}**",
+                    value=display_val,
+                    delta=format_delta(delta_pct),
+                    delta_color="normal",
+                    border=True,
+                )
 
-            st.metric(
-                label=f"**{kpi_meta['label']}**",
-                value=display_val,
-                delta=format_delta(delta_pct),
-                delta_color="normal",
-                border=True,
-            )
+                source_field = _KPI_TO_SOURCE_FIELD.get(kpi)
+                page = source_map.get(source_field) if source_field else None
+                if page and str(page) != "?":
+                    st.caption(f"fuente: pág. {page}")
 
-            source_field = _KPI_TO_SOURCE_FIELD.get(kpi)
-            page = source_map.get(source_field, "?") if source_field else "?"
-            st.caption(f"fuente: pág. {page}")
-
-            if (
-                len(df_sorted) > 1
-                and "fiscal_year" in df_sorted.columns
-                and kpi in df_sorted.columns
-            ):
-                yr_min = int(df_sorted["fiscal_year"].min())
-                yr_max = int(df_sorted["fiscal_year"].max())
-                fig = build_trend_figure(df_sorted, kpi, (yr_min, yr_max), slug)
-                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-            else:
-                st.caption("Solo 1 año de datos disponibles.")
+                if len(df_sorted) > 1 and "fiscal_year" in df_sorted.columns and kpi in df_sorted.columns:
+                    yr_min = int(df_sorted["fiscal_year"].min())
+                    yr_max = int(df_sorted["fiscal_year"].max())
+                    fig = build_trend_figure(df_sorted, kpi, (yr_min, yr_max), slug)
+                    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
 _SUMMARY_FIELDS = [
@@ -711,21 +689,28 @@ def _render_latam_financials_table(slug: str, country: str, currency_mode: str) 
 
     # Build display DataFrame
     display_cols: dict = {"Año": fin_df["fiscal_year"].astype(str)}
-    # fx_rate_usd is USD-per-native (e.g. 0.000265 USD per COP)
-    # reverse: native = usd / fx_rate_usd
-    fx_rate = meta.get("fx_rate_usd", None)
-    if currency_mode == "Moneda Original" and fx_rate and fx_rate > 0:
-        curr_symbol = meta.get("currency_original", "USD")
-        multiplier = 1.0 / fx_rate
-    else:
-        curr_symbol = "USD"
-        multiplier = 1.0
+    curr_symbol = meta.get("currency_original", "USD") if currency_mode == "Moneda Original" else "USD"
 
+    # Values stored in local currency — no conversion needed for Moneda Original.
+    # For USD mode, convert using per-year FX rate.
+    if currency_mode == "USD":
+        from currency import to_usd as _to_usd
+        def _per_year_multiplier(fy: int) -> float:
+            try:
+                return _to_usd(1.0, curr_symbol, int(fy)) if curr_symbol not in ("USD", "EUR") else 1.0
+            except Exception:
+                return meta.get("fx_rate_usd", 1.0) or 1.0
+        multiplier_series = fin_df["fiscal_year"].apply(_per_year_multiplier)
+        curr_symbol = "USD"
+    else:
+        multiplier_series = pd.Series(1.0, index=fin_df.index)
+
+    _table_large_suffix = "mil M" if curr_symbol not in ("USD", "EUR") else "B"
     for field, label in _SUMMARY_FIELDS:
         if field in fin_df.columns:
-            display_cols[label] = (fin_df[field] * multiplier).apply(
+            display_cols[label] = (fin_df[field] * multiplier_series).apply(
                 lambda v: (
-                    f"{curr_symbol} {v/1e9:.2f}B" if pd.notna(v) and abs(v) >= 1e9
+                    f"{curr_symbol} {v/1e9:.2f} {_table_large_suffix}" if pd.notna(v) and abs(v) >= 1e9
                     else f"{curr_symbol} {v/1e6:.1f}M" if pd.notna(v) and abs(v) >= 1e6
                     else f"{curr_symbol} {v:,.0f}" if pd.notna(v)
                     else "N/A"
@@ -741,18 +726,42 @@ def _render_latam_financials_table(slug: str, country: str, currency_mode: str) 
 
 
 def _render_latam_red_flags(slug: str, country: str) -> None:
+    import yaml as _yaml
     red_flags = st.session_state.get("latam_red_flags", {}).get(slug, [])
-    if not red_flags:
-        st.success("No se detectaron red flags.")
-        return
+    triggered_ids = {f.get("flag_id") for f in red_flags}
 
     _SEVERITY_ICON = {"Alta": "🔴", "Media": "🟡", "Baja": "🟢"}
-    for flag in red_flags:
-        if not flag.get("triggered", True):
-            continue
-        icon = _SEVERITY_ICON.get(flag.get("severity", "Baja"), "⚪")
-        st.markdown(f"{icon} **{flag.get('name', 'Flag')}** — {flag.get('severity', '')}")
-        st.caption(flag.get("description", ""))
+
+    # Always show triggered flags first
+    if red_flags:
+        for flag in red_flags:
+            icon = _SEVERITY_ICON.get(flag.get("severity", "Baja"), "⚪")
+            st.markdown(f"{icon} **{flag.get('name', 'Flag')}** — {flag.get('severity', '')}")
+            st.caption(flag.get("description", ""))
+    else:
+        st.success("Sin alertas activas en los indicadores evaluados.")
+
+    # Always show full checklist from YAML — green for OK, colored for triggered
+    try:
+        cfg_path = Path("config/red_flags.yaml")
+        if cfg_path.exists():
+            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+            all_flags = cfg.get("sectors", {}).get("healthcare", {}).get("flags", [])
+            if all_flags:
+                with st.expander("Ver todos los indicadores monitoreados", expanded=False):
+                    for spec in all_flags:
+                        fid = spec.get("id", "")
+                        fname = spec.get("name", fid)
+                        fdesc = spec.get("description", "")
+                        if fid in triggered_ids:
+                            matched = next((f for f in red_flags if f.get("flag_id") == fid), {})
+                            icon = _SEVERITY_ICON.get(matched.get("severity", "Baja"), "⚪")
+                            st.markdown(f"{icon} **{fname}** — {matched.get('severity', '')}")
+                        else:
+                            st.markdown(f"✅ **{fname}** — OK")
+                        st.caption(fdesc)
+    except Exception:
+        pass
 
 
 def _run_latam_pipeline(name: str, country: str, url: str, force_refresh: bool = False) -> None:
@@ -822,12 +831,36 @@ def _generate_and_cache_report(slug: str, country: str) -> None:
     st.rerun()
 
 
+_SYN_CACHE_FILE = Path("data/latam/learned_suggestions_cache.json")
+
+
+def _load_syn_cache() -> dict[str, str]:
+    if not _SYN_CACHE_FILE.exists():
+        return {}
+    try:
+        import json as _json
+        return _json.loads(_SYN_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_syn_cache(cache: dict[str, str]) -> None:
+    try:
+        import json as _json
+        _SYN_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _SYN_CACHE_FILE.write_text(
+            _json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
 def _render_synonym_panel() -> None:
     """Render the 'Terminología Aprendida' collapsible panel inside the LATAM tab.
 
-    Shows unmatched labels collected during extraction, allows Claude-assisted
-    mapping suggestions, and lets the analyst approve or reject each mapping.
-    All reviewer imports are lazy (try/except ImportError).
+    Claude auto-assigns all new candidates once and persists to a cache file —
+    zero tokens spent on repeat opens. The analyst uses a single search box to
+    look up any label and correct its assignment if needed.
     """
     with st.expander("Terminología Aprendida", expanded=False):
         try:
@@ -835,116 +868,123 @@ def _render_synonym_panel() -> None:
                 get_review_candidates,
                 suggest_mapping,
                 approve_synonym,
-                reject_synonym,
             )
         except ImportError:
             st.info("Módulo latam_synonym_reviewer no disponible.")
             return
 
-        # Threshold control
-        col_thresh, _ = st.columns([1, 3])
-        with col_thresh:
-            min_seen = st.number_input(
-                "Visto en mínimo N empresas",
-                min_value=1,
-                max_value=20,
-                value=2,
-                step=1,
-                key="latam_syn_min_seen",
-                help="Solo muestra etiquetas vistas en al menos N empresas distintas.",
-            )
+        candidates = get_review_candidates(min_seen_count=1)
+        cache = _load_syn_cache()
 
-        candidates = get_review_candidates(min_seen_count=int(min_seen))
+        # ── Auto-assign only uncached candidates — silent, runs once per new label ──
+        uncached = [c for c in candidates if c.label.strip().lower() not in cache]
+        if uncached:
+            for cand in uncached:
+                result = suggest_mapping(cand)
+                cache[cand.label.strip().lower()] = result.canonical or ""
+            _save_syn_cache(cache)
 
-        if not candidates:
-            st.success(
-                "No hay candidatos pendientes de revisión. "
-                "Las etiquetas no reconocidas se acumulan automáticamente durante la extracción."
-            )
+        total = len(cache)
+        if total == 0:
+            st.success("No hay etiquetas registradas aún.")
             return
 
-        st.caption(
-            f"{len(candidates)} etiqueta(s) pendiente(s) de revisión "
-            f"(vista(s) en {int(min_seen)}+ empresa(s))."
+        st.caption(f"{total} etiqueta(s) en registro. Escribe una para revisar o corregir su asignación.")
+
+        # ── Single lookup box ─────────────────────────────────────────────────
+        search = st.text_input(
+            "Buscar etiqueta",
+            key="latam_syn_search",
+            placeholder="Escribe parte de la etiqueta del PDF...",
+            label_visibility="collapsed",
         )
 
-        for i, cand in enumerate(candidates):
-            with st.container():
-                col_label, col_count, col_section = st.columns([3, 1, 2])
-                with col_label:
-                    st.markdown(f"**{cand.label}**")
-                with col_count:
-                    st.caption(f"Vistas: {cand.seen_count}")
-                with col_section:
-                    st.caption(f"Sección: {cand.section or '—'}")
+        if not search.strip():
+            return
 
-                # Suggestion state stored in session state keyed by label
-                suggestion_key = f"latam_syn_suggestion_{i}"
-                suggestion = st.session_state.get(suggestion_key)
+        search_lower = search.strip().lower()
+        matches = {lbl: canon for lbl, canon in cache.items() if search_lower in lbl}
 
-                col_suggest, col_edit, col_approve, col_reject = st.columns([2, 3, 1, 1])
+        if not matches:
+            st.warning("No se encontró esa etiqueta en el registro.")
+            return
 
-                with col_suggest:
-                    if st.button("Sugerir con Claude", key=f"latam_syn_suggest_{i}"):
-                        with st.spinner("Consultando Claude..."):
-                            result = suggest_mapping(cand)
-                        st.session_state[suggestion_key] = result
+        for lbl, assigned in matches.items():
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                st.markdown(f"**{lbl}**")
+                st.caption(f"Asignado: `{assigned or 'sin asignar'}`")
+            with col2:
+                import json as _json
+                correction = st.text_input(
+                    "Nuevo campo canónico",
+                    value=assigned,
+                    key=f"latam_syn_fix_{lbl}",
+                    placeholder="ej: net_income",
+                )
+                if st.button("Confirmar", key=f"latam_syn_confirm_{lbl}", type="primary"):
+                    val = correction.strip()
+                    if val:
+                        approve_synonym(lbl, val, approved_by="user")
+                        cache[lbl] = val
+                        _save_syn_cache(cache)
+                        st.success(f"Guardado: `{lbl}` → `{val}`")
+                        st.rerun()
 
-                if suggestion is not None:
-                    with col_edit:
-                        # Pre-populate with Claude's suggestion; analyst can edit
-                        mapping_value = st.text_input(
-                            "Campo canónico",
-                            value=suggestion.canonical or "",
-                            key=f"latam_syn_mapping_{i}",
-                            help=f"Confianza: {suggestion.confidence} — {suggestion.reasoning}",
-                            label_visibility="collapsed",
-                            placeholder="ej: net_income",
-                        )
-                    with col_approve:
-                        if st.button("Aprobar", key=f"latam_syn_approve_{i}", type="primary"):
-                            final_mapping = st.session_state.get(f"latam_syn_mapping_{i}", "").strip()
-                            if final_mapping and final_mapping != "__rejected__":
-                                approve_synonym(cand.label, final_mapping, approved_by="user")
-                                # Clear suggestion state and rerun to remove from list
-                                if suggestion_key in st.session_state:
-                                    del st.session_state[suggestion_key]
-                                st.rerun()
-                            else:
-                                st.warning("Ingresa un campo canónico válido antes de aprobar.")
-                    with col_reject:
-                        if st.button("Rechazar", key=f"latam_syn_reject_{i}"):
-                            reject_synonym(cand.label)
-                            if suggestion_key in st.session_state:
-                                del st.session_state[suggestion_key]
-                            st.rerun()
-                else:
-                    # Show approve/reject even without suggestion (analyst may know the mapping)
-                    with col_edit:
-                        st.text_input(
-                            "Campo canónico",
-                            value="",
-                            key=f"latam_syn_mapping_{i}",
-                            label_visibility="collapsed",
-                            placeholder="ej: net_income — o usa Sugerir",
-                        )
-                    with col_approve:
-                        if st.button("Aprobar", key=f"latam_syn_approve_{i}", type="primary"):
-                            final_mapping = st.session_state.get(f"latam_syn_mapping_{i}", "").strip()
-                            if final_mapping and final_mapping != "__rejected__":
-                                approve_synonym(cand.label, final_mapping, approved_by="user")
-                                st.rerun()
-                            else:
-                                st.warning("Ingresa o sugiere un campo canónico primero.")
-                    with col_reject:
-                        if st.button("Rechazar", key=f"latam_syn_reject_{i}"):
-                            reject_synonym(cand.label)
-                            st.rerun()
 
-                st.divider()
+def _auto_load_existing_latam() -> None:
+    """Scan data/latam/ and auto-populate session_state with companies that already have data.
+
+    Runs once per session (skips slugs already in latam_companies).
+    This allows the dashboard to show existing data without re-running the pipeline.
+    """
+    base = Path("data/latam")
+    if not base.exists():
+        return
+    already_loaded = {c["slug"] for c in st.session_state.get("latam_companies", [])}
+    for country_dir in sorted(base.iterdir()):
+        if not country_dir.is_dir():
+            continue
+        country = country_dir.name  # e.g. "co", "br"
+        if country in ("test",):
+            continue
+        for company_dir in sorted(country_dir.iterdir()):
+            if not company_dir.is_dir():
+                continue
+            slug = company_dir.name
+            if slug in already_loaded:
+                continue
+            if not (company_dir / "meta.json").exists() or not (company_dir / "kpis.parquet").exists():
+                continue
+            try:
+                meta = _load_latam_meta(slug, country)
+                kpis_df = _load_latam_kpis(slug, country)
+                if kpis_df.empty:
+                    continue
+                fin_df = _load_latam_financials(slug, country)
+                st.session_state["latam_companies"].append({
+                    "name": meta.get("name", slug),
+                    "country": country,
+                    "slug": slug,
+                    "url": meta.get("url", ""),
+                })
+                st.session_state["latam_kpis"][slug] = kpis_df
+                st.session_state["latam_meta"][slug] = meta
+                st.session_state["latam_financials"][slug] = fin_df
+                # Re-evaluate red flags from parquet
+                try:
+                    from red_flags import evaluate_flags as _eval_flags
+                    flags = _eval_flags(kpis_df, fin_df)
+                    st.session_state["latam_red_flags"][slug] = [vars(f) for f in flags]
+                except Exception:
+                    st.session_state["latam_red_flags"][slug] = []
+                already_loaded.add(slug)
+            except Exception:
+                continue
 
 
 def _render_latam_tab() -> None:
+    _auto_load_existing_latam()
     st.markdown("### Análisis Financiero LATAM")
 
     # --- Input section ---
@@ -1041,10 +1081,11 @@ def _render_latam_tab() -> None:
     active_company = next((c for c in companies if c["slug"] == active_slug), {})
     active_country = active_company.get("country", "CO")
 
-    # --- Currency toggle (FX-03) ---
+    # --- Currency toggle (FX-03) — defaults to Moneda Original (must) ---
     currency_mode = st.radio(
         "Moneda",
         options=["Moneda Original", "USD"],
+        index=0,
         horizontal=True,
         key="latam_currency_toggle",
     )
@@ -1072,6 +1113,17 @@ def _render_latam_tab() -> None:
     if kpis_df.empty:
         st.warning("KPIs no disponibles. Ejecuta el pipeline primero.")
     else:
+        # Note: if long_term_debt was not extractable from the PDF, Deuda/EBITDA
+        # and Deuda/Activos se calculan usando pasivos no corrientes
+        # (total_liabilities − current_liabilities) como aproximación.
+        fin_df = st.session_state["latam_financials"].get(active_slug, pd.DataFrame())
+        if not fin_df.empty and fin_df.get("long_term_debt", pd.Series([None])).isna().all():
+            st.info(
+                "ℹ️ **Deuda LP no identificada en el PDF.** "
+                "Los KPIs de solvencia (Deuda/EBITDA, Deuda/Activos) se calcularon usando "
+                "los **pasivos no corrientes** (Pasivo Total − Pasivo Corriente) como estimación de deuda de largo plazo.",
+                icon=None,
+            )
         _render_latam_kpi_cards(active_slug, active_country, currency_mode)
         _render_latam_financials_table(active_slug, active_country, currency_mode)
 

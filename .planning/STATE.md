@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: 12 of 12 (Learned Synonyms) — IN PROGRESS
-Plan: 7 of 7 in current phase — 12-07 complete
-Status: Phase 12 gap closure plan 07 complete — candidate queue noise filter shipped
-Last activity: 2026-03-12 — Phase 12 Plan 07: Candidate Queue Noise Filter
+Phase: 12 of 12 (Learned Synonyms) — COMPLETE
+Plan: 7 of 7 in current phase — all complete
+Status: All phases complete — v2.0 LATAM pipeline shipped; Phase 6 formally closed 2026-03-16
+Last activity: 2026-03-16 — Phase 6 closed (code was complete since 2026-03-05; documentation gap resolved)
 
-Progress: [##########] 100% (10/10 phases complete — v1.0 shipped; v2.0 Phases 6-10 complete)
+Progress: [##########] 100% (12/12 phases complete — v1.0 shipped; v2.0 Phases 6-12 all complete)
 
 ## Performance Metrics
 
