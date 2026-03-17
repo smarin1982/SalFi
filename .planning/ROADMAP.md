@@ -91,6 +91,15 @@ Plans:
 
 </details>
 
+### Phase 13: Multi-year historical PDF ingestion
+
+**Goal:** [To be planned]
+**Depends on:** Phase 12
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 13 to break down)
+
 ---
 
 ## v2.0 LATAM Financial Analysis Pipeline

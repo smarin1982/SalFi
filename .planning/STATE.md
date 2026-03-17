@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: 12 of 12 (Learned Synonyms) — COMPLETE
-Plan: 7 of 7 in current phase — all complete
-Status: All phases complete — v2.0 LATAM pipeline shipped; Phase 6 formally closed 2026-03-16
-Last activity: 2026-03-16 — Phase 6 closed (code was complete since 2026-03-05; documentation gap resolved)
+Phase: 13 of 13 (Multi-year historical PDF ingestion) — NOT PLANNED
+Plan: 0 of ? in current phase
+Status: Phase 13 added — ready to plan
+Last activity: 2026-03-17 — Phase 13 added (multi-year historical PDF ingestion)
 
-Progress: [##########] 100% (12/12 phases complete — v1.0 shipped; v2.0 Phases 6-12 all complete)
+Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 6-12 all complete; Phase 13 pending)
 
 ## Performance Metrics
 
@@ -123,6 +123,10 @@ Progress: [##########] 100% (12/12 phases complete — v1.0 shipped; v2.0 Phases
 - [12-07 Noise Filter]: Write-time guard placed BEFORE try block in _append_candidate() — semantic guard, no I/O for noise labels; year headers (2020-2023) and standalone stop-words (total/subtotal/suma/neto) blocked
 - [12-07 Noise Filter]: 'neto' blocked only as standalone whole-string match — 'ingreso neto' (phrase) still passes through
 - [12-07 Noise Filter]: learned_candidates.jsonl NOT modified — noise excluded at read time via _is_noise_label(); raw data preserved
+
+### Roadmap Evolution
+
+- Phase 13 added (2026-03-17): Multi-year historical PDF ingestion — crawl listing pages to discover all available annual PDFs, download and accumulate into financials.parquet
 
 ### Pending Todos
 
