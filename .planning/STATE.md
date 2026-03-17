@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 Phase: 13 of 13 (Multi-year historical PDF ingestion)
 Plan: 1 of ? in current phase
-Status: In progress — Plan 01 complete (backfill orchestration module)
-Last activity: 2026-03-17 — Completed 13-01-PLAN.md (latam_backfiller.py + tests)
+Status: In progress — Plan 02 complete (dashboard backfill wiring)
+Last activity: 2026-03-17 — Completed 13-02-PLAN.md (app.py + LatamAgent.py backfill wiring)
 
 Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 6-12 all complete; Phase 13 in progress)
 
@@ -49,6 +49,7 @@ Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 
 | 12-learned-synonyms | 07 | 6min | 2 | 2 |
 | Phase 12-learned-synonyms P07 | 6min | 2 tasks | 2 files |
 | Phase 13-multi-year-historical-pdf-ingestion P01 | 2min | 2 tasks | 2 files |
+| Phase 13-multi-year-historical-pdf-ingestion P02 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,10 @@ Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 
 - [13-01 Backfiller]: ScraperResult.pdf_path used (not .path) — matching the actual dataclass field name in latam_scraper.py
 - [13-01 Backfiller]: _make_absolute and _is_on_domain imported from latam_scraper (both confirmed present at lines 755/766) — no local duplicate needed
 
+- [13-02 Backfill Wiring]: active_country derived from latam_companies session list; currency from latam_meta[slug]["currency_original"] — no separate latam_currency_ session key needed since data already populated by _run_latam_pipeline and _auto_load_existing_latam
+- [13-02 Backfill Wiring]: _update_historical_pdfs uses str(year) as JSON key; collect_listing_pdfs returns dict[int, str] so int keys used in memory, string keys on disk
+- [13-02 Backfill Wiring]: st.cache_data.clear() + targeted session-state reload after each write_year() — ensures trend charts reflect newly written parquet rows
+
 ### Roadmap Evolution
 
 - Phase 13 added (2026-03-17): Multi-year historical PDF ingestion — crawl listing pages to discover all available annual PDFs, download and accumulate into financials.parquet
@@ -147,5 +152,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-17
-Stopped at: Completed 13-01-PLAN.md — Backfill Orchestration Module
+Stopped at: Completed 13-02-PLAN.md — Dashboard Backfill Wiring
 Resume file: None
