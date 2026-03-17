@@ -96,7 +96,7 @@ Plans:
 **Goal:** LATAM companies accumulate 5 years of financial history automatically — the dashboard backfills historical PDFs on company registration and silently detects gaps on subsequent loads, showing per-year progress and enabling multi-year KPI trend charts
 **Depends on:** Phase 12
 **Requirements:** HIST-01, HIST-02, HIST-03, HIST-04, HIST-05, HIST-06
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 13-01-PLAN.md — latam_backfiller.py: listing-page crawler (Playwright/ProactorEventLoop) + skip-year guard + LatamBackfiller class (run_year/write_year) + unit tests
@@ -253,4 +253,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 9. Orchestration & Red Flags | 2/2 | Complete   | 2026-03-06 | - |
 | 10. Dashboard & Report | 2/2 | Complete    | 2026-03-07 | - |
 | 12. Learned Synonyms | 7/7 | Complete   | 2026-03-12 | - |
-| 13. Multi-year Historical PDF Ingestion | 0/3 | Planned | 2026-03-17 | - |
+| 13. Multi-year Historical PDF Ingestion | 1/3 | In Progress|  | - |

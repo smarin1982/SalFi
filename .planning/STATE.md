@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: 13 of 13 (Multi-year historical PDF ingestion) — NOT PLANNED
-Plan: 0 of ? in current phase
-Status: Phase 13 added — ready to plan
-Last activity: 2026-03-17 — Phase 13 added (multi-year historical PDF ingestion)
+Phase: 13 of 13 (Multi-year historical PDF ingestion)
+Plan: 1 of ? in current phase
+Status: In progress — Plan 01 complete (backfill orchestration module)
+Last activity: 2026-03-17 — Completed 13-01-PLAN.md (latam_backfiller.py + tests)
 
-Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 6-12 all complete; Phase 13 pending)
+Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 6-12 all complete; Phase 13 in progress)
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 
 | Phase 12-learned-synonyms P06 | 28min | 3 tasks | 2 files |
 | 12-learned-synonyms | 07 | 6min | 2 | 2 |
 | Phase 12-learned-synonyms P07 | 6min | 2 tasks | 2 files |
+| Phase 13-multi-year-historical-pdf-ingestion P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,10 @@ Progress: [##########] 92% (12/13 phases complete — v1.0 shipped; v2.0 Phases 
 - [12-07 Noise Filter]: 'neto' blocked only as standalone whole-string match — 'ingreso neto' (phrase) still passes through
 - [12-07 Noise Filter]: learned_candidates.jsonl NOT modified — noise excluded at read time via _is_noise_label(); raw data preserved
 
+- [13-01 Backfiller]: _download_pdf() called with strategy='backfill' and attempts=[] — actual signature requires these positional args; plan pseudocode showed slug as third arg which would silently misname the strategy
+- [13-01 Backfiller]: ScraperResult.pdf_path used (not .path) — matching the actual dataclass field name in latam_scraper.py
+- [13-01 Backfiller]: _make_absolute and _is_on_domain imported from latam_scraper (both confirmed present at lines 755/766) — no local duplicate needed
+
 ### Roadmap Evolution
 
 - Phase 13 added (2026-03-17): Multi-year historical PDF ingestion — crawl listing pages to discover all available annual PDFs, download and accumulate into financials.parquet
@@ -141,6 +146,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Completed 12-07-PLAN.md — Candidate Queue Noise Filter
+Last session: 2026-03-17
+Stopped at: Completed 13-01-PLAN.md — Backfill Orchestration Module
 Resume file: None
