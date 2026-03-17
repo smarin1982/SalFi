@@ -442,7 +442,7 @@ class LatamBackfiller:
         Returns True on success. Should only be called after the analyst has
         confirmed low-confidence results (status="low_conf").
 
-        Note: data_dir is derived as storage_path.parent.parent because
+        Note: data_dir is derived as storage_path.parent.parent.parent because
         storage_path is data/latam/{country}/{slug}/ and latam_processor
         expects DATA_DIR = data/ (it appends "latam/{country}/{slug}" itself).
         """
@@ -454,7 +454,7 @@ class LatamBackfiller:
                 company_slug=self.slug,
                 extraction_result=result.extraction_result,
                 country=self.country,
-                data_dir=str(self.storage_path.parent.parent),
+                data_dir=str(self.storage_path.parent.parent.parent),
             )
             logger.info(f"LatamBackfiller.write_year: wrote year={result.year} to parquet")
             return True
