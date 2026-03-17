@@ -1115,27 +1115,9 @@ def _auto_load_existing_latam() -> None:
                 except Exception:
                     st.session_state["latam_red_flags"][slug] = []
 
-                # Queue missing historical years for backfill (silent — no UI update here)
-                try:
-                    missing = _check_missing_years(slug, country)
-                    if missing:
-                        if "latam_backfill_queue" not in st.session_state:
-                            st.session_state["latam_backfill_queue"] = {}
-                        if slug not in st.session_state["latam_backfill_queue"]:
-                            # Only queue if not already queued (avoid overwriting in-progress)
-                            st.session_state["latam_backfill_queue"][slug] = missing
-                            if "latam_backfill_status" not in st.session_state:
-                                st.session_state["latam_backfill_status"] = {}
-                            from datetime import datetime as _dt
-                            _current = _dt.now().year
-                            _target = [_current - i for i in range(1, 6)]
-                            _existing_set = set(_target) - set(missing)
-                            st.session_state["latam_backfill_status"][slug] = {
-                                y: "skipped" if y in _existing_set else "pending"
-                                for y in _target
-                            }
-                except Exception:
-                    pass  # backfill gap detection is non-critical on load
+                # Backfill is triggered manually by the user (button in the LATAM tab).
+                # Do not auto-queue here — with many companies, auto-triggering Playwright
+                # crawls on tab open would make the dashboard slow.
 
                 already_loaded.add(slug)
             except Exception:
@@ -1375,7 +1357,17 @@ def _render_latam_tab() -> None:
     st.markdown("#### Red Flags")
     _render_latam_red_flags(active_slug, active_country)
 
-    # --- Backfill status (per-year progress + Re-extraer buttons) ---
+    # --- Backfill histórico (manual trigger) ---
+    st.markdown("#### Datos Históricos")
+    _bf_queue_now = st.session_state.get("latam_backfill_queue", {}).get(active_slug)
+    _bf_running = bool(_bf_queue_now)
+    if not _bf_running:
+        if st.button("Iniciar backfill histórico", key="latam_start_backfill_btn"):
+            from company_registry import make_storage_path
+            from pathlib import Path as _BFP2
+            _bf2_sp = make_storage_path(_BFP2("data"), active_country, active_slug)
+            _maybe_queue_backfill(active_slug, active_country, _bf2_sp)
+            st.rerun()
     _render_backfill_status(active_slug)
 
     # --- Executive report ---

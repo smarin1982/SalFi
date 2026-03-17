@@ -5,9 +5,25 @@
     "domain": "Corporate website domain used for scraping",
     "last_success": "ISO date of last successful PDF acquisition",
     "strategy": "Strategy that last succeeded: profile | corporate_crawl | ddgs | playwright",
-    "pdf_url_pattern": "URL pattern with * replacing the year — used for fast pattern replay",
+    "pdf_url_pattern": "URL pattern with * replacing the year â€” used for fast pattern replay",
     "nav_path": "Ordered list of nav link texts to follow to reach document section",
-    "failed_ddgs_queries": "DDGS query strings that returned irrelevant results — skipped on rerun",
+    "failed_ddgs_queries": "DDGS query strings that returned irrelevant results â€” skipped on rerun",
     "notes": "Free-text notes for manual review"
+  },
+  "mired-ips": {
+    "domain": "https://miredbarranquilla.com/",
+    "last_success": "2026-03-13",
+    "strategy": "corporate_crawl",
+    "pdf_url_pattern": "https://miredbarranquilla.com/wp-content/uploads/*/03/ESTADOS-FINANCIEROS-A-CORTE-DE-DICIEMBRE-31-DEL-2024.pdf",
+    "doc_tier": 1,
+    "failed_ddgs_queries": [],
+    "historical_pdfs": {
+      "2022": "https://miredbarranquilla.com/docs/estadosfinancieros/EF_MiRed_2022.pdf",
+      "2021": "https://miredbarranquilla.com/docs/estadosfinancieros/EF_MiRed_2021.pdf",
+      "2020": "https://miredbarranquilla.com/docs/estadosfinancieros/EF_MiRed_2020.pdf",
+      "2019": "https://miredbarranquilla.com/docs/estadosfinancieros/EF_MiRed_2019.pdf",
+      "2023": "https://miredbarranquilla.com/wp-content/uploads/2024/04/EF_MiRed_2023.pdf",
+      "2024": "https://miredbarranquilla.com/wp-content/uploads/2025/03/ESTADOS-FINANCIEROS-A-CORTE-DE-DICIEMBRE-31-DEL-2024.pdf"
+    }
   }
 }

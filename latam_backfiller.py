@@ -44,7 +44,7 @@ from latam_extractor import extract as _extract
 from latam_processor import process as _process
 
 # How many completed fiscal years to look back from current year
-BACKFILL_YEARS = 5
+BACKFILL_YEARS = 6
 
 
 # ---------------------------------------------------------------------------
@@ -137,8 +137,11 @@ async def _async_collect_listing_pdfs(
             # Build absolute URL
             abs_url = _make_absolute(href, base_origin)
 
-            # Extract year from URL or link text
-            year = _extract_year_from_text(href) or _extract_year_from_text(text)
+            # Extract year — prefer filename (last path segment) over directory path,
+            # since upload directories like /2025/03/...2024.pdf would otherwise
+            # return 2025 (upload year) instead of 2024 (fiscal year in filename).
+            _fname = href.rsplit("/", 1)[-1]
+            year = _extract_year_from_text(_fname) or _extract_year_from_text(text) or _extract_year_from_text(href)
             if year is None:
                 continue
 

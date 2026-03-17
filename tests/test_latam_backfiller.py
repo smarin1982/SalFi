@@ -17,6 +17,7 @@ from latam_backfiller import (
     _years_already_in_parquet,
     BackfillResult,
     LatamBackfiller,
+    BACKFILL_YEARS,
 )
 
 
@@ -89,7 +90,7 @@ def test_years_already_in_parquet_empty_parquet(tmp_path):
 def test_get_target_years_returns_5(tmp_path):
     bf = LatamBackfiller("slug", "CO", tmp_path, "https://example.com")
     years = bf.get_target_years()
-    assert len(years) == 5
+    assert len(years) == BACKFILL_YEARS
     current = datetime.now().year
     assert years[0] == current - 1  # most recent completed year
 
@@ -103,7 +104,7 @@ def test_get_target_years_descending(tmp_path):
 def test_get_missing_years_empty_parquet(tmp_path):
     bf = LatamBackfiller("slug", "CO", tmp_path, "https://example.com")
     missing = bf.get_missing_years()
-    assert len(missing) == 5  # all missing when no parquet exists
+    assert len(missing) == BACKFILL_YEARS  # all missing when no parquet exists
 
 
 def test_get_missing_years_skips_existing(tmp_path):
@@ -115,7 +116,7 @@ def test_get_missing_years_skips_existing(tmp_path):
     bf = LatamBackfiller("slug", "CO", tmp_path, "https://example.com")
     missing = bf.get_missing_years()
     assert yr not in missing
-    assert len(missing) == 4
+    assert len(missing) == BACKFILL_YEARS - 1
 
 
 def test_get_missing_years_all_present(tmp_path):
