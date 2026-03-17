@@ -93,12 +93,15 @@ Plans:
 
 ### Phase 13: Multi-year historical PDF ingestion
 
-**Goal:** [To be planned]
+**Goal:** LATAM companies accumulate 5 years of financial history automatically — the dashboard backfills historical PDFs on company registration and silently detects gaps on subsequent loads, showing per-year progress and enabling multi-year KPI trend charts
 **Depends on:** Phase 12
-**Plans:** 0 plans
+**Requirements:** HIST-01, HIST-02, HIST-03, HIST-04, HIST-05, HIST-06
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 13 to break down)
+- [ ] 13-01-PLAN.md — latam_backfiller.py: listing-page crawler (Playwright/ProactorEventLoop) + skip-year guard + LatamBackfiller class (run_year/write_year) + unit tests
+- [ ] 13-02-PLAN.md — app.py + LatamAgent.py: backfill queue on registration, silent gap detection on load, per-year progress display, backfill processing loop with validation intercept, historical_pdfs profile storage
+- [ ] 13-03-PLAN.md — Smoke tests + human verification checkpoint: dashboard loads, status table visible, idempotency confirmed
 
 ---
 
@@ -250,3 +253,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 9. Orchestration & Red Flags | 2/2 | Complete   | 2026-03-06 | - |
 | 10. Dashboard & Report | 2/2 | Complete    | 2026-03-07 | - |
 | 12. Learned Synonyms | 7/7 | Complete   | 2026-03-12 | - |
+| 13. Multi-year Historical PDF Ingestion | 0/3 | Planned | 2026-03-17 | - |
