@@ -863,13 +863,14 @@ def _render_synonym_panel() -> None:
         candidates = get_review_candidates(min_seen_count=1)
         cache = _load_syn_cache()
 
-        # ── Auto-assign only uncached candidates — silent, runs once per new label ──
-        uncached = [c for c in candidates if c.label.strip().lower() not in cache]
-        if uncached:
-            for cand in uncached:
-                result = suggest_mapping(cand)
-                cache[cand.label.strip().lower()] = result.canonical or ""
-            _save_syn_cache(cache)
+        # Auto-suggest deshabilitado — evita consumo de tokens en revisión de sinónimos.
+        # Para activar: descomentar el bloque y ejecutar manualmente desde este panel.
+        # uncached = [c for c in candidates if c.label.strip().lower() not in cache]
+        # if uncached:
+        #     for cand in uncached:
+        #         result = suggest_mapping(cand)
+        #         cache[cand.label.strip().lower()] = result.canonical or ""
+        #     _save_syn_cache(cache)
 
         total = len(cache)
         if total == 0:

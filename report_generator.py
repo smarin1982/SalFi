@@ -88,8 +88,8 @@ def generate_executive_report(
             f"## 3. Red Flags Activas\n"
             f"## 4. Contexto Sectorial y Comparables\n\n"
             f"Datos disponibles:\n"
-            f"KPIs (valores en USD normalizados): {json.dumps(kpis, ensure_ascii=False, indent=2)}\n"
-            f"Red Flags detectadas: {json.dumps(red_flags, ensure_ascii=False, indent=2)}\n"
+            f"KPIs (valores en USD normalizados): {json.dumps({k: v for k, v in kpis.items() if v is not None}, ensure_ascii=False, separators=(',', ':'))}\n"
+            f"Red Flags detectadas: {json.dumps(red_flags, ensure_ascii=False, separators=(',', ':'))}\n"
             f"Empresas comparables (búsqueda web): {comparables}\n"
             f"Moneda original: {company.get('currency_original', 'N/D')}\n\n"
             f"Instrucciones por sección:\n"
@@ -104,8 +104,8 @@ def generate_executive_report(
         )
 
         msg = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=4096,
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
             system=(
                 "Eres un analista financiero senior especializado en empresas de salud de "
                 "Latinoamérica. Genera reportes ejecutivos concisos, factuales y en español "
