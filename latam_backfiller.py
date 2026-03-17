@@ -38,6 +38,7 @@ from latam_scraper import (
     _make_absolute,
     _is_on_domain,
     NAV_FINANCIAL_KEYWORDS,
+    NAV_T1_KEYWORDS,
 )
 from latam_extractor import extract as _extract
 from latam_processor import process as _process
@@ -99,6 +100,7 @@ async def _async_collect_listing_pdfs(
     """
     parsed = urlparse(listing_url)
     base_origin = f"{parsed.scheme}://{parsed.netloc}"
+    target_domain_str = parsed.netloc.lower().lstrip("www.")
 
     # year → list of (score, url) tuples
     candidates: dict[int, list[tuple[int, str]]] = {}
@@ -151,7 +153,61 @@ async def _async_collect_listing_pdfs(
             # Initial harvest
             await _harvest_page(listing_url)
 
-            # Follow pagination if too few results found
+            # Follow financial nav links when the starting page is a homepage
+            # (few or no PDFs directly on root). T1 nav links (estados financieros,
+            # balance general) are followed before generic financial links so the
+            # backfiller mirrors the same priority as the scraper's corporate crawl.
+            if len(candidates) < 3:
+                try:
+                    nav_anchors = await page.query_selector_all("a[href]")
+                    t1_nav: list[str] = []
+                    other_nav: list[str] = []
+                    seen_nav: set[str] = set()
+                    for anchor in nav_anchors:
+                        try:
+                            href = (await anchor.get_attribute("href") or "").strip()
+                            text = (await anchor.inner_text() or "").strip().lower()
+                        except Exception:
+                            continue
+                        if not href:
+                            continue
+                        href_lower = href.lower()
+                        # Skip PDF links — we want navigation pages, not direct PDFs
+                        if href_lower.endswith(".pdf") or ".pdf?" in href_lower:
+                            continue
+                        abs_url = _make_absolute(href, base_origin)
+                        if not abs_url or abs_url in seen_nav:
+                            continue
+                        if not _is_on_domain(abs_url, target_domain_str):
+                            continue
+                        if abs_url == listing_url:
+                            continue
+                        seen_nav.add(abs_url)
+                        is_t1 = any(
+                            kw in text or kw.replace(" ", "-") in href_lower
+                            for kw in NAV_T1_KEYWORDS
+                        )
+                        is_financial = any(
+                            kw in text or kw.replace(" ", "-") in href_lower
+                            for kw in NAV_FINANCIAL_KEYWORDS
+                        )
+                        if is_t1:
+                            t1_nav.append(abs_url)
+                        elif is_financial:
+                            other_nav.append(abs_url)
+                    # Visit T1 nav links first (up to 3 total nav pages)
+                    nav_followed = 0
+                    for nav_url in (t1_nav[:3] + other_nav[:2]):
+                        if nav_followed >= 3:
+                            break
+                        if len(candidates) >= 5:
+                            break
+                        await _harvest_page(nav_url)
+                        nav_followed += 1
+                except Exception as nav_exc:
+                    logger.debug(f"_async_collect_listing_pdfs nav-following failed: {nav_exc}")
+
+            # Follow pagination if still too few results found
             if len(candidates) < 3:
                 PAGINATION_PATTERNS = ["page=", "pagina=", "p=", "/page/", "/pagina/"]
                 PAGINATION_TEXT = ["anterior", "siguiente", "older", "newer"]

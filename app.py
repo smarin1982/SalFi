@@ -627,18 +627,23 @@ def _render_latam_kpi_cards(slug: str, country: str) -> None:
 
     df_sorted = kpis_df.sort_values("fiscal_year") if "fiscal_year" in kpis_df.columns else kpis_df
 
-    # Rows of max 3 KPI cards each
+    # Rows of max 3 KPI cards — always 3 columns wide for consistent card sizing.
+    # Last row with 1 KPI: centered (middle column). With 2: left-justified.
     for row_kpis in [display_kpis[i:i+3] for i in range(0, n, 3)]:
-        cols = st.columns(len(row_kpis), gap="medium")
-        for col, kpi in zip(cols, row_kpis):
+        n_row = len(row_kpis)
+        all_cols = st.columns(3, gap="medium")
+        render_cols = [all_cols[1]] if n_row == 1 else all_cols[:n_row]
+        for col, kpi in zip(render_cols, row_kpis):
             with col:
                 if kpi not in df_sorted.columns:
                     st.metric(label=KPI_META.get(kpi, {}).get("label", kpi), value="N/A")
                     continue
 
-                kpi_series = df_sorted[kpi].dropna()
-                latest_val = kpi_series.iloc[-1] if not kpi_series.empty else None
-                prior_val = kpi_series.iloc[-2] if len(kpi_series) >= 2 else None
+                # Track year alongside value so the label shows the actual year of data
+                _kpi_with_year = df_sorted[["fiscal_year", kpi]].dropna(subset=[kpi])
+                latest_val = _kpi_with_year[kpi].iloc[-1] if not _kpi_with_year.empty else None
+                prior_val = _kpi_with_year[kpi].iloc[-2] if len(_kpi_with_year) >= 2 else None
+                latest_year = int(_kpi_with_year["fiscal_year"].iloc[-1]) if not _kpi_with_year.empty else None
 
                 delta_pct = None
                 if latest_val is not None and prior_val is not None and prior_val != 0:
@@ -646,9 +651,10 @@ def _render_latam_kpi_cards(slug: str, country: str) -> None:
 
                 kpi_meta = KPI_META.get(kpi, {"label": kpi, "format": "ratio_x"})
                 display_val = _format_latam_kpi_value(latest_val, kpi_meta["format"], meta)
+                year_label = f" ({latest_year})" if latest_year else ""
 
                 st.metric(
-                    label=f"**{kpi_meta['label']}**",
+                    label=f"**{kpi_meta['label']}{year_label}**",
                     value=display_val,
                     delta=format_delta(delta_pct),
                     delta_color="normal",
