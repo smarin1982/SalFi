@@ -425,3 +425,37 @@ class LatamAgent:
         if not self.meta_path.exists():
             return {}
         return json.loads(self.meta_path.read_text(encoding="utf-8"))
+
+    def _update_historical_pdfs(self, year_url_map: dict) -> None:
+        """Merge discovered {year: pdf_url} into this company's scraper profile
+        under the 'historical_pdfs' key. Append-only — existing URLs are never
+        overwritten (they are already validated).
+
+        Args:
+            year_url_map: dict mapping int fiscal year to PDF URL string.
+                          Keys can also be strings (JSON-safe).
+        """
+        profiles_path = Path("data/latam/scraper_profiles.json")
+        profiles: dict = {}
+        if profiles_path.exists():
+            try:
+                with open(profiles_path, "r", encoding="utf-8") as f:
+                    profiles = json.load(f)
+            except Exception:
+                profiles = {}
+
+        entry = profiles.get(self.slug, {})
+        historical = entry.get("historical_pdfs", {})
+        for year, url in year_url_map.items():
+            key = str(year)
+            if key not in historical:  # append-only: never overwrite validated entries
+                historical[key] = url
+        entry["historical_pdfs"] = historical
+        profiles[self.slug] = entry
+
+        try:
+            profiles_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(profiles_path, "w", encoding="utf-8") as f:
+                json.dump(profiles, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"LatamAgent._update_historical_pdfs failed: {e}")
