@@ -123,7 +123,7 @@ def test_get_missing_years_all_present(tmp_path):
     """When all 5 target years are in parquet, get_missing_years returns empty list."""
     parquet_path = tmp_path / "financials.parquet"
     current = datetime.now().year
-    target_years = [current - i for i in range(1, 6)]
+    target_years = [current - i for i in range(1, BACKFILL_YEARS + 1)]
     df = pd.DataFrame({"fiscal_year": target_years})
     df.to_parquet(parquet_path)
     bf = LatamBackfiller("slug", "CO", tmp_path, "https://example.com")
