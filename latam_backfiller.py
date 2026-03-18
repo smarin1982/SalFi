@@ -13,7 +13,8 @@ Design constraint: This module is a pure coordinator. It does NOT modify any exi
 module (latam_scraper, latam_extractor, latam_processor).
 
 CRITICAL: All Playwright calls go through ThreadPoolExecutor + asyncio.ProactorEventLoop
-on Windows. sync_playwright raises NotImplementedError from ThreadPoolExecutor on Windows.
+on Windows. The blocking/threaded playwright API raises NotImplementedError inside a
+ThreadPoolExecutor on Windows — use async_playwright exclusively.
 """
 from __future__ import annotations
 
