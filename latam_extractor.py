@@ -385,6 +385,7 @@ def _extract_pdfplumber(
     source_map: dict = {}
     warnings_list: list = []
     current_section = "unknown"
+    _unmatched: list[str] = []
     # Comparative (prior) year data — populated when a second year column is detected
     prior_fields: dict = {}
     prior_year = fiscal_year - 1 if fiscal_year else 0
@@ -502,10 +503,7 @@ def _extract_pdfplumber(
 
                     canonical = map_to_canonical(label)
                     if canonical is None:
-                        logger.debug(
-                            f"[latam_extractor] unmatched label | "
-                            f"company={company_slug!r} | page={page_num} | label={label!r}"
-                        )
+                        _unmatched.append(label)
                         # Capture unmatched label for future synonym review
                         _append_candidate(
                             label=label,
@@ -530,6 +528,11 @@ def _extract_pdfplumber(
                     # Store prior year value (first occurrence only)
                     if prior_value is not None and canonical not in prior_fields:
                         prior_fields[canonical] = prior_value
+
+    if _unmatched:
+        logger.debug(
+            f"[latam_extractor] {len(_unmatched)} unmatched labels for {company_slug!r}: {_unmatched}"
+        )
 
     results = [ExtractionResult(
         fields=fields,
@@ -571,6 +574,7 @@ def _extract_pymupdf_text(
     fields: dict = {}
     source_map: dict = {}
     current_section = "unknown"
+    _unmatched: list[str] = []
 
     for page_num, page in enumerate(doc, start=1):
         page_text = page.get_text("text")
@@ -609,10 +613,7 @@ def _extract_pymupdf_text(
 
             canonical = map_to_canonical(label)
             if canonical is None:
-                logger.debug(
-                    f"[latam_extractor] unmatched label | "
-                    f"company={company_slug!r} | page={page_num} | label={label!r}"
-                )
+                _unmatched.append(label)
                 # Capture unmatched label for future synonym review
                 _append_candidate(
                     label=label,
@@ -632,6 +633,11 @@ def _extract_pymupdf_text(
                     section_heading=current_section,
                     extraction_method="pymupdf_text",
                 )
+
+    if _unmatched:
+        logger.debug(
+            f"[latam_extractor] {len(_unmatched)} unmatched labels for {company_slug!r}: {_unmatched}"
+        )
 
     return ExtractionResult(
         fields=fields,
@@ -685,16 +691,32 @@ def _extract_ocr(
     fields: dict = {}           # primary year (e.g. 2024)
     fields_comp: dict = {}      # comparative year (e.g. 2023)
     source_map: dict = {}
+    _unmatched: list[str] = []
     source_map_comp: dict = {}
     current_section = "unknown"
 
     # Pre-render all pages once to avoid double-rendering page 1.
-    # Only match proper financial numbers: require at least one thousand-separator group
-    # (e.g. "116.222.588.859,23") to avoid capturing note references (21, 22).
-    _FIN_NUM_RE = re.compile(r"[-\u2013]?\$?\s*\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?")
+    # Match financial numbers in two formats:
+    #   1. Colombian (dot-thousands, comma-decimal): 119.056.418.774,00
+    #   2. OCR-artifact (comma-thousands, dot-decimal-or-thousands): 119,056,418.774
+    #      Tesseract at 300 DPI commonly OCRs "$119.056.418.774" as "5119,056,418.774":
+    #      the "$" merges with the first digit as "5", and dots → commas.
+    #      The alternate pattern matches the number starting from digit position 1 ("119")
+    #      so the leading "5" stays in the label region, not in the numeric match.
+    _FIN_NUM_RE = re.compile(
+        r"[-\u2013]?\$?\s*\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?"   # Colombian: 1.234.567,89
+        r"|[-\u2013]?\$?\s*\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?"  # OCR/US: 1,234,567.774
+    )
+
+    # Limit to first MAX_OCR_PAGES pages — financial statements appear in the first
+    # 10-15 pages of LATAM annual reports.  PUC detail ledger pages (which can extend
+    # to 70+ pages) contain sub-account rows that mis-map canonical fields and overwrite
+    # correctly-extracted statement totals via the max-absolute-value strategy.
+    MAX_OCR_PAGES = 20
+    pages_to_ocr = list(doc)[:MAX_OCR_PAGES]
 
     pages_ocr: list[str] = []
-    for page in doc:
+    for page in pages_to_ocr:
         pix = page.get_pixmap(dpi=300)
         img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("L")  # grayscale
         pages_ocr.append(pytesseract.image_to_string(img, lang="spa", config="--psm 6"))
@@ -783,10 +805,7 @@ def _extract_ocr(
 
             canonical = map_to_canonical(label)
             if canonical is None:
-                logger.debug(
-                    f"[latam_extractor] unmatched label | "
-                    f"company={company_slug!r} | page={page_num} | label={label!r}"
-                )
+                _unmatched.append(label)
                 # Capture unmatched label for future synonym review
                 _append_candidate(
                     label=label,
@@ -820,6 +839,11 @@ def _extract_ocr(
                 )
 
     # primary_year, comp_year, primary_is_left already computed above before the main loop.
+
+    if _unmatched:
+        logger.debug(
+            f"[latam_extractor] {len(_unmatched)} unmatched labels for {company_slug!r}: {_unmatched}"
+        )
 
     results = [
         ExtractionResult(

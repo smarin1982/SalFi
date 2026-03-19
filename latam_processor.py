@@ -30,7 +30,6 @@ import pandas as pd
 from loguru import logger
 
 from processor import calculate_kpis, save_parquet   # KPI-01: import, never modify
-from currency import to_usd
 from latam_extractor import ExtractionResult
 
 
@@ -92,8 +91,8 @@ def process(
 
     Steps:
       1. Normalise input to list[ExtractionResult] for uniform processing.
-      2. Build one row per ExtractionResult with canonical column names; convert each
-         non-NaN monetary field from native currency to USD via currency.to_usd().
+      2. Build one row per ExtractionResult with canonical column names; values stored
+         in native local currency (COP, BRL, MXN, etc.) — no FX conversion applied.
       3. Enforce schema dtypes (fiscal_year int64, all monetary cols float64).
       4. Determine output directory under data/latam/{country?}/{slug}/.
       5. If prior-year Parquet exists, concat + deduplicate so growth KPIs are
@@ -184,6 +183,13 @@ def process(
                 logger.debug(
                     f"Balance sheet correction FY{fy}: total_liabilities "
                     f"{tl:,.0f} → {corrected:,.0f} (= assets − equity)"
+                )
+            elif tl / abs(ta) < 0.01:                  # liabilities < 1% of assets → truncated OCR
+                corrected = ta - te
+                df_combined.at[idx, "total_liabilities"] = corrected
+                logger.debug(
+                    f"Balance sheet reconstruction FY{fy}: total_liabilities "
+                    f"{tl:,.0f} → {corrected:,.0f} (OCR truncation, = assets − equity)"
                 )
 
     # ------------------------------------------------------------------

@@ -43,6 +43,8 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "ingresos por servicios",                           # abbreviated form
         "ingresos totales",                                 # total revenues
         "ventas netas",                                     # net sales (some MX companies)
+        "ventas de servicios",                              # abbreviated form
+        "ventas",                                           # bare label (pdfplumber truncation)
         "total de ingresos",                                # total income
         "ingresos",                                         # bare label
     ],
@@ -70,6 +72,7 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "resultado de operación",
         "resultado operativo",
         "ebit",
+        "ebitda",  # EBITDA used as operating_income proxy (closest schema column)
         # Pre-tax income (closest proxy in current schema)
         "ganancia antes de impuestos",
         "ganancia antes de impuesto",
@@ -139,13 +142,20 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "total activos",
         "total de activos",
         "activo total",
+        "activos totales",               # PUC CO: noun-adj order
         "suma del activo",
         "total activo",
+        # IFRS balance-sheet check line: equity + liabilities = total assets
+        "patrimonio y pasivos totales",  # CO IFRS balance sheet total line
+        "pasivos y patrimonio totales",  # variant column order
+        "total pasivos y patrimonio",    # another variant
+        "total patrimonio y pasivos",    # another variant
     ],
     "total_liabilities": [
         "total pasivos",
         "total de pasivos",
         "pasivo total",
+        "pasivos totales",       # PUC CO: noun-adj order
         "suma del pasivo",
         "total pasivo",
     ],
@@ -192,6 +202,7 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "deudores comerciales",
         "cartera de clientes",
         "cuentas por cobrar netas",
+        "cobrar corrientes",
         "deudores",
     ],
     "inventory": [
@@ -254,6 +265,43 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "gastos de capital",
         "adquisiciones de propiedad planta y equipo",
         "compras de propiedad planta y equipo",
+    ],
+    # ---------------------------------------------------------------------------
+    # Derived indicators — extracted from indicator tables (e.g. CO management
+    # report page 41). These fields are NOT in FINANCIALS_COLUMNS so they are
+    # stored in ExtractionResult.fields but not written to financials.parquet.
+    # They are included here so the extractor logs them and the synonym reviewer
+    # can capture them for future schema additions.
+    # ---------------------------------------------------------------------------
+    "current_ratio": [
+        "razón corriente",
+        "razon corriente",
+        "liquidez corriente",
+        "índice de liquidez",
+        "indice de liquidez",
+        "razón de liquidez",
+        "razon de liquidez",
+    ],
+    "dso": [
+        "periodo de cobro",
+        "período de cobro",
+        "periodo de cobro en dias",
+        "período de cobro en días",
+        "período de cobro (días)",
+        "periodo de cobro (dias)",
+        "días de cuentas por cobrar",
+        "dias de cuentas por cobrar",
+        # NOTE: "rotacion de cartera en dias" deliberately excluded — "Rotación de cartera"
+        # (without "en días") is the turnover RATIO (e.g. 2.65x), not DSO in days (135 days).
+        # That label would falsely prefix-match this synonym via Direction 3.
+    ],
+    "dpo": [
+        "periodo de pago",
+        "período de pago",
+        "periodo de pago en dias",
+        "período de pago en días",
+        "días de cuentas por pagar",
+        "dias de cuentas por pagar",
     ],
 }
 
@@ -363,29 +411,46 @@ def map_to_canonical(label: str) -> Optional[str]:
             candidates.append((canonical, _normalize(synonym)))
     candidates.sort(key=lambda x: len(x[1]), reverse=True)
 
+    # -----------------------------------------------------------------------
+    # TWO-PASS matching to prevent Direction-3 (prefix) from shadowing an
+    # exact Direction-1/2 match that belongs to a shorter synonym.
+    #
+    # Example: label "total activos"
+    #   Pass 1 — Direction 1 on (total_assets, "total activos") → MATCH ✓
+    #   If merged in one loop, Direction 3 on (current_assets, "total activos
+    #   corrientes") fires first (longer synonym, higher sort position) → wrong.
+    # -----------------------------------------------------------------------
+
+    # Pass 1: Direction 1 (synonym-in-label) and Direction 2 (label-in-synonym)
     for canonical, synonym_plain in candidates:
-        # Direction 1: synonym appears as a whole-word sequence within the normalised label
-        #   e.g. "ingresos" matches "ingresos operacionales" but NOT "reingresos..."
-        #   Uses negative lookbehind/lookahead to enforce word boundaries.
+        # Direction 1: synonym appears as a whole-word sequence within the label.
+        #   e.g. "ingresos" matches "ingresos operacionales" but NOT "reingresos"
         synonym_in_label = bool(
             re.search(r"(?<![a-z])" + re.escape(synonym_plain) + r"(?![a-z])", normalized_plain)
         )
-        # Direction 2: label appears within the synonym
-        #   Only valid when the label is AT LEAST as long as the synonym.
-        #   Prevents a short input like "total activos" from being swallowed by a
-        #   longer synonym "total activos corrientes" (which would be a false positive).
+        # Direction 2: label appears within the synonym, only when label >= synonym length.
         label_in_synonym = (
             len(normalized_plain) >= len(synonym_plain)
             and normalized_plain in synonym_plain
         )
-        # Direction 3: label is a prefix of the synonym — handles pdfplumber truncation
-        #   e.g. "ganancia antes de impue" matches synonym "ganancia antes de impuestos"
-        #   Require at least 12 chars to avoid short false-positive prefixes.
+        if synonym_in_label or label_in_synonym:
+            return canonical
+
+    # Pass 2: Direction 3 — prefix matching for pdfplumber-truncated labels.
+    #   e.g. "Ganancia o" (10 chars) → prefix of "ganancia o perdida del año" → net_income
+    #
+    #   Guards:
+    #   - len >= 8: ignore very short prefixes
+    #   - ratio >= 0.30: label must be ≥30% of the synonym length — rules out a
+    #     single word ("efectivo", 21%) being a prefix of a long unrelated synonym
+    #     while still catching genuine truncations like "Ganancia o" (38%)
+    for canonical, synonym_plain in candidates:
         label_is_prefix = (
-            len(normalized_plain) >= 12
+            len(normalized_plain) >= 8
             and synonym_plain.startswith(normalized_plain)
+            and len(normalized_plain) / len(synonym_plain) >= 0.30
         )
-        if synonym_in_label or label_in_synonym or label_is_prefix:
+        if label_is_prefix:
             return canonical
 
     # Fallback: check human-approved learned synonyms (base map always wins)
@@ -438,8 +503,22 @@ def parse_latam_number(text: str) -> Optional[float]:
     has_period = "." in cleaned
 
     if has_comma and has_period:
-        # Format: 1.234.567,89 — remove periods (thousands), replace comma with dot (decimal)
-        cleaned = cleaned.replace(".", "").replace(",", ".")
+        first_comma = cleaned.index(",")
+        first_period = cleaned.index(".")
+        if first_period < first_comma:
+            # Colombian format: 1.234.567,89 — remove periods (thousands), comma → decimal
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            # American / OCR-artifact format: 1,234,567.89 or 1,234,567.774
+            # When the final period-segment has exactly 3 digits, it is also a thousands
+            # group (not a decimal fraction) — common Tesseract OCR artifact at 300 DPI.
+            last_segment = cleaned.rsplit(".", 1)[-1]
+            if len(last_segment) == 3 and last_segment.isdigit():
+                # e.g. 119,056,418.774 → all separators are thousands → 119056418774
+                cleaned = cleaned.replace(",", "").replace(".", "")
+            else:
+                # Standard American decimal: remove commas (thousands), keep period
+                cleaned = cleaned.replace(",", "")
     elif has_comma and not has_period:
         # Only comma: comma is decimal separator (e.g. "1234567,89")
         cleaned = cleaned.replace(",", ".")
