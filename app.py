@@ -812,14 +812,18 @@ def _maybe_queue_backfill(slug: str, country: str, storage_path) -> None:
     target = [current - i for i in range(1, 6)]
     missing = [y for y in target if y not in existing]
 
-    # Also re-queue years that are in parquet but missing total_assets (balance not extracted)
+    # Also re-queue years that are in parquet but missing key balance fields
+    # (total_assets OR total_equity not yet confirmed)
     incomplete_balance: set[int] = set()
     if parquet_path.exists():
         try:
             import pandas as _pd_bf
-            _df_bf = _pd_bf.read_parquet(parquet_path, columns=["fiscal_year", "total_assets"])
+            _df_bf = _pd_bf.read_parquet(
+                parquet_path, columns=["fiscal_year", "total_assets", "total_equity"]
+            )
+            _incomplete_mask = _df_bf["total_assets"].isna() | _df_bf["total_equity"].isna()
             incomplete_balance = set(
-                _df_bf[_df_bf["total_assets"].isna()]["fiscal_year"].dropna().astype(int)
+                _df_bf[_incomplete_mask]["fiscal_year"].dropna().astype(int)
             )
             for y in incomplete_balance:
                 if y in target and y not in missing:
