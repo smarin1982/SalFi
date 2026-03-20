@@ -24,6 +24,35 @@
       "2019": "https://miredbarranquilla.com/docs/estadosfinancieros/EF_MiRed_2019.pdf",
       "2023": "https://miredbarranquilla.com/wp-content/uploads/2024/04/EF_MiRed_2023.pdf",
       "2024": "https://miredbarranquilla.com/wp-content/uploads/2025/03/ESTADOS-FINANCIEROS-A-CORTE-DE-DICIEMBRE-31-DEL-2024.pdf"
+    },
+    "t2_pdfs": {
+      "2024": "https://miredbarranquilla.com/docs/gestion/2024/Infgestion2024MiRedIPS.pdf",
+      "2023": "https://miredbarranquilla.com/docs/gestion/2023/Infgestion2023MiRedIPS.pdf",
+      "2022": "https://miredbarranquilla.com/docs/gestion/2022/Infgestion2022MiRedIPS.pdf",
+      "2021": "https://miredbarranquilla.com/docs/gestion/2021/Inf_gestion2021.pdf",
+      "2020": "https://miredbarranquilla.com/docs/gestion/2020/Inf_gestion2020-1.pdf"
+    }
+  },
+  "centro-radio-oncologico-del-caribe": {
+    "domain": "https://crocsas.com/",
+    "failed_ddgs_queries": [
+      "ddgs:site:https://crocsas.com/ filetype:pdf \"Estado de Situación ",
+      "ddgs:site:https://crocsas.com/ filetype:pdf \"estados financieros\"",
+      "ddgs:site:https://crocsas.com/ filetype:pdf \"informe anual\" \"esta"
+    ],
+    "last_success": "2026-03-19",
+    "strategy": "corporate_crawl",
+    "pdf_url_pattern": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/Estadosfinancieros2024-2023.pdf",
+    "doc_tier": 1,
+    "historical_pdfs": {
+      "2014": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/ESTADOSFINANCIEROS2014.pdf",
+      "2016": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/ESTADOS-FINANCIEROS-CROC-2016-2015.pdf",
+      "2017": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/ESTADOSFINANCIEROSCROC2018-2017.pdf",
+      "2018": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/ESTADOSFINANCIEROSCROC2019-2018.pdf",
+      "2020": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/ESTADOSFINANCIEROSAO2020CROC.pdf",
+      "2021": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/ESTADOSFINANCIEROS20222021CROC.pdf",
+      "2022": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/ESTADOSFINANCIEROS2023.pdf",
+      "2023": "https://assets.nicepagecdn.com/1a0a0638/6079041/files/Estadosfinancieros2024-2023.pdf"
     }
   }
 }

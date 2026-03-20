@@ -90,6 +90,14 @@ None. The plan's verification script used `min_seen=1` as parameter name but the
 - Review panel now surfaces actionable financial terms for the analyst
 - Phase 12 gap closure plans complete; no further queue noise issues expected
 
+## Self-Check: PASSED
+
+- FOUND: latam_extractor.py
+- FOUND: latam_synonym_reviewer.py
+- FOUND: .planning/phases/12-learned-synonyms/12-07-SUMMARY.md
+- FOUND: 87663ca (feat: write-time noise filter)
+- FOUND: 3dc6dc2 (feat: read-time noise filter)
+
 ---
 *Phase: 12-learned-synonyms*
 *Completed: 2026-03-12*

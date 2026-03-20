@@ -75,4 +75,10 @@ Rewrote `_format_latam_kpi_value()` in `app.py`:
 - **Files modified:** `app.py`
 - **Commit:** 621cfab
 
-## Self-Check
+## Self-Check: PASSED
+
+- app.py: FOUND and syntax OK
+- LatamAgent.py: FOUND and syntax OK
+- 12-05-SUMMARY.md: FOUND
+- Commit 621cfab: FOUND (feat - financials table + FX fix)
+- Commit 8e4ef46: FOUND (docs - SUMMARY + STATE + ROADMAP)

@@ -1,0 +1,26 @@
+# Environment / secrets
+.env
+
+# Generated data (large binaries, downloaded PDFs, parquet files)
+data/clean/
+data/raw/
+data/cache/
+data/latam/co/
+data/latam/latam/
+
+# Runtime / cache
+data/latam/learned_candidates.jsonl
+data/latam/learned_suggestions_cache.json
+logs/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local tooling state
+.agents/
+.claude/
+
+# IDE
+.vscode/
+.idea/

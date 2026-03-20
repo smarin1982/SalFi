@@ -55,11 +55,19 @@ BACKFILL_YEARS = 6
 def _extract_year_from_text(text: str) -> Optional[int]:
     """Extract fiscal year (2015–current) from a URL or link text string.
 
-    Returns the first year found in the range [2015, current_year].
-    Returns None when no valid year is found.
+    Pass 1: word-boundary match (\b2020\b) — precise, avoids false positives.
+    Pass 2: bare match (20[12]\\d) — catches years embedded in filenames like
+            ESTADOSFINANCIEROSAO2020CROC.pdf where no word boundary exists.
+    Returns the first valid year found, or None.
     """
     current = datetime.now().year
+    # Pass 1: word-boundary — preferred
     for m in re.findall(r'\b(20[12]\d)\b', text):
+        y = int(m)
+        if 2015 <= y <= current:
+            return y
+    # Pass 2: bare — for years embedded in camelCase/all-caps filenames
+    for m in re.findall(r'(20[12]\d)', text):
         y = int(m)
         if 2015 <= y <= current:
             return y
@@ -385,7 +393,7 @@ class LatamBackfiller:
             self.raw_dir.mkdir(parents=True, exist_ok=True)
             scrape_result = _download_pdf(
                 url=pdf_url,
-                out_dir=self.raw_dir,
+                out_dir=self.storage_path,  # _download_pdf appends /raw/ internally
                 strategy="backfill",
                 attempts=[],
             )

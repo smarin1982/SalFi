@@ -65,6 +65,13 @@ def _render_confidence_badge(confidence: str | None) -> None:
         st.markdown(md)
 
 
+def _advance_backfill_queue(slug: str) -> None:
+    """Pop the first year from the backfill queue for slug (called after confirm/discard)."""
+    queue = st.session_state.get("latam_backfill_queue", {}).get(slug, [])
+    if queue:
+        st.session_state["latam_backfill_queue"][slug] = queue[1:]
+
+
 def _handle_discard() -> None:
     """
     Clear all pending LATAM extraction state from session.
@@ -72,6 +79,10 @@ def _handle_discard() -> None:
     Does NOT show any st.info here — re-run block in app.py handles that.
     Calls st.rerun() to refresh the UI.
     """
+    _company = st.session_state.get("latam_pending_company", {})
+    _slug = _company.get("slug", "") if isinstance(_company, dict) else str(_company)
+    if _slug:
+        _advance_backfill_queue(_slug)
     for key in ("latam_pending_extraction", "latam_pending_company"):
         if key in st.session_state:
             del st.session_state[key]
@@ -165,6 +176,9 @@ def _handle_confirm(
         # Navigation state — app.py reads this on next rerun to show success message
         st.session_state["active_latam_company"] = {"slug": slug, "country": country}
 
+        # Advance backfill queue — year was held pending validation, now confirmed
+        _advance_backfill_queue(slug)
+
         # Clear pending keys ONLY after successful write
         # Do NOT call _handle_discard() here — that sets latam_show_rerun, wrong after confirm
         for key in ("latam_pending_extraction", "latam_pending_company"):
@@ -236,7 +250,31 @@ def write_meta_json(
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def render_latam_validation_panel(extraction_result: dict, company: dict) -> None:
+def _extraction_result_to_dict(er) -> dict:
+    """Convert an ExtractionResult dataclass to the flat dict expected by this panel.
+
+    Maps canonical English field names to Spanish display names used by the form,
+    and extracts per-field confidence and source-page metadata.
+    """
+    canonical_to_display = {v: k for k, v in _DISPLAY_TO_CANONICAL.items()}
+    fields = getattr(er, "fields", {})
+    source_map = getattr(er, "source_map", {})
+    confidence = getattr(er, "confidence", None)
+    d: dict = {
+        "fiscal_year": getattr(er, "fiscal_year", None),
+        "currency_code": getattr(er, "currency_code", None),
+        "extraction_method": getattr(er, "extraction_method", None),
+        "confidence": confidence,
+    }
+    for canonical, display in canonical_to_display.items():
+        d[display] = fields.get(canonical)
+        d[f"confidence_{display}"] = confidence
+        src = source_map.get(canonical)
+        d[f"source_page_{display}"] = getattr(src, "page_number", None) if src else None
+    return d
+
+
+def render_latam_validation_panel(extraction_result, company: dict) -> None:
     """
     Render the LATAM extraction validation form panel.
 
@@ -253,6 +291,12 @@ def render_latam_validation_panel(extraction_result: dict, company: dict) -> Non
 
     After the form block closes, confirmed/discarded booleans drive the handler calls.
     """
+    # Accept ExtractionResult dataclass or legacy dict
+    if not isinstance(extraction_result, dict):
+        extraction_result = _extraction_result_to_dict(extraction_result)
+
+    currency = extraction_result.get("currency_code") or "COP"
+
     with st.form(key="latam_validation_form"):
         st.subheader("Validacion de Extraccion")
         st.caption(
@@ -265,7 +309,7 @@ def render_latam_validation_panel(extraction_result: dict, company: dict) -> Non
         # ── Left column: Ingresos + Total Activos ─────────────────────────────
         with col_left:
             ingresos = st.number_input(
-                label="Ingresos (USD)",
+                label=f"Ingresos ({currency})",
                 value=float(extraction_result.get("ingresos") or 0.0),
                 step=1_000_000.0,
                 format="%.0f",
@@ -282,7 +326,7 @@ def render_latam_validation_panel(extraction_result: dict, company: dict) -> Non
                 st.warning("Confianza Baja: verifique y corrija este valor antes de confirmar.")
 
             total_activos = st.number_input(
-                label="Total Activos (USD)",
+                label=f"Total Activos ({currency})",
                 value=float(extraction_result.get("total_activos") or 0.0),
                 step=1_000_000.0,
                 format="%.0f",
@@ -301,7 +345,7 @@ def render_latam_validation_panel(extraction_result: dict, company: dict) -> Non
         # ── Right column: Utilidad Neta + Deuda Total ─────────────────────────
         with col_right:
             utilidad_neta = st.number_input(
-                label="Utilidad Neta (USD)",
+                label=f"Utilidad Neta ({currency})",
                 value=float(extraction_result.get("utilidad_neta") or 0.0),
                 step=1_000_000.0,
                 format="%.0f",
@@ -318,7 +362,7 @@ def render_latam_validation_panel(extraction_result: dict, company: dict) -> Non
                 st.warning("Confianza Baja: verifique y corrija este valor antes de confirmar.")
 
             deuda_total = st.number_input(
-                label="Deuda Total (USD)",
+                label=f"Deuda Total ({currency})",
                 value=float(extraction_result.get("deuda_total") or 0.0),
                 step=1_000_000.0,
                 format="%.0f",

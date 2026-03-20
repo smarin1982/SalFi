@@ -486,10 +486,6 @@ def _latam_confidence_badge(company_slug: str, country: str, data_dir: str = "da
                         )
                     except OSError:
                         pass  # PDF unreadable — skip button silently
-        else:
-            # Positive indicator — clean extraction
-            label = {"Alta": "Alta", "Media": "Media"}.get(confidence or "", confidence or "—")
-            st.info(f"Confianza de extraccion: **{label}**", icon="ℹ️")
 
     except ImportError:
         pass  # LATAM modules not installed — badge silently skipped
@@ -713,7 +709,7 @@ def _render_latam_financials_table(slug: str, country: str) -> None:
     st.markdown("#### Estados Financieros")
     st.dataframe(
         pd.DataFrame(display_cols).set_index("Año"),
-        use_container_width=True,
+        width="stretch",
         hide_index=False,
     )
 
@@ -725,36 +721,61 @@ def _render_latam_red_flags(slug: str, country: str) -> None:
 
     _SEVERITY_ICON = {"Alta": "🔴", "Media": "🟡", "Baja": "🟢"}
 
-    # Always show triggered flags first
-    if red_flags:
-        for flag in red_flags:
-            icon = _SEVERITY_ICON.get(flag.get("severity", "Baja"), "⚪")
-            st.markdown(f"{icon} **{flag.get('name', 'Flag')}** — {flag.get('severity', '')}")
-            st.caption(flag.get("description", ""))
-    else:
-        st.success("Sin alertas activas en los indicadores evaluados.")
+    _col_info, _col_alerts = st.columns([1, 1])
 
-    # Always show full checklist from YAML — green for OK, colored for triggered
-    try:
-        cfg_path = Path("config/red_flags.yaml")
-        if cfg_path.exists():
-            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
-            all_flags = cfg.get("sectors", {}).get("healthcare", {}).get("flags", [])
-            if all_flags:
-                with st.expander("Ver todos los indicadores monitoreados", expanded=False):
-                    for spec in all_flags:
-                        fid = spec.get("id", "")
-                        fname = spec.get("name", fid)
-                        fdesc = spec.get("description", "")
-                        if fid in triggered_ids:
-                            matched = next((f for f in red_flags if f.get("flag_id") == fid), {})
-                            icon = _SEVERITY_ICON.get(matched.get("severity", "Baja"), "⚪")
-                            st.markdown(f"{icon} **{fname}** — {matched.get('severity', '')}")
-                        else:
-                            st.markdown(f"✅ **{fname}** — OK")
-                        st.caption(fdesc)
-    except Exception:
-        pass
+    # Left col: informational message about Deuda LP
+    with _col_info:
+        _fin_df = st.session_state.get("latam_financials", {}).get(slug, pd.DataFrame())
+        if not _fin_df.empty and _fin_df.get("long_term_debt", pd.Series([None])).isna().all():
+            st.info(
+                "ℹ️ **Deuda LP no identificada en el PDF.** "
+                "KPIs de solvencia calculados usando pasivos no corrientes como estimación.",
+                icon=None,
+            )
+
+    # Right col: alerts + indicadores monitoreados
+    with _col_alerts:
+        # Consolidated alert for years where historical ingestion failed
+        _bf_status = st.session_state.get("latam_backfill_status", {}).get(slug, {})
+        _bad_years = sorted(
+            [str(y) for y, s in _bf_status.items() if s in {"not_found", "error"}], reverse=True
+        )
+        if _bad_years:
+            st.warning(
+                f"Datos históricos incompletos — sin datos para: {', '.join(_bad_years)}",
+                icon="⚠️",
+            )
+
+        # Triggered flags
+        if red_flags:
+            for flag in red_flags:
+                icon = _SEVERITY_ICON.get(flag.get("severity", "Baja"), "⚪")
+                st.markdown(f"{icon} **{flag.get('name', 'Flag')}** — {flag.get('severity', '')}")
+                st.caption(flag.get("description", ""))
+        else:
+            st.success("Sin alertas activas en los indicadores evaluados.")
+
+        # Indicadores monitoreados checklist
+        try:
+            cfg_path = Path("config/red_flags.yaml")
+            if cfg_path.exists():
+                cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+                all_flags = cfg.get("sectors", {}).get("healthcare", {}).get("flags", [])
+                if all_flags:
+                    with st.expander("Ver todos los indicadores monitoreados", expanded=False):
+                        for spec in all_flags:
+                            fid = spec.get("id", "")
+                            fname = spec.get("name", fid)
+                            fdesc = spec.get("description", "")
+                            if fid in triggered_ids:
+                                matched = next((f for f in red_flags if f.get("flag_id") == fid), {})
+                                icon = _SEVERITY_ICON.get(matched.get("severity", "Baja"), "⚪")
+                                st.markdown(f"{icon} **{fname}** — {matched.get('severity', '')}")
+                            else:
+                                st.markdown(f"✅ **{fname}** — OK")
+                            st.caption(fdesc)
+        except Exception:
+            pass
 
 
 def _get_domain_from_profile(slug: str) -> str:
@@ -814,80 +835,81 @@ def _check_missing_years(slug: str, country: str) -> list:
 
 
 def _render_backfill_status(slug: str) -> None:
-    """Show per-year ingestion progress table with re-extract buttons for retryable years."""
+    """Progress bar while backfill is running; compact Re-extraer buttons for retryable years."""
+    queue = st.session_state.get("latam_backfill_queue", {}).get(slug, [])
     status_map = st.session_state.get("latam_backfill_status", {}).get(slug, {})
-    if not status_map:
+    if not status_map and not queue:
         return
-    STATUS_ICONS = {
-        "skipped": "— ya existe",
-        "pending": "⏳ pendiente",
-        "running": "⏳ descargando...",
-        "ok": "✓ OK",
-        "low_conf": "⚠️ baja confianza (requiere validación)",
-        "not_found": "✗ PDF no encontrado",
-        "validated": "✓ validado",
+
+    # not_found = no PDF on website, cannot retry automatically
+    RETRYABLE = {"low_conf", "error"}
+    STATUS_LABELS = {
+        "low_conf": "⚠️ baja confianza",
+        "not_found": "sin PDF disponible",
         "error": "✗ error",
     }
-    RETRYABLE = {"low_conf", "not_found", "error"}
-    st.markdown("#### Estado de ingesta histórica")
-    for year in sorted(status_map, reverse=True):
-        current_status = status_map[year]
-        icon = STATUS_ICONS.get(current_status, current_status)
-        col_label, col_btn = st.columns([4, 1])
-        with col_label:
-            st.markdown(f"**{year}** — {icon}")
-        with col_btn:
-            if current_status in RETRYABLE:
-                if st.button("Re-extraer", key=f"latam_reextract_{slug}_{year}"):
-                    # Retrieve PDF URL: prefer cached listing map, fall back to profile
-                    _listing_key = f"latam_listing_pdfs_{slug}"
-                    _pdf_map = st.session_state.get(_listing_key, {})
-                    _pdf_url = _pdf_map.get(year)
-                    if not _pdf_url:
-                        # Fall back to scraper_profiles.json historical_pdfs
-                        import json
-                        from pathlib import Path as _Path
-                        _profiles_path = _Path("data/latam/scraper_profiles.json")
-                        if _profiles_path.exists():
-                            try:
-                                with open(_profiles_path, "r", encoding="utf-8") as _pf:
-                                    _profiles = json.load(_pf)
-                                _pdf_url = _profiles.get(slug, {}).get(
-                                    "historical_pdfs", {}
-                                ).get(str(year))
-                            except Exception:
-                                pass
-                    if _pdf_url:
+
+    # Progress bar while actively ingesting
+    if queue:
+        done = sum(1 for s in status_map.values() if s not in ("running", "pending"))
+        total = done + len(queue)
+        st.progress(done / total if total else 0, text=f"Descargando año {queue[0]}…")
+
+    # Compact retryable list with Re-extraer buttons
+    retryable = sorted([(y, s) for y, s in status_map.items() if s in RETRYABLE | {"not_found"}], reverse=True)
+    for year, status in retryable:
+        if status == "not_found":
+            st.caption(f"**{year}** — {STATUS_LABELS['not_found']}")
+            continue
+        _c1, _c2 = st.columns([3, 1])
+        with _c1:
+            st.caption(f"**{year}** — {STATUS_LABELS.get(status, status)}")
+        with _c2:
+            if st.button("↺", key=f"latam_reextract_{slug}_{year}", help=f"Re-extraer {year}"):
+                _listing_key = f"latam_listing_pdfs_{slug}"
+                _pdf_map = st.session_state.get(_listing_key, {})
+                _pdf_url = _pdf_map.get(year)
+                if not _pdf_url:
+                    import json
+                    from pathlib import Path as _Path
+                    _profiles_path = _Path("data/latam/scraper_profiles.json")
+                    if _profiles_path.exists():
                         try:
-                            from latam_backfiller import LatamBackfiller
-                        except ImportError:
-                            st.error("latam_backfiller no disponible")
-                            return
-                        # Resolve country and currency from session state
-                        _companies = st.session_state.get("latam_companies", [])
-                        _comp = next((c for c in _companies if c["slug"] == slug), {})
-                        _country = _comp.get("country", "CO")
-                        _meta = st.session_state.get("latam_meta", {}).get(slug, {})
-                        _currency = _meta.get("currency_original", "USD")
-                        _domain = _comp.get("url", "") or _get_domain_from_profile(slug)
-                        from company_registry import make_storage_path
-                        from pathlib import Path as _Path
-                        _sp = make_storage_path(_Path("data"), _country, slug)
-                        _bf = LatamBackfiller(slug, _country, _sp, _domain)
-                        with st.spinner(f"Re-extrayendo {year}..."):
-                            _res = _bf.run_year(
-                                year, _pdf_url, _currency, force_reextract=True
-                            )
-                        st.session_state["latam_backfill_status"][slug][year] = _res.status
-                        if _res.status == "ok":
-                            _bf.write_year(_res)
-                            st.cache_data.clear()
-                        elif _res.status == "low_conf":
-                            st.session_state["latam_pending_extraction"] = _res.extraction_result
-                            st.session_state["latam_pending_company"] = slug
-                        st.rerun()
-                    else:
-                        st.warning(f"Sin URL de PDF para {year} — ejecute primero el descubrimiento de PDFs históricos")
+                            with open(_profiles_path, "r", encoding="utf-8") as _pf:
+                                _profiles = json.load(_pf)
+                            _pdf_url = _profiles.get(slug, {}).get(
+                                "historical_pdfs", {}
+                            ).get(str(year))
+                        except Exception:
+                            pass
+                if _pdf_url:
+                    try:
+                        from latam_backfiller import LatamBackfiller
+                    except ImportError:
+                        st.error("latam_backfiller no disponible")
+                        return
+                    _companies = st.session_state.get("latam_companies", [])
+                    _comp = next((c for c in _companies if c["slug"] == slug), {})
+                    _country = _comp.get("country", "CO")
+                    _meta = st.session_state.get("latam_meta", {}).get(slug, {})
+                    _currency = _meta.get("currency_original", "USD")
+                    _domain = _comp.get("url", "") or _get_domain_from_profile(slug)
+                    from company_registry import make_storage_path
+                    from pathlib import Path as _Path
+                    _sp = make_storage_path(_Path("data"), _country, slug)
+                    _bf = LatamBackfiller(slug, _country, _sp, _domain)
+                    with st.spinner(f"Re-extrayendo {year}..."):
+                        _res = _bf.run_year(year, _pdf_url, _currency, force_reextract=True)
+                    st.session_state["latam_backfill_status"][slug][year] = _res.status
+                    if _res.status == "ok":
+                        _bf.write_year(_res)
+                        st.cache_data.clear()
+                    elif _res.status == "low_conf":
+                        st.session_state["latam_pending_extraction"] = _res.extraction_result
+                        st.session_state["latam_pending_company"] = {"slug": slug, "country": _country}
+                    st.rerun()
+                else:
+                    st.warning(f"Sin URL de PDF para {year}")
 
 
 def _run_latam_pipeline(name: str, country: str, url: str, force_refresh: bool = False) -> None:
@@ -941,26 +963,39 @@ def _generate_and_cache_report(slug: str, country: str) -> None:
     meta = st.session_state["latam_meta"].get(slug, {})
     kpis_dict = kpis_df.iloc[-1].dropna().to_dict() if not kpis_df.empty else {}
     red_flags = st.session_state["latam_red_flags"].get(slug, [])
+    # fiscal_year: prefer scalar key, fall back to last entry of fiscal_years list
+    _fy = meta.get("fiscal_year") or (
+        max(meta["fiscal_years"]) if meta.get("fiscal_years") else 0
+    )
     company_info = {
         "name": meta.get("name", slug),
         "country": country,
         "currency_original": meta.get("currency_original", "USD"),
-        "fiscal_year": meta.get("fiscal_year", 0),
+        "fiscal_year": _fy,
+        "fx_rate_usd": meta.get("fx_rate_usd"),
     }
 
     with st.spinner("Obteniendo empresas comparables..."):
         comparables = report_generator.fetch_comparables(meta.get("name", slug), country)
 
-    with st.spinner("Generando reporte con Claude API (claude-opus-4-6)..."):
+    with st.spinner("Descargando informe de gestión (T2)..."):
+        management_narrative = report_generator.fetch_management_narrative(
+            slug=slug,
+            country=country,
+            fiscal_year=_fy,
+        )
+
+    with st.spinner("Generando reporte con Claude API..."):
         report_text = report_generator.generate_executive_report(
-            kpis_dict, red_flags, comparables, company_info
+            kpis_dict, red_flags, comparables, company_info,
+            management_narrative=management_narrative,
         )
 
     st.session_state["latam_report_text"][slug] = report_text
 
     with st.spinner("Generando PDF..."):
         pdf_bytes = report_generator.build_pdf_bytes(
-            report_text, meta.get("name", slug), country, meta.get("fiscal_year", 0)
+            report_text, meta.get("name", slug), country, _fy
         )
     st.session_state["latam_report_pdf"][slug] = pdf_bytes
     st.rerun()
@@ -1145,7 +1180,7 @@ def _render_latam_tab() -> None:
         )
     with col_btn:
         st.markdown("<br>", unsafe_allow_html=True)
-        run_clicked = st.button("Ejecutar", key="latam_run_btn", use_container_width=True)
+        run_clicked = st.button("Ejecutar", key="latam_run_btn", width="stretch")
 
     # PDF upload alternative
     uploaded_pdf = st.file_uploader(
@@ -1213,14 +1248,27 @@ def _render_latam_tab() -> None:
         return
 
     company_options = {f"{c['name']} ({c['country']})": c["slug"] for c in companies}
-    selected_label = st.selectbox(
-        "Empresa LATAM activa",
-        options=list(company_options.keys()),
-        key="latam_company_selector",
-    )
+    _sel_col, _bf_col = st.columns([3, 1])
+    with _sel_col:
+        selected_label = st.selectbox(
+            "Empresa LATAM activa",
+            options=list(company_options.keys()),
+            key="latam_company_selector",
+        )
     active_slug = company_options[selected_label]
     active_company = next((c for c in companies if c["slug"] == active_slug), {})
     active_country = active_company.get("country", "CO")
+    with _bf_col:
+        if not st.session_state.get("latam_backfill_queue", {}).get(active_slug):
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("↺ Histórico", key="latam_start_backfill_btn"):
+                from company_registry import make_storage_path
+                from pathlib import Path as _BFP2
+                _bf2_sp = make_storage_path(_BFP2("data"), active_country, active_slug)
+                # Clear cached listing so it's rebuilt fresh with latest profile data
+                st.session_state.pop(f"latam_listing_pdfs_{active_slug}", None)
+                _maybe_queue_backfill(active_slug, active_country, _bf2_sp)
+                st.rerun()
 
     meta = st.session_state["latam_meta"].get(active_slug, {})
     if meta.get("currency_original") == "ARS":
@@ -1260,15 +1308,38 @@ def _render_latam_tab() -> None:
         # Resolve domain: prefer company URL, fall back to scraper_profiles.json
         _bf_domain = active_company.get("url", "") or _get_domain_from_profile(active_slug)
 
-        # Collect listing PDFs (once per backfill run, cached in session state)
+        # Collect listing PDFs (once per backfill run, cached in session state).
+        # Primary source: historical_pdfs already saved in scraper_profiles.json
+        # (these are validated URLs from prior successful crawls).
+        # Secondary source: fresh Playwright crawl of the company site.
         _listing_key = f"latam_listing_pdfs_{active_slug}"
-        if _listing_key not in st.session_state and _bf_domain:
+        if _listing_key not in st.session_state:
+            # Load known URLs from scraper_profiles.json
+            _profile_pdf_map: dict[int, str] = {}
             try:
-                from latam_backfiller import collect_listing_pdfs
-                with st.spinner(f"Buscando PDFs históricos en {_bf_domain}..."):
-                    st.session_state[_listing_key] = collect_listing_pdfs(_bf_domain, _bf_domain)
-            except ImportError:
-                st.session_state[_listing_key] = {}
+                import json as _json_bf
+                _profiles_path = Path("data/latam/scraper_profiles.json")
+                if _profiles_path.exists():
+                    _profiles_data = _json_bf.loads(_profiles_path.read_text(encoding="utf-8"))
+                    _profile_pdf_map = {
+                        int(k): v
+                        for k, v in _profiles_data.get(active_slug, {})
+                                                   .get("historical_pdfs", {}).items()
+                    }
+            except Exception:
+                pass
+
+            if _bf_domain:
+                try:
+                    from latam_backfiller import collect_listing_pdfs
+                    with st.spinner(f"Buscando PDFs históricos en {_bf_domain}..."):
+                        _crawled_map = collect_listing_pdfs(_bf_domain, _bf_domain)
+                    # Profile entries take precedence (already validated)
+                    st.session_state[_listing_key] = {**_crawled_map, **_profile_pdf_map}
+                except ImportError:
+                    st.session_state[_listing_key] = _profile_pdf_map
+            else:
+                st.session_state[_listing_key] = _profile_pdf_map
 
         _pdf_map = st.session_state.get(_listing_key, {})
 
@@ -1312,7 +1383,7 @@ def _render_latam_tab() -> None:
                 elif _result.status == "low_conf":
                     # Pause and route to validation panel
                     st.session_state["latam_pending_extraction"] = _result.extraction_result
-                    st.session_state["latam_pending_company"] = active_slug
+                    st.session_state["latam_pending_company"] = {"slug": active_slug, "country": active_country}
                     st.session_state["latam_backfill_status"][active_slug][_year] = "low_conf"
                     # Do NOT pop from queue yet — validation confirm/discard will advance it
                     st.rerun()
@@ -1332,6 +1403,7 @@ def _render_latam_tab() -> None:
             except ImportError:
                 pass  # latam_backfiller not available — skip silently
     # --- End backfill processing block ---
+    _render_backfill_status(active_slug)
 
     # --- KPI cards (DASHL-02, DASHL-04) ---
     st.markdown("#### KPIs Financieros")
@@ -1342,39 +1414,24 @@ def _render_latam_tab() -> None:
         # Note: if long_term_debt was not extractable from the PDF, Deuda/EBITDA
         # and Deuda/Activos se calculan usando pasivos no corrientes
         # (total_liabilities − current_liabilities) como aproximación.
-        fin_df = st.session_state["latam_financials"].get(active_slug, pd.DataFrame())
-        if not fin_df.empty and fin_df.get("long_term_debt", pd.Series([None])).isna().all():
-            st.info(
-                "ℹ️ **Deuda LP no identificada en el PDF.** "
-                "Los KPIs de solvencia (Deuda/EBITDA, Deuda/Activos) se calcularon usando "
-                "los **pasivos no corrientes** (Pasivo Total − Pasivo Corriente) como estimación de deuda de largo plazo.",
-                icon=None,
-            )
         _render_latam_kpi_cards(active_slug, active_country)
         _render_latam_financials_table(active_slug, active_country)
 
-    # --- Red flags ---
+    # --- Red Flags ---
     st.markdown("#### Red Flags")
     _render_latam_red_flags(active_slug, active_country)
 
-    # --- Backfill histórico (manual trigger) ---
-    st.markdown("#### Datos Históricos")
-    _bf_queue_now = st.session_state.get("latam_backfill_queue", {}).get(active_slug)
-    _bf_running = bool(_bf_queue_now)
-    if not _bf_running:
-        if st.button("Iniciar backfill histórico", key="latam_start_backfill_btn"):
-            from company_registry import make_storage_path
-            from pathlib import Path as _BFP2
-            _bf2_sp = make_storage_path(_BFP2("data"), active_country, active_slug)
-            _maybe_queue_backfill(active_slug, active_country, _bf2_sp)
-            st.rerun()
-    _render_backfill_status(active_slug)
+    st.divider()
 
-    # --- Executive report ---
+    # --- Reporte Ejecutivo ---
     st.markdown("#### Reporte Ejecutivo")
+    st.caption(
+        "El reporte resume los KPIs financieros clave, alertas detectadas y comparables del "
+        "sector para el año fiscal más reciente. Generado con Claude (claude-opus-4-6), produce "
+        "un análisis narrativo listo para presentar a dirección o inversores, descargable en PDF."
+    )
     if st.button("Generar Reporte", key="latam_generate_report_btn"):
         _generate_and_cache_report(active_slug, active_country)
-
     report_text = st.session_state.get("latam_report_text", {}).get(active_slug)
     if report_text:
         st.markdown(report_text)
@@ -1474,7 +1531,7 @@ with tab_sp500:
                 label_visibility="collapsed",
             ).upper().strip()
         with col_btn:
-            load_clicked = st.button("Cargar", key="load_ticker_btn", use_container_width=True)
+            load_clicked = st.button("Cargar", key="load_ticker_btn", width="stretch")
         with col_msg:
             if load_clicked and new_ticker_input:
                 if new_ticker_input in st.session_state.loaded_tickers:

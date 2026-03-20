@@ -247,6 +247,79 @@ class LatamAgent:
             data_dir=str(DATA_DIR),
         )
 
+        # --- Step 3b: Inline historical backfill (non-blocking) ---
+        # The initial PDF typically yields only 2 years (current + comparative).
+        # Crawl the company site for older PDFs to reach the last 5 completed years.
+        _url_is_pdf = _url_path.suffix.lower() == ".pdf" and _url_path.exists()
+        if not _url_is_pdf and self.url:
+            try:
+                from latam_backfiller import (
+                    LatamBackfiller,
+                    collect_listing_pdfs,
+                    _years_already_in_parquet,
+                )
+                _target_years = [_dt.now().year - i for i in range(1, 6)]
+                _have_years = _years_already_in_parquet(self.storage_path / "financials.parquet")
+                _missing_years = [y for y in _target_years if y not in _have_years]
+                if _missing_years:
+                    logger.info(
+                        f"[{self.name}] Step 3b: Searching for historical PDFs — "
+                        f"missing years: {_missing_years}"
+                    )
+                    # Seed from scraper_profiles.json before Playwright crawl
+                    _profile_hist: dict[int, str] = {}
+                    try:
+                        import json as _json_hist
+                        _prof_path = Path("data/latam/scraper_profiles.json")
+                        if _prof_path.exists():
+                            _prof_data = _json_hist.loads(
+                                _prof_path.read_text(encoding="utf-8")
+                            )
+                            _profile_hist = {
+                                int(k): v
+                                for k, v in _prof_data.get(self.slug, {})
+                                                       .get("historical_pdfs", {}).items()
+                            }
+                    except Exception:
+                        pass
+
+                    _crawled_hist = collect_listing_pdfs(self.url, self.url)
+                    # Profile entries take precedence (already validated)
+                    _hist_pdf_map = {**_crawled_hist, **_profile_hist}
+                    if _hist_pdf_map:
+                        self._update_historical_pdfs(_hist_pdf_map)
+                        _bf = LatamBackfiller(
+                            self.slug, self.country, self.storage_path, self.url
+                        )
+                        for _yr in sorted(_missing_years, reverse=True):
+                            _pdf_url = _hist_pdf_map.get(_yr)
+                            if not _pdf_url:
+                                logger.info(
+                                    f"[{self.name}] Step 3b: no PDF found for year={_yr}"
+                                )
+                                continue
+                            _res = _bf.run_year(_yr, _pdf_url, _currency)
+                            if _res.status in ("ok", "low_conf"):
+                                _bf.write_year(_res)
+                                logger.info(
+                                    f"[{self.name}] Step 3b: year={_yr} written "
+                                    f"(conf={_res.confidence})"
+                                )
+                            else:
+                                logger.info(
+                                    f"[{self.name}] Step 3b: year={_yr} "
+                                    f"status={_res.status}"
+                                )
+                    else:
+                        logger.info(
+                            f"[{self.name}] Step 3b: no historical PDFs discovered on site"
+                        )
+            except Exception as _hist_exc:
+                logger.warning(
+                    f"[{self.name}] Step 3b: historical backfill failed (non-blocking): "
+                    f"{_hist_exc!r}"
+                )
+
         # --- Step 4: Evaluate red flags (ONLY after Parquet files exist on disk) ---
         logger.info(f"[{self.name}] Step 4: Evaluating red flags")
         kpis_df = pd.read_parquet(self.storage_path / "kpis.parquet")

@@ -88,18 +88,41 @@ IR_PAGE_FRAGMENTS = [
     "annual-report",
 ]
 
-# Common corporate document section paths to try during crawl
+# Common corporate document section paths to try during crawl.
+# T1 paths (financial statements) are listed first — crawl visits them with priority.
 COMMON_DOC_PATHS = [
-    "/informes/",
-    "/transparencia/",
-    "/documentos/",
-    "/reportes/",
+    # T1 — financial statements sections (highest priority)
+    # Directory-style paths
     "/estados-financieros/",
-    "/sala-de-prensa/",
-    "/publicaciones/",
-    "/rendicion-de-cuentas/",
+    "/informes-financieros/",
     "/informacion-financiera/",
+    "/estados_financieros/",
+    "/financiero/",
+    "/auditoria/",
+    "/auditorias/",
+    "/balance/",
+    # HTML page variants (e.g. crocsas.com/Estados-financieros.html)
+    "/estados-financieros.html",
+    "/estados-financieros.htm",
+    "/Estados-financieros.html",
+    "/informacion-financiera.html",
+    "/informes-financieros.html",
+    "/auditoria.html",
+    # T2 — annual/management report sections (fallback)
+    "/informes/",
+    "/reportes/",
+    "/transparencia/",
+    "/rendicion-de-cuentas/",
+    "/documentos/",
+    "/publicaciones/",
+    "/sala-de-prensa/",
     "/relaciones-con-inversionistas/",
+    "/memoria/",
+    # HTML page variants T2
+    "/informes.html",
+    "/reportes.html",
+    "/documentos.html",
+    "/transparencia.html",
 ]
 
 # ---------------------------------------------------------------------------
@@ -124,6 +147,7 @@ PDF_KEYWORDS_TIER1 = [
     "estados-financieros",
     "estado-financiero",
     "estados_financieros",
+    "estadosfinancieros",   # no-separator variant (e.g. nicepagecdn filenames)
     "balance general",
     "balance-general",
     "balance_general",
@@ -169,11 +193,25 @@ PDF_KEYWORDS_TIER3 = [
     "annual", "financial", "earnings",
 ]
 
-# Nav link text fragments indicating financial document sections
+# Nav link text fragments indicating financial document sections.
+# NOTE: "estado de resultados" must appear BEFORE "estados" so that the more
+# specific T1 term is checked first when iterating NAV_T1_KEYWORDS.
 NAV_FINANCIAL_KEYWORDS = [
+    # T1-specific nav terms (match financial statement sub-sections)
+    "estado de resultados",
+    "estados financieros",
+    "estados de resultados",
+    "balance general",
+    "informacion financiera",
+    "información financiera",
+    "estados contables",
+    # Generic financial section terms
     "financiero",
     "informe",
+    "gestion",
+    "gestión",
     "estados",
+    "resultado",
     "reporte anual",
     "transparencia",
     "rendicion de cuentas",
@@ -182,6 +220,21 @@ NAV_FINANCIAL_KEYWORDS = [
     "publicaciones",
     "sala de prensa",
     "memoria",
+]
+
+# Subset of NAV_FINANCIAL_KEYWORDS that specifically indicate T1 sub-sections.
+# When navigating into a financial section, links matching these are followed
+# before generic financial links to prioritise estados financieros over T2.
+NAV_T1_KEYWORDS = [
+    "estado de resultados",
+    "estados financieros",
+    "estados de resultados",
+    "balance general",
+    "informacion financiera",
+    "información financiera",
+    "estados contables",
+    "flujo de caja",
+    "flujo de efectivo",
 ]
 
 # Relevance keywords found in PDF URL path
@@ -194,8 +247,9 @@ PDF_PATH_RELEVANCE_KEYWORDS = [
     "memoria",
     "annual",
     "report",
-    "transparencia",
     "rendicion",
+    # NOTE: "transparencia" removed — matches Mexican gov transparency portals
+    # (INEGI, INAI) and causes false positives for non-domain DDGS results.
 ]
 
 # Default location for scraper profiles
@@ -331,18 +385,89 @@ def _playwright_crawl_corporate(domain: str, year: int) -> Optional[str]:
 
 
 async def _async_crawl_corporate(domain: str, year: int) -> Optional[str]:
-    """Async implementation of corporate website crawl for financial PDF."""
-    # Normalise domain to a full URL
+    """Async implementation of corporate website crawl for financial PDF.
+
+    Navigates up to 3 levels deep:
+      Level 1: root page → find PDFs or financial section links
+      Level 2: financial section → find PDFs or T1 sub-section links
+               (e.g. "Estado de resultados", "Estados financieros")
+      Level 3: T1 sub-section → find PDFs (estados financieros priority)
+
+    T1 sub-sections (NAV_T1_KEYWORDS) are always visited before T2 sections
+    so that estados financieros is preferred over informes de gestión.
+    """
     base_url = domain if domain.startswith("http") else f"https://{domain}"
     parsed = urlparse(base_url)
     base_origin = f"{parsed.scheme}://{parsed.netloc}"
     target_domain = parsed.netloc.lower().lstrip("www.")
 
+    async def _visit_and_find_pdf(url: str) -> Optional[str]:
+        """Navigate to url and return best PDF link found on the page."""
+        try:
+            await page.goto(url, timeout=20_000, wait_until="domcontentloaded")
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except PlaywrightTimeout:
+                pass
+            try:
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(500)
+            except Exception:
+                pass
+            pdf = await _async_find_pdf_link_on_page(page, year)
+            if pdf:
+                # PDFs may be on a CDN (nicepagecdn, S3, GDrive, etc.) —
+                # domain guard only applies to navigation links.
+                return _make_absolute(pdf, base_origin)
+        except Exception as e:
+            logger.debug(f"_async_crawl_corporate: visit {url} failed: {e}")
+        return None
+
+    async def _get_subsection_links(t1_first: bool = True) -> tuple[list[str], list[str]]:
+        """Return (t1_links, other_financial_links) from current page."""
+        t1: list[str] = []
+        other: list[str] = []
+        seen: set[str] = set()
+        try:
+            all_links = await page.locator("a[href]").all()
+        except Exception:
+            return t1, other
+        for link in all_links:
+            try:
+                href = (await link.get_attribute("href") or "").strip()
+                text = ""
+                try:
+                    text = (await link.inner_text() or "").lower().strip()
+                except Exception:
+                    pass
+                href_lower = href.lower()
+                if href_lower.endswith(".pdf") or ".pdf?" in href_lower:
+                    continue
+                abs_url = _make_absolute(href, base_origin)
+                if not abs_url or abs_url in seen or not _is_on_domain(abs_url, target_domain):
+                    continue
+                seen.add(abs_url)
+                is_t1 = any(kw in text for kw in NAV_T1_KEYWORDS) or \
+                         any(kw.replace(" ", "-") in href_lower or
+                             kw.replace(" ", "_") in href_lower
+                             for kw in NAV_T1_KEYWORDS)
+                is_financial = any(kw in text for kw in NAV_FINANCIAL_KEYWORDS) or \
+                               any(kw.replace(" ", "-") in href_lower or
+                                   kw.replace(" ", "_") in href_lower
+                                   for kw in NAV_FINANCIAL_KEYWORDS)
+                if is_t1:
+                    t1.append(abs_url)
+                elif is_financial:
+                    other.append(abs_url)
+            except Exception:
+                continue
+        return t1, other
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         try:
-            # --- Step 1: Visit root and look for financial nav links ---
+            # --- Level 1: root page ---
             try:
                 await page.goto(base_url, timeout=30_000, wait_until="domcontentloaded")
                 try:
@@ -353,32 +478,47 @@ async def _async_crawl_corporate(domain: str, year: int) -> Optional[str]:
                 logger.debug(f"_async_crawl_corporate: goto {base_url} failed: {e}")
                 return None
 
-            # Check for PDFs directly on root page
+            # Scroll to bottom — ensures footer/lazy-loaded links are in DOM
+            try:
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(800)
+            except Exception:
+                pass
+
             pdf_url = await _async_find_pdf_link_on_page(page, year)
             if pdf_url:
-                pdf_url = _make_absolute(pdf_url, base_origin)
-                if _is_on_domain(pdf_url, target_domain):
-                    return pdf_url
+                # PDFs may be hosted on a CDN (nicepagecdn, S3, GDrive, etc.) —
+                # do NOT apply _is_on_domain here; domain guard only applies to
+                # navigation links in _get_subsection_links.
+                return _make_absolute(pdf_url, base_origin)
 
-            # --- Step 2: Follow financial section nav links ---
-            financial_links = await _async_find_financial_nav_links(page, base_origin)
-            for link_url in financial_links[:5]:
-                try:
-                    await page.goto(link_url, timeout=20_000, wait_until="domcontentloaded")
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=10_000)
-                    except PlaywrightTimeout:
-                        pass
-                    pdf_url = await _async_find_pdf_link_on_page(page, year)
-                    if pdf_url:
-                        pdf_url = _make_absolute(pdf_url, base_origin)
-                        if _is_on_domain(pdf_url, target_domain):
-                            return pdf_url
-                except Exception as e:
-                    logger.debug(f"_async_crawl_corporate: nav link {link_url} failed: {e}")
-                    continue
+            t1_links_l1, other_links_l1 = await _get_subsection_links()
+            section_links_l1 = t1_links_l1[:5] + other_links_l1[:4]
 
-            # --- Step 3: Try common document paths ---
+            # --- Level 2: financial section pages ---
+            for section_url in section_links_l1:
+                pdf_url = await _visit_and_find_pdf(section_url)
+                if pdf_url:
+                    # Check if it's T1 — if yes, return immediately
+                    if _detect_doc_tier(pdf_url) == 1:
+                        return pdf_url
+                    # T2/T3 found — keep as candidate but look deeper for T1
+                    t2_candidate = pdf_url
+
+                # --- Level 3: T1 sub-sections within this financial section ---
+                t1_links_l2, other_links_l2 = await _get_subsection_links()
+                # Prioritise T1 sub-links (e.g. "Estado de resultados" within
+                # "Información de Gestión")
+                for sub_url in (t1_links_l2[:3] + other_links_l2[:2]):
+                    pdf_url = await _visit_and_find_pdf(sub_url)
+                    if pdf_url and _detect_doc_tier(pdf_url) == 1:
+                        logger.info(
+                            f"_async_crawl_corporate: found T1 at depth-3 "
+                            f"via {sub_url}"
+                        )
+                        return pdf_url
+
+            # --- Level 4: Try common document paths ---
             for path in COMMON_DOC_PATHS:
                 candidate_url = base_origin + path
                 try:
@@ -391,9 +531,7 @@ async def _async_crawl_corporate(domain: str, year: int) -> Optional[str]:
                         pass
                     pdf_url = await _async_find_pdf_link_on_page(page, year)
                     if pdf_url:
-                        pdf_url = _make_absolute(pdf_url, base_origin)
-                        if _is_on_domain(pdf_url, target_domain):
-                            return pdf_url
+                        return _make_absolute(pdf_url, base_origin)
                 except Exception as e:
                     logger.debug(f"_async_crawl_corporate: path {path} failed: {e}")
                     continue
@@ -488,13 +626,20 @@ async def _async_find_financial_nav_links(page, base_origin: str) -> list[str]:
 
 async def _async_find_pdf_link_on_page(page, year: int) -> Optional[str]:
     """
-    Scan page for the best financial-report PDF link.
+    Scan page for the best annual financial-report PDF link.
 
-    Collects ALL pdf anchors, scores each by financial keywords in href/filename/
-    link text and year match, then returns the highest-scoring href.
-    Returns None if no candidate scores above zero.
+    Priority:
+      1. T1 annual financial statements (estados financieros, balance general, etc.)
+      2. T2 annual/management reports — only when no T1 found AND it's NOT a
+         periodic/partial-year report (quarterly, semester, trimestral, etc.)
+
+    Periodic reports (quarterly, semester) are rejected entirely — the pipeline
+    only processes complete annual data.
+
+    Returns the highest-scoring annual PDF href, or None.
     """
-    candidates: list[tuple[int, str]] = []  # (score, href)
+    t1_candidates: list[tuple[int, str]] = []
+    t2_annual_candidates: list[tuple[int, str]] = []
 
     try:
         all_links = await page.locator("a[href]").all()
@@ -518,14 +663,27 @@ async def _async_find_pdf_link_on_page(page, year: int) -> Optional[str]:
         except Exception:
             pass
 
-        score = _score_pdf_link(href, text, year)
-        if score > 0:
-            candidates.append((score, href))
+        # Reject periodic/partial-year reports outright
+        if _is_partial_year_url(href) or _is_partial_year_url(text):
+            continue
 
-    if not candidates:
-        return None
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    return candidates[0][1]
+        score = _score_pdf_link(href, text, year)
+        if score <= 0:
+            continue
+
+        tier = _detect_doc_tier(href)
+        if tier == 1:
+            t1_candidates.append((score, href))
+        else:
+            t2_annual_candidates.append((score, href))
+
+    if t1_candidates:
+        t1_candidates.sort(key=lambda x: x[0], reverse=True)
+        return t1_candidates[0][1]
+    if t2_annual_candidates:
+        t2_annual_candidates.sort(key=lambda x: x[0], reverse=True)
+        return t2_annual_candidates[0][1]
+    return None
 
 
 def _score_pdf_link(href: str, link_text: str, year: int) -> int:
@@ -638,6 +796,48 @@ def _is_on_domain(url: str, target_domain: str) -> bool:
         return host == target_domain or host.endswith("." + target_domain)
     except Exception:
         return False
+
+
+_PARTIAL_YEAR_PATTERNS = re.compile(
+    r"semestre|semestral|trimestre|trimestral"
+    r"|-1-|-2-|-3-|-4-"         # e.g. Infgestion-1-2025
+    r"|primer|segundo|tercer|cuarto"
+    r"|q1|q2|q3|q4"
+    r"|ene[-_]jun|jul[-_]dic",   # Jan-Jun / Jul-Dec spans
+    re.IGNORECASE,
+)
+
+
+def _is_partial_year_url(url: str) -> bool:
+    """Return True if the URL suggests a partial-year (semester/quarterly) report."""
+    return bool(_PARTIAL_YEAR_PATTERNS.search(url))
+
+
+def _detect_doc_tier(url: str) -> int:
+    """Return document tier inferred from the URL/filename.
+
+    1 = estados financieros (financial statements — highest trust)
+    2 = informe de gestión / informe anual (management / annual report)
+    3 = generic or unrecognised
+
+    Used to decide whether a cached scraper profile can be reused: only T1
+    profiles are reused directly; T2/T3 profiles trigger a fresh search so
+    that a T1 document is preferred.
+    """
+    def _fold(s: str) -> str:
+        return (
+            s.replace("ó", "o").replace("é", "e").replace("á", "a")
+             .replace("í", "i").replace("ú", "u").replace("ñ", "n").replace("ü", "u")
+        )
+
+    url_n = _fold(url.lower())
+    for kw in PDF_KEYWORDS_TIER1:
+        if _fold(kw) in url_n:
+            return 1
+    for kw in PDF_KEYWORDS_TIER2:
+        if _fold(kw) in url_n:
+            return 2
+    return 3
 
 
 # ---------------------------------------------------------------------------
@@ -757,17 +957,29 @@ def search(domain: str, year: int, out_dir: Path) -> ScraperResult:
         out_dir: Base output directory (PDF written to out_dir/raw/)
     """
     attempts: list[str] = []
+    # All queries target T1 (annual financial statements) explicitly.
+    # No T2-only queries — annual management reports are accepted as last resort
+    # by the caller (search_and_download), not here.
     queries = [
         f'site:{domain} filetype:pdf {SEARCH_KEYWORDS_ES} {year}',
+        f'site:{domain} filetype:pdf "estados financieros" "balance" {year}',
         f'site:{domain} filetype:pdf {SEARCH_KEYWORDS_ALT} {year}',
-        f'site:{domain} filetype:pdf "informe anual" {year}',
+        f'site:{domain} filetype:pdf "informe anual" "estados financieros" {year}',
     ]
 
     for i, query in enumerate(queries):
         attempts.append(f"ddgs:{query[:60]}")
         pdf_url = _ddgs_first_pdf_url(query)
         if pdf_url:
-            # Validate relevance before downloading
+            # Reject partial/periodic reports entirely
+            if _is_partial_year_url(pdf_url):
+                logger.info(
+                    f"search: skipping partial-year URL from query {i+1}: {pdf_url[:80]}"
+                )
+                if i < len(queries) - 1:
+                    time.sleep(random.uniform(2.0, 4.0))
+                continue
+
             score = _validate_pdf_relevance(pdf_url, domain, domain, year)
             if score < 0.5:
                 logger.warning(
@@ -781,7 +993,6 @@ def search(domain: str, year: int, out_dir: Path) -> ScraperResult:
             logger.info(f"search: found PDF URL via ddgs on query {i+1}/{len(queries)} (score={score:.2f})")
             return _download_pdf(pdf_url, out_dir=out_dir, strategy="ddgs", attempts=attempts)
 
-        # Sleep between queries (not before first, not after last)
         if i < len(queries) - 1:
             time.sleep(random.uniform(2.0, 4.0))
 
@@ -858,6 +1069,14 @@ def scrape_with_playwright(
                 error="Browser timeout after 120s",
                 attempts=attempts,
             )
+        except Exception as exc:
+            logger.warning(f"scrape_with_playwright: worker raised {type(exc).__name__}: {exc}")
+            return ScraperResult(
+                ok=False,
+                strategy="playwright",
+                error=f"Worker exception: {exc}",
+                attempts=attempts,
+            )
 
     if pdf_url:
         logger.info(f"scrape_with_playwright: found PDF URL {pdf_url[:80]}")
@@ -875,52 +1094,71 @@ def _playwright_find_pdf(base_url: str, year: int) -> Optional[str]:
     """
     Thread worker: runs in its own ThreadPoolExecutor thread.
 
-    Creates its own sync_playwright() instance — not shared. Navigates to
-    base_url, tries to find a PDF link for the given year using heuristics.
+    Uses async_playwright + ProactorEventLoop — required on Windows when called
+    from a ThreadPoolExecutor (sync_playwright raises NotImplementedError there).
     Returns PDF URL (absolute) or None.
     """
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_async_find_pdf(base_url, year))
+    finally:
+        loop.close()
+
+
+async def _async_find_pdf(base_url: str, year: int) -> Optional[str]:
+    """
+    Async implementation: navigate to base_url, find best financial PDF link.
+
+    Tries root page first, then IR_PAGE_FRAGMENTS sub-pages via click navigation.
+    Returns the first matching PDF URL (absolute), or None.
+    """
+    parsed = urlparse(base_url)
+    base_origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
         try:
-            page.goto(base_url, timeout=30_000, wait_until="domcontentloaded")
+            await page.goto(base_url, timeout=30_000, wait_until="domcontentloaded")
             try:
-                page.wait_for_load_state("networkidle", timeout=15_000)
+                await page.wait_for_load_state("networkidle", timeout=15_000)
             except PlaywrightTimeout:
-                pass  # Continue even if networkidle times out
+                pass
+            try:
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(800)
+            except Exception:
+                pass
 
-            # Parse base URL for relative href resolution
-            parsed = urlparse(base_url)
-            base_origin = f"{parsed.scheme}://{parsed.netloc}"
-
-            # Try direct PDF links on current page
-            pdf_url = _find_pdf_link_on_page(page, year)
+            # Try direct PDF links on root page
+            pdf_url = await _async_find_pdf_link_on_page(page, year)
             if pdf_url:
-                if pdf_url.startswith("/"):
-                    pdf_url = base_origin + pdf_url
-                return pdf_url
+                return _make_absolute(pdf_url, base_origin)
 
-            # Try navigating to IR sub-pages via fragment links
+            # Try IR sub-pages via fragment links
             for fragment in IR_PAGE_FRAGMENTS:
                 try:
                     ir_locator = page.locator(f'a[href*="{fragment}"]')
-                    if ir_locator.count() > 0:
-                        ir_locator.first.click(timeout=5_000)
+                    if await ir_locator.count() > 0:
+                        await ir_locator.first.click(timeout=5_000)
                         try:
-                            page.wait_for_load_state("networkidle", timeout=10_000)
+                            await page.wait_for_load_state("networkidle", timeout=10_000)
                         except PlaywrightTimeout:
                             pass
-                        pdf_url = _find_pdf_link_on_page(page, year)
+                        pdf_url = await _async_find_pdf_link_on_page(page, year)
                         if pdf_url:
-                            if pdf_url.startswith("/"):
-                                pdf_url = base_origin + pdf_url
-                            return pdf_url
+                            return _make_absolute(pdf_url, base_origin)
                 except PlaywrightTimeout:
                     continue
                 except Exception:
                     continue
         finally:
-            browser.close()
+            await browser.close()
     return None
 
 
@@ -1162,21 +1400,35 @@ def search_and_download(
     profiles = _load_scraper_profiles(profiles_path)
     profile = profiles.get(slug, {})
 
-    # Strategy 0: Try saved profile pattern (fastest)
+    # Strategy 0: Try saved profile pattern (fastest) — only reuse T1 profiles.
+    # If the cached profile points to a T2 management report, skip it and search
+    # fresh so that a T1 (estados financieros) document can be found instead.
     if profile:
-        logger.info(f"search_and_download: found existing profile for {slug}, trying saved pattern")
-        result = _try_profile_pattern(slug, profile, year, storage_path)
-        if result and result.ok:
-            logger.info(f"search_and_download: found via profile pattern — {result.pdf_path}")
-            _save_scraper_profile(slug, {
-                "domain": domain,
-                "last_success": str(date.today()),
-                "strategy": "profile",
-            }, profiles_path)
-            return result.pdf_path
+        saved_tier = profile.get("doc_tier", 3)
+        if saved_tier > 1:
+            logger.info(
+                f"search_and_download: existing profile for {slug} is doc_tier={saved_tier} "
+                f"(management report / generic) — skipping saved pattern to search for T1 "
+                f"estados financieros"
+            )
+        else:
+            logger.info(f"search_and_download: found existing T1 profile for {slug}, trying saved pattern")
+            result = _try_profile_pattern(slug, profile, year, storage_path)
+            if result and result.ok:
+                logger.info(f"search_and_download: found via profile pattern — {result.pdf_path}")
+                _save_scraper_profile(slug, {
+                    "domain": domain,
+                    "last_success": str(date.today()),
+                    "strategy": "profile",
+                }, profiles_path)
+                return result.pdf_path
 
     # Strategy 1: Crawl the corporate website directly (highest trust)
+    # T1 (estados financieros) is returned immediately.
+    # T2/T3 is stored as a fallback and we continue to DDGS/Playwright for T1.
     logger.info(f"search_and_download: crawling corporate site {domain} for {slug}")
+    crawl_t2_fallback: Optional[ScraperResult] = None
+    crawl_t2_url: Optional[str] = None
     pdf_url = _crawl_corporate_site(domain, slug, year)
     if pdf_url:
         crawl_score = _validate_pdf_relevance(pdf_url, domain, slug, year)
@@ -1187,65 +1439,138 @@ def search_and_download(
             )
             pdf_url = None
     if pdf_url:
+        crawl_tier = _detect_doc_tier(pdf_url)
         result = _download_pdf(pdf_url, out_dir=storage_path, strategy="corporate_crawl", attempts=[f"corporate_crawl:{domain[:60]}"])
         if result.ok:
-            logger.info(f"search_and_download: found via corporate crawl — {result.pdf_path}")
-            # Learn: save the URL pattern for future runs
-            url_pattern = re.sub(str(year), "*", pdf_url)
-            _save_scraper_profile(slug, {
-                "domain": domain,
-                "last_success": str(date.today()),
-                "strategy": "corporate_crawl",
-                "pdf_url_pattern": url_pattern,
-            }, profiles_path)
-            return result.pdf_path
+            if crawl_tier == 1:
+                # T1 found via crawl — use it immediately
+                logger.info(f"search_and_download: found T1 via corporate crawl — {result.pdf_path}")
+                url_pattern = re.sub(str(year), "*", pdf_url)
+                _save_scraper_profile(slug, {
+                    "domain": domain,
+                    "last_success": str(date.today()),
+                    "strategy": "corporate_crawl",
+                    "pdf_url_pattern": url_pattern,
+                    "doc_tier": 1,
+                }, profiles_path)
+                return result.pdf_path
+            else:
+                # T2/T3 from crawl — store as fallback, continue searching for T1
+                logger.info(
+                    f"search_and_download: corporate crawl found T{crawl_tier} document "
+                    f"— storing as fallback, continuing to search for T1 estados financieros"
+                )
+                crawl_t2_fallback = result
+                crawl_t2_url = pdf_url
 
-    # Strategy 2: DDGS semantic search (with relevance validation)
+    # Strategy 2: DDGS semantic search.
+    # T1 results (estados financieros) are accepted immediately.
+    # T2/T3 results are stored as fallback — we keep searching for T1.
+    # If the T2 result looks like a partial-year report (first semester, quarterly),
+    # we also search year-1 since a full annual report is more useful.
     logger.info(f"search_and_download: corporate crawl failed, trying DDGS for {domain}")
-    result = search(domain=domain, year=year, out_dir=storage_path)
-    if result.ok:
-        logger.info(f"search_and_download: found via ddgs — {result.pdf_path}")
-        # Learn: save the successful URL pattern
-        if result.source_url:
-            url_pattern = re.sub(str(year), "*", result.source_url)
-            _save_scraper_profile(slug, {
-                "domain": domain,
-                "last_success": str(date.today()),
-                "strategy": "ddgs",
-                "pdf_url_pattern": url_pattern,
-            }, profiles_path)
-        return result.pdf_path
-    else:
-        # Record failed DDGS queries so we can skip them next time
-        failed_queries = [a for a in result.attempts if a.startswith("ddgs:")]
-        if failed_queries:
-            _save_scraper_profile(slug, {
-                "domain": domain,
-                "failed_ddgs_queries": failed_queries,
-            }, profiles_path)
 
-    # Strategy 3: Playwright browser fallback
-    logger.info(f"search_and_download: ddgs failed, trying Playwright for {domain}")
+    t2_fallback: Optional[ScraperResult] = None
+    failed_attempts: list[str] = []
+
+    for search_year in (year, year - 1):
+        if search_year < year - 1:
+            break
+        result = search(domain=domain, year=search_year, out_dir=storage_path)
+
+        if result.ok:
+            tier = _detect_doc_tier(result.source_url or "")
+            if tier == 1:
+                logger.info(f"search_and_download: found T1 via ddgs (year={search_year}) — {result.pdf_path}")
+                if result.source_url:
+                    url_pattern = re.sub(str(search_year), "*", result.source_url)
+                    _save_scraper_profile(slug, {
+                        "domain": domain,
+                        "last_success": str(date.today()),
+                        "strategy": "ddgs",
+                        "pdf_url_pattern": url_pattern,
+                        "doc_tier": 1,
+                    }, profiles_path)
+                return result.pdf_path
+
+            # T2/T3 found — only accept full annual reports, never partial/periodic
+            is_partial = _is_partial_year_url(result.source_url or "")
+            if is_partial:
+                logger.info(
+                    f"search_and_download: DDGS found partial-year T{tier} document "
+                    f"(year={search_year}) — rejected, trying year-1 for full annual"
+                )
+                # Don't store as fallback — continue to year-1
+            else:
+                logger.info(
+                    f"search_and_download: DDGS found annual T{tier} document "
+                    f"(year={search_year}) — storing as fallback"
+                )
+                t2_fallback = result
+                break  # Full-year T2 is acceptable — no need to try year-1
+        else:
+            failed_attempts.extend(a for a in result.attempts if a.startswith("ddgs:"))
+            if search_year == year:
+                logger.info(f"search_and_download: DDGS year={year} found nothing, trying year={year-1}")
+
+    if failed_attempts:
+        _save_scraper_profile(slug, {"domain": domain, "failed_ddgs_queries": failed_attempts}, profiles_path)
+
+    # Strategy 3: Playwright browser fallback (try for T1)
+    last_attempts = (t2_fallback.attempts if t2_fallback else []) or failed_attempts
+    logger.info(f"search_and_download: trying Playwright for {domain}")
     result = scrape_with_playwright(
         base_url=domain,
         year=year,
         out_dir=storage_path,
-        attempts=result.attempts or [],
+        attempts=last_attempts,
     )
     if result.ok:
-        logger.info(f"search_and_download: found via Playwright — {result.pdf_path}")
-        if result.source_url:
-            url_pattern = re.sub(str(year), "*", result.source_url)
+        tier = _detect_doc_tier(result.source_url or "")
+        if tier == 1 or t2_fallback is None:
+            logger.info(f"search_and_download: found via Playwright (T{tier}) — {result.pdf_path}")
+            if result.source_url:
+                url_pattern = re.sub(str(year), "*", result.source_url)
+                _save_scraper_profile(slug, {
+                    "domain": domain,
+                    "last_success": str(date.today()),
+                    "strategy": "playwright",
+                    "pdf_url_pattern": url_pattern,
+                    "doc_tier": tier,
+                }, profiles_path)
+            return result.pdf_path
+        # Playwright also returned T2 — compare with existing fallback
+        is_partial = _is_partial_year_url(result.source_url or "")
+        if not is_partial:
+            t2_fallback = result
+
+    # Last resort: use best T2 fallback found (DDGS > crawl preference)
+    best_t2 = t2_fallback or crawl_t2_fallback
+    best_t2_url = (t2_fallback.source_url if t2_fallback else crawl_t2_url) or ""
+    if best_t2 and best_t2.ok:
+        logger.info(
+            f"search_and_download: no T1 found — using best T2 fallback "
+            f"({best_t2_url or 'unknown url'})"
+        )
+        if best_t2_url:
+            src = best_t2_url
+            matched_year = year
+            for y in (year, year - 1):
+                if str(y) in src:
+                    matched_year = y
+                    break
+            url_pattern = re.sub(str(matched_year), "*", src)
             _save_scraper_profile(slug, {
                 "domain": domain,
                 "last_success": str(date.today()),
-                "strategy": "playwright",
+                "strategy": "crawl_t2_fallback" if best_t2 is crawl_t2_fallback else "ddgs_t2_fallback",
                 "pdf_url_pattern": url_pattern,
+                "doc_tier": _detect_doc_tier(src),
             }, profiles_path)
-        return result.pdf_path
+        return best_t2.pdf_path
 
     logger.warning(
         f"search_and_download: all strategies failed for {slug} ({domain}). "
-        f"Attempts: {result.attempts}"
+        f"Attempts: {last_attempts}"
     )
     return None
