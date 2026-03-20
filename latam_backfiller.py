@@ -424,10 +424,47 @@ class LatamBackfiller:
                     error_msg="extract() returned empty list",
                 )
             # extract() returns list[ExtractionResult]; prefer the one matching year
-            target = next(
-                (r for r in results if r.fiscal_year == year),
-                results[0],
-            )
+            matched = next((r for r in results if r.fiscal_year == year), None)
+            if matched:
+                target = matched
+            else:
+                # No result matched target year — OCR year inference was wrong (e.g. reads
+                # upload date instead of fiscal year). Override fiscal_year to the requested
+                # year and force Baja so the analyst sees the validation panel.
+                from latam_extractor import ExtractionResult as _ER
+                r0 = results[0]
+                target = _ER(
+                    fields=r0.fields,
+                    source_map=r0.source_map,
+                    confidence="Baja",
+                    currency_code=r0.currency_code,
+                    fiscal_year=year,
+                    extraction_method=r0.extraction_method,
+                )
+                logger.warning(
+                    f"run_year year={year}: no result matched fiscal_year={year} "
+                    f"(got {[r.fiscal_year for r in results]}) — overriding to {year}, forcing Baja"
+                )
+
+            # Force validation panel when key fields are zero/NaN — analyst must confirm
+            _revenue_ok = bool(target.fields.get("revenue") or 0)
+            _assets_ok = bool(target.fields.get("total_assets") or 0)
+            if not _revenue_ok or not _assets_ok:
+                from latam_extractor import ExtractionResult as _ER
+                target = _ER(
+                    fields=target.fields,
+                    source_map=target.source_map,
+                    confidence="Baja",
+                    currency_code=target.currency_code,
+                    fiscal_year=target.fiscal_year,
+                    extraction_method=target.extraction_method,
+                )
+                logger.warning(
+                    f"run_year year={year}: key fields missing "
+                    f"(revenue={target.fields.get('revenue')}, total_assets={target.fields.get('total_assets')}) "
+                    f"— forcing Baja for manual validation"
+                )
+
             status = "low_conf" if target.confidence == "Baja" else "ok"
             return BackfillResult(
                 year=year,

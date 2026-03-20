@@ -794,7 +794,12 @@ def _get_domain_from_profile(slug: str) -> str:
 
 
 def _maybe_queue_backfill(slug: str, country: str, storage_path) -> None:
-    """Queue missing historical years after a new company is registered."""
+    """Queue missing historical years after a new company is registered.
+
+    Also queues years that are present in parquet but have total_assets=NaN
+    (incomplete balance sheet extraction) so they can be re-processed and
+    validated manually.
+    """
     from pathlib import Path
     from datetime import datetime as _dt
     try:
@@ -806,16 +811,36 @@ def _maybe_queue_backfill(slug: str, country: str, storage_path) -> None:
     current = _dt.now().year
     target = [current - i for i in range(1, 6)]
     missing = [y for y in target if y not in existing]
+
+    # Also re-queue years that are in parquet but missing total_assets (balance not extracted)
+    incomplete_balance: set[int] = set()
+    if parquet_path.exists():
+        try:
+            import pandas as _pd_bf
+            _df_bf = _pd_bf.read_parquet(parquet_path, columns=["fiscal_year", "total_assets"])
+            incomplete_balance = set(
+                _df_bf[_df_bf["total_assets"].isna()]["fiscal_year"].dropna().astype(int)
+            )
+            for y in incomplete_balance:
+                if y in target and y not in missing:
+                    missing.append(y)
+        except Exception:
+            pass
+
     if missing:
         if "latam_backfill_queue" not in st.session_state:
             st.session_state["latam_backfill_queue"] = {}
-        st.session_state["latam_backfill_queue"][slug] = missing
+        st.session_state["latam_backfill_queue"][slug] = sorted(missing, reverse=True)
         if "latam_backfill_status" not in st.session_state:
             st.session_state["latam_backfill_status"] = {}
         st.session_state["latam_backfill_status"][slug] = {
-            y: "skipped" if y in existing else "pending"
+            y: "skipped" if (y in existing and y not in incomplete_balance) else "pending"
             for y in target
         }
+        # Track which years need force_reextract (already in parquet but incomplete balance)
+        if "latam_backfill_force_years" not in st.session_state:
+            st.session_state["latam_backfill_force_years"] = {}
+        st.session_state["latam_backfill_force_years"][slug] = incomplete_balance
 
 
 def _check_missing_years(slug: str, country: str) -> list:
@@ -1369,8 +1394,10 @@ def _render_latam_tab() -> None:
                 from pathlib import Path as _BFPath
                 _bf_sp = make_storage_path(_BFPath("data"), active_country, active_slug)
                 _bf = LatamBackfiller(active_slug, active_country, _bf_sp, _bf_domain)
+                _force_years = st.session_state.get("latam_backfill_force_years", {}).get(active_slug, set())
+                _force_reextract = _year in _force_years
                 with st.spinner(f"Extrayendo datos {_year}..."):
-                    _result = _bf.run_year(_year, _pdf_url, _bf_currency)
+                    _result = _bf.run_year(_year, _pdf_url, _bf_currency, force_reextract=_force_reextract)
 
                 if _result.status == "skipped":
                     st.session_state["latam_backfill_status"][active_slug][_year] = "skipped"
