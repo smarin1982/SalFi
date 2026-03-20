@@ -1327,8 +1327,16 @@ def _render_latam_tab() -> None:
             st.session_state["latam_backfill_status"][active_slug] = {}
         st.session_state["latam_backfill_status"][active_slug][_year] = "running"
 
-        # Resolve currency from meta
-        _bf_currency = meta.get("currency_original", "USD")
+        # Resolve currency from meta — fall back to country-based default (never USD for LATAM)
+        _COUNTRY_CURRENCY_DEFAULT = {
+            "co": "COP", "br": "BRL", "mx": "MXN",
+            "ar": "ARS", "cl": "CLP", "pe": "PEN",
+        }
+        _bf_currency = (
+            meta.get("currency_original")
+            or meta.get("currency_code")
+            or _COUNTRY_CURRENCY_DEFAULT.get(active_country.lower(), "USD")
+        )
 
         # Resolve domain: prefer company URL, fall back to scraper_profiles.json
         _bf_domain = active_company.get("url", "") or _get_domain_from_profile(active_slug)

@@ -173,6 +173,16 @@ def _handle_confirm(
         write_meta_json(slug, country, extraction_result, corrected_values, original_values)
         st.cache_data.clear()
 
+        # Reload parquet caches directly into session state so charts refresh on rerun.
+        # _auto_load_existing_latam() skips already-loaded slugs, so we must update here.
+        from pathlib import Path as _Path
+        import pandas as _pd
+        _sp = _Path("data") / "latam" / country / slug
+        if (_sp / "financials.parquet").exists():
+            st.session_state.setdefault("latam_financials", {})[slug] = _pd.read_parquet(_sp / "financials.parquet")
+        if (_sp / "kpis.parquet").exists():
+            st.session_state.setdefault("latam_kpis", {})[slug] = _pd.read_parquet(_sp / "kpis.parquet")
+
         # Navigation state — app.py reads this on next rerun to show success message
         st.session_state["active_latam_company"] = {"slug": slug, "country": country}
 
@@ -224,9 +234,21 @@ def write_meta_json(
         if corrected_values.get(field) != original_values.get(field)
     }
 
+    # Preserve currency_original from existing meta.json if present
+    _existing_meta: dict = {}
+    try:
+        if meta_path.exists():
+            _existing_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+
     meta = {
         "company_slug": company_slug,
         "country": country,
+        "currency_original": (
+            extraction_result.get("currency_code")
+            or _existing_meta.get("currency_original")
+        ),
         "extraction_timestamp": extraction_result.get("extracted_at"),
         "pdf_path": extraction_result.get("pdf_path"),
         "confidence_scores": {
@@ -297,8 +319,10 @@ def render_latam_validation_panel(extraction_result, company: dict) -> None:
 
     currency = extraction_result.get("currency_code") or "COP"
 
+    fiscal_year = extraction_result.get("fiscal_year")
+    year_label = f" — {int(fiscal_year)}" if fiscal_year else ""
     with st.form(key="latam_validation_form"):
-        st.subheader("Validacion de Extraccion")
+        st.subheader(f"Validación de Extracción{year_label}")
         st.caption(
             "Revise los valores detectados. Corrija cualquier valor incorrecto antes de confirmar. "
             "Si cierra el navegador antes de confirmar, no se escribira ningun dato."
