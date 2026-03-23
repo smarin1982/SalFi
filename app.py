@@ -1089,6 +1089,16 @@ def _run_latam_pipeline(name: str, country: str, url: str, force_refresh: bool =
         st.session_state["latam_meta"][agent.slug] = _load_latam_meta(agent.slug, country)
         st.session_state["latam_financials"][agent.slug] = _load_latam_financials(agent.slug, country)
 
+        # Sprint 3: queue all fiscal years for analyst validation before KPI display.
+        # Builds validation forms from the freshly written parquet so analyst can
+        # confirm/correct every field that feeds KPI calculations.
+        _fin_for_val = st.session_state["latam_financials"].get(agent.slug, pd.DataFrame())
+        if not _fin_for_val.empty:
+            _years_to_validate = sorted(
+                _fin_for_val["fiscal_year"].dropna().astype(int).tolist(), reverse=True
+            )
+            st.session_state.setdefault("latam_validation_queue", {})[agent.slug] = _years_to_validate
+
         # Trigger backfill for historical years (non-blocking: skip if backfiller unavailable)
         try:
             from company_registry import make_storage_path

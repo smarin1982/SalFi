@@ -73,12 +73,7 @@ def _build_row(extraction_result: ExtractionResult, company_slug: str) -> dict:
         if native_value is np.nan or (isinstance(native_value, float) and np.isnan(native_value)):
             row[canonical] = np.nan
         else:
-            v = float(native_value)
-            # D&A is always a positive add-back; OCR sometimes stores it as a negative expense.
-            # Normalise to positive here so financials.parquet is always consistent.
-            if canonical == "depreciation_amortization" and v < 0:
-                v = abs(v)
-            row[canonical] = v  # store in local currency
+            row[canonical] = float(native_value)  # store in local currency as-is from PDF
     return row
 
 

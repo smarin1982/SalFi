@@ -379,7 +379,9 @@ KPI_REGISTRY: dict = {
     "revenue_cagr_10y":        lambda d: _cagr_10y(_col(d, "revenue")),
     # Margins
     "gross_profit_margin":     lambda d: safe_divide(_col(d, "gross_profit"), _col(d, "revenue")),
-    "operating_margin":        lambda d: safe_divide(_col(d, "operating_income"), _col(d, "revenue")),
+    "operating_margin":        lambda d: safe_divide(
+                                   _col(d, "operating_income").fillna(_col(d, "gross_profit")),
+                                   _col(d, "revenue")),
     "net_profit_margin":       lambda d: safe_divide(_col(d, "net_income"), _col(d, "revenue")),
     "ebitda_margin":           lambda d: safe_divide(_ebitda_base(d), _col(d, "revenue")),
     # Returns
