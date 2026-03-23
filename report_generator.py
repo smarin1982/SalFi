@@ -480,15 +480,20 @@ def generate_executive_report(
         # Section 1 instruction depends on whether T2 is available
         sec1_instruction = (
             "Fuente PRIMARIA: el INFORME DE GESTION (T2) incluido arriba. "
-            "Redacta 2 párrafos basados en la introduccion y conclusiones del informe: "
-            "qué hizo la empresa, cómo fue su gestión, logros y desafios declarados. "
-            "Complementa con 1-2 KPIs clave para cuantificar afirmaciones. "
-            "OBLIGATORIO: identifica explicitamente al menos 1 fortaleza financiera concreta "
-            "Y al menos 1 area critica de mejora o riesgo relevante — no solo describas, evalua."
+            "2 parrafos en tono corporativo impecable. "
+            "Parrafo 1: narrativa sobre el desempeno operativo del periodo — que hizo la empresa, "
+            "como evoluciono su actividad clinica y comercial, logros y desafios declarados. "
+            "Parrafo 2: conclusion ejecutiva sobre la posicion del negocio y perspectiva estrategica. "
+            "PROHIBIDO: no interpretes ratios ni KPIs individuales — eso es exclusivo de Section 2. "
+            "Puedes mencionar como maximo 1 cifra de contexto (ej. crecimiento de ingresos) "
+            "pero sin analisis de indicadores."
             if management_narrative else
-            "2 párrafos: evaluación critica de la salud financiera basada en los KPIs. "
-            "OBLIGATORIO: señala explicitamente al menos 1 fortaleza concreta Y al menos 1 "
-            "area critica de mejora o riesgo relevante, comparando contra benchmarks sectoriales."
+            "2 parrafos en tono corporativo impecable. "
+            "Parrafo 1: perfil del prestador, su posicion en el mercado y desempeno general del periodo. "
+            "Parrafo 2: conclusion ejecutiva sobre la salud financiera del negocio y los principales "
+            "retos estrategicos que enfrenta. "
+            "PROHIBIDO: no interpretes ratios ni KPIs individuales — eso es exclusivo de Section 2. "
+            "Menciona como maximo 1 cifra de contexto sin analisis de indicadores."
         )
 
         user_prompt = (
@@ -555,7 +560,7 @@ def generate_executive_report(
 
         msg = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2600,
+            max_tokens=4000,
             system=(
                 "Eres un analista financiero senior especializado en banca de inversion, "
                 "due diligence y estructuracion de instrumentos de credito para el sector salud "
