@@ -143,7 +143,7 @@ def _extract_t2_narrative(pdf_path: str) -> str:
         return "\n\n".join(parts)
 
     except Exception as exc:
-        logger.warning("_extract_t2_narrative failed: %s", exc)
+        logger.warning("_extract_t2_narrative failed: {}", exc)
         return ""
 
 
@@ -174,7 +174,7 @@ def fetch_management_narrative(
         cache_txt = raw_dir / f"t2_{fiscal_year}_narrative.txt"
 
         if cache_txt.exists():
-            logger.info("fetch_management_narrative: cache hit %s %d", slug, fiscal_year)
+            logger.info("fetch_management_narrative: cache hit {} {}", slug, fiscal_year)
             return cache_txt.read_text(encoding="utf-8")
 
         profiles_path = Path(data_dir) / "latam" / "scraper_profiles.json"
@@ -184,12 +184,12 @@ def fetch_management_narrative(
         profiles = json.loads(profiles_path.read_text(encoding="utf-8"))
         t2_url = profiles.get(slug, {}).get("t2_pdfs", {}).get(str(fiscal_year))
         if not t2_url:
-            logger.info("fetch_management_narrative: no T2 URL for %s year %d", slug, fiscal_year)
+            logger.info("fetch_management_narrative: no T2 URL for {} year {}", slug, fiscal_year)
             return ""
 
         t2_pdf_path = raw_dir / f"t2_{fiscal_year}.pdf"
         if not t2_pdf_path.exists():
-            logger.info("fetch_management_narrative: downloading T2 %s", t2_url)
+            logger.info("fetch_management_narrative: downloading T2 {}", t2_url)
             raw_dir.mkdir(parents=True, exist_ok=True)
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             resp = requests.get(t2_url, timeout=30, headers=headers)
@@ -198,16 +198,16 @@ def fetch_management_narrative(
                 logger.warning("fetch_management_narrative: response is not a PDF — skipping")
                 return ""
             t2_pdf_path.write_bytes(resp.content)
-            logger.info("fetch_management_narrative: saved %d bytes to %s", len(resp.content), t2_pdf_path)
+            logger.info("fetch_management_narrative: saved {} bytes to {}", len(resp.content), t2_pdf_path)
 
         narrative = _extract_t2_narrative(str(t2_pdf_path))
         if narrative:
             cache_txt.write_text(narrative, encoding="utf-8")
-            logger.info("fetch_management_narrative: extracted %d chars for %s %d", len(narrative), slug, fiscal_year)
+            logger.info("fetch_management_narrative: extracted {} chars for {} {}", len(narrative), slug, fiscal_year)
         return narrative
 
     except Exception as exc:
-        logger.warning("fetch_management_narrative failed: %s", exc)
+        logger.warning("fetch_management_narrative failed: {}", exc)
         return ""
 
 
@@ -234,7 +234,7 @@ def fetch_comparables(company_name: str, country: str, sector: str = "salud") ->
                 snippets.append(snippet)
         return snippets
     except Exception as exc:
-        logger.warning("fetch_comparables failed: %s", exc)
+        logger.warning("fetch_comparables failed: {}", exc)
         return []
 
 
@@ -366,7 +366,7 @@ def compute_factoring_context(kpis_df, financials_df) -> dict:
             "factoring_rating": factoring_rating,
         }
     except Exception as exc:
-        logger.warning("compute_factoring_context failed: %s", exc)
+        logger.warning("compute_factoring_context failed: {}", exc)
         return {}
 
 
@@ -446,7 +446,7 @@ def generate_executive_report(
                 f"\nINFORME DE GESTION (T2) - Introduccion y Conclusiones:\n"
                 f"{management_narrative}\n"
             )
-            logger.info("generate_executive_report: T2 narrative included (%d chars)", len(management_narrative))
+            logger.info("generate_executive_report: T2 narrative included ({} chars)", len(management_narrative))
         else:
             logger.info("generate_executive_report: no T2 narrative — sections 1 and 3 will use KPI data only")
 
@@ -604,7 +604,7 @@ def generate_executive_report(
         )
         usage = msg.usage
         logger.info(
-            "report_generator tokens | input: %d | output: %d | total: %d | cost_usd: ~$%.4f",
+            "report_generator tokens | input: {} | output: {} | total: {} | cost_usd: ~${:.4f}",
             usage.input_tokens,
             usage.output_tokens,
             usage.input_tokens + usage.output_tokens,
@@ -613,7 +613,7 @@ def generate_executive_report(
         return msg.content[0].text
 
     except Exception as exc:
-        logger.error("generate_executive_report failed: %s", exc)
+        logger.error("generate_executive_report failed: {}", exc)
         return f"[Error al generar reporte: {exc}]"
 
 
@@ -703,5 +703,5 @@ def export_chart_png(fig) -> "bytes | None":
         result = fig.to_image(format="png", width=800, height=300, scale=2)
         return result
     except Exception as exc:
-        logger.warning("export_chart_png failed (Kaleido unavailable): %s", exc)
+        logger.warning("export_chart_png failed (Kaleido unavailable): {}", exc)
         return None
