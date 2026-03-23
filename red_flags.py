@@ -233,9 +233,6 @@ def evaluate_flags(
     for flag_spec in sector_config.get("flags", []):
         kpi_name = flag_spec["kpi"]
         if kpi_name not in latest_kpis or pd.isna(latest_kpis[kpi_name]):
-            logger.debug(
-                f"Flag {flag_spec['id']}: KPI '{kpi_name}' missing or NaN — skipping"
-            )
             continue
 
         value = float(latest_kpis[kpi_name])
