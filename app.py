@@ -1119,6 +1119,7 @@ def _generate_and_cache_report(slug: str, country: str) -> None:
         return
 
     kpis_df = st.session_state["latam_kpis"].get(slug, pd.DataFrame())
+    financials_df = st.session_state["latam_financials"].get(slug, pd.DataFrame())
     meta = st.session_state["latam_meta"].get(slug, {})
     kpis_dict = kpis_df.iloc[-1].dropna().to_dict() if not kpis_df.empty else {}
     red_flags = st.session_state["latam_red_flags"].get(slug, [])
@@ -1144,10 +1145,13 @@ def _generate_and_cache_report(slug: str, country: str) -> None:
             fiscal_year=_fy,
         )
 
+    factoring_context = report_generator.compute_factoring_context(kpis_df, financials_df)
+
     with st.spinner("Generando reporte con Claude API..."):
         report_text = report_generator.generate_executive_report(
             kpis_dict, red_flags, comparables, company_info,
             management_narrative=management_narrative,
+            factoring_context=factoring_context,
         )
 
     st.session_state["latam_report_text"][slug] = report_text

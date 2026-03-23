@@ -229,6 +229,138 @@ def fetch_comparables(company_name: str, country: str, sector: str = "salud") ->
 
 
 # ---------------------------------------------------------------------------
+# compute_factoring_context
+# ---------------------------------------------------------------------------
+
+def compute_factoring_context(kpis_df, financials_df) -> dict:
+    """Pre-compute factoring-eligibility metrics for Section 3 prompt injection.
+
+    Computes DSO zone, CCC trend, WC gap projection (Option B), leverage zones,
+    factoring-eligible AR estimate, and a pre-computed rating suggestion.
+    Never raises — returns {} on any failure.
+    """
+    try:
+        import math
+        import pandas as pd
+
+        if kpis_df.empty or financials_df.empty:
+            return {}
+
+        kpis = kpis_df.sort_values("fiscal_year")
+        fin = financials_df.sort_values("fiscal_year")
+        lk = kpis.iloc[-1]
+        lf = fin.iloc[-1]
+
+        def _v(row, key):
+            val = row.get(key)
+            return None if (val is None or (isinstance(val, float) and math.isnan(val))) else float(val)
+
+        # DSO zone
+        dso = _v(lk, "dso")
+        if dso is not None:
+            dso_zone = (
+                "Excelente (menor de 90 dias)" if dso < 90
+                else "Estandar (120-150 dias)" if dso <= 150
+                else "Zona Critica de Liquidez (150-180 dias)" if dso <= 180
+                else "Cartera en Riesgo Critico (mayor de 180 dias)"
+            )
+        else:
+            dso_zone = "N/D"
+
+        # CCC trend (last 2 years)
+        ccc_latest = _v(lk, "cash_conversion_cycle")
+        ccc_trend = "N/D"
+        if "cash_conversion_cycle" in kpis.columns:
+            ccc_vals = kpis["cash_conversion_cycle"].dropna()
+            if len(ccc_vals) >= 2:
+                delta = float(ccc_vals.iloc[-1]) - float(ccc_vals.iloc[-2])
+                ccc_trend = "estable" if abs(delta) < 5 else ("creciente" if delta > 0 else "decreciente")
+
+        # Revenue and receivables (latest year, in local currency)
+        revenue = _v(lf, "revenue") or 0.0
+        receivables = _v(lf, "receivables") or 0.0
+
+        # Average revenue growth from historical series
+        avg_growth = 0.10
+        if "revenue_growth_yoy" in kpis.columns:
+            g_vals = kpis["revenue_growth_yoy"].dropna()
+            if len(g_vals) > 0:
+                avg_growth = max(-0.10, min(float(g_vals.mean()), 0.40))
+
+        # WC gap projection (Option B):
+        # If DSO holds and revenue grows at avg_growth, incremental WC need = delta in receivables
+        projected_revenue = None
+        wc_gap = None
+        if dso is not None and revenue > 0:
+            projected_revenue = revenue * (1 + avg_growth)
+            wc_gap = (dso / 365) * projected_revenue - receivables
+
+        # Factoring eligible estimate (~70% of AR as >60d aging proxy)
+        factoring_eligible = receivables * 0.70 if receivables > 0 else None
+
+        # D/EBITDA zone
+        debt_ebitda = _v(lk, "debt_to_ebitda")
+        if debt_ebitda is not None:
+            debt_ebitda_zone = (
+                "Saludable (menor de 3.5x)" if debt_ebitda < 3.5
+                else "Vigilancia (3.5-5x)" if debt_ebitda < 5
+                else "Estres Financiero / Posible Zombie (mayor de 5x)"
+            )
+        else:
+            debt_ebitda_zone = "N/D"
+
+        # Net debt
+        net_debt = (
+            (_v(lf, "long_term_debt") or 0)
+            + (_v(lf, "short_term_debt") or 0)
+            - (_v(lf, "cash") or 0)
+        )
+
+        debt_equity = _v(lk, "debt_to_equity")
+        current_ratio = _v(lk, "current_ratio")
+        ebitda_margin = _v(lk, "ebitda_margin")
+
+        # Pre-computed factoring rating suggestion
+        factoring_rating = None
+        if dso is not None and debt_ebitda is not None and ebitda_margin is not None:
+            if dso > 150 and debt_ebitda < 3.5 and ebitda_margin > 0.08:
+                factoring_rating = "CANDIDATO PRIORITARIO"
+            elif dso > 150 and (debt_ebitda > 5 or ebitda_margin < 0.05):
+                factoring_rating = "CANDIDATO CON RESTRICCIONES"
+            elif debt_ebitda > 5 and ebitda_margin <= 0:
+                factoring_rating = "NO RECOMENDADO"
+        if factoring_rating is None and dso is not None and debt_ebitda is not None:
+            if 120 <= dso <= 150 or (3.5 <= debt_ebitda < 5):
+                factoring_rating = "CANDIDATO MODERADO"
+
+        def _mmm(v):
+            return round(v / 1e9, 1) if v is not None else None
+
+        return {
+            "dso_days": round(dso, 1) if dso is not None else None,
+            "dso_zone": dso_zone,
+            "ccc_days": round(ccc_latest, 1) if ccc_latest is not None else None,
+            "ccc_trend": ccc_trend,
+            "current_ratio": round(current_ratio, 2) if current_ratio is not None else None,
+            "revenue_mmm": _mmm(revenue),
+            "receivables_mmm": _mmm(receivables),
+            "avg_growth_pct": round(avg_growth * 100, 1),
+            "projected_revenue_mmm": _mmm(projected_revenue),
+            "wc_gap_mmm": _mmm(wc_gap),
+            "factoring_eligible_mmm": _mmm(factoring_eligible),
+            "debt_ebitda": round(debt_ebitda, 2) if debt_ebitda is not None else None,
+            "debt_ebitda_zone": debt_ebitda_zone,
+            "debt_equity": round(debt_equity, 2) if debt_equity is not None else None,
+            "net_debt_mmm": _mmm(net_debt),
+            "ebitda_margin_pct": round(ebitda_margin * 100, 1) if ebitda_margin is not None else None,
+            "factoring_rating": factoring_rating,
+        }
+    except Exception as exc:
+        logger.warning("compute_factoring_context failed: %s", exc)
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # generate_executive_report
 # ---------------------------------------------------------------------------
 
@@ -238,6 +370,7 @@ def generate_executive_report(
     comparables: list,
     company: dict,
     management_narrative: str = "",
+    factoring_context: dict = None,
 ) -> str:
     """Generate a Spanish executive report via Claude following the financial-analysis skill.
 
@@ -307,15 +440,45 @@ def generate_executive_report(
         else:
             logger.info("generate_executive_report: no T2 narrative — sections 1 and 3 will use KPI data only")
 
+        # Factoring context block for Section 3
+        fc = factoring_context or {}
+        fc_block = ""
+        if fc:
+            def _fmt(v, unit="", dec=1):
+                return f"{v:.{dec}f}{unit}" if v is not None else "N/D"
+
+            fc_block = (
+                f"\nCONTEXTO PRECOMPUTADO PARA SECCION 3 (usa estos valores, no los recalcules):\n"
+                f"DSO actual: {_fmt(fc.get('dso_days'), ' dias', 0)} — {fc.get('dso_zone', 'N/D')}\n"
+                f"Ciclo de Conversion de Caja: {_fmt(fc.get('ccc_days'), ' dias', 0)} (tendencia: {fc.get('ccc_trend', 'N/D')})\n"
+                f"Razon corriente: {_fmt(fc.get('current_ratio'), '', 2)}\n"
+                f"Deuda/EBITDA: {_fmt(fc.get('debt_ebitda'), 'x', 2)} — {fc.get('debt_ebitda_zone', 'N/D')}\n"
+                f"Deuda/Patrimonio: {_fmt(fc.get('debt_equity'), 'x', 2)}\n"
+                f"Deuda neta: {_fmt(fc.get('net_debt_mmm'), ' mil millones COP')}\n"
+                f"Ingresos actuales: {_fmt(fc.get('revenue_mmm'), ' mil millones COP')}\n"
+                f"Cartera (cuentas por cobrar): {_fmt(fc.get('receivables_mmm'), ' mil millones COP')}\n"
+                f"Crecimiento promedio historico de ingresos: {_fmt(fc.get('avg_growth_pct'), '%')}\n"
+                f"Ingresos proyectados proximo ejercicio: {_fmt(fc.get('projected_revenue_mmm'), ' mil millones COP')}\n"
+                f"Brecha proyectada de capital de trabajo: {_fmt(fc.get('wc_gap_mmm'), ' mil millones COP')}\n"
+                f"Cartera elegible estimada para factoring (~70% AR): {_fmt(fc.get('factoring_eligible_mmm'), ' mil millones COP')}\n"
+                f"EBITDA margin actual: {_fmt(fc.get('ebitda_margin_pct'), '%')}\n"
+            )
+            if fc.get("factoring_rating"):
+                fc_block += f"Calificacion sugerida por algoritmo: {fc['factoring_rating']}\n"
+            fc_block += "(Nota: Aging >120d y Glosa Rate no disponibles — menciona esta limitacion en el reporte)\n"
+
         # Section 1 instruction depends on whether T2 is available
         sec1_instruction = (
             "Fuente PRIMARIA: el INFORME DE GESTION (T2) incluido arriba. "
             "Redacta 2 párrafos basados en la introduccion y conclusiones del informe: "
             "qué hizo la empresa, cómo fue su gestión, logros y desafios declarados. "
-            "Complementa solo con 1-2 KPIs clave para cuantificar afirmaciones."
+            "Complementa con 1-2 KPIs clave para cuantificar afirmaciones. "
+            "OBLIGATORIO: identifica explicitamente al menos 1 fortaleza financiera concreta "
+            "Y al menos 1 area critica de mejora o riesgo relevante — no solo describas, evalua."
             if management_narrative else
-            "Maximo 2 párrafos breves: evaluación global de la salud financiera y "
-            "posicion competitiva basada en los KPIs disponibles."
+            "2 párrafos: evaluación critica de la salud financiera basada en los KPIs. "
+            "OBLIGATORIO: señala explicitamente al menos 1 fortaleza concreta Y al menos 1 "
+            "area critica de mejora o riesgo relevante, comparando contra benchmarks sectoriales."
         )
 
         user_prompt = (
@@ -324,12 +487,13 @@ def generate_executive_report(
             f"País: {company['country']} | Año fiscal: {company['fiscal_year']} | {fx_note}\n"
             f"{t2_block}\n"
             f"DATOS FINANCIEROS:\n"
-            f"KPIs año principal (USD): {json.dumps(kpis_clean, ensure_ascii=False, separators=(',', ':'))}\n"
+            f"KPIs año principal ({currency}): {json.dumps(kpis_clean, ensure_ascii=False, separators=(',', ':'))}\n"
             f"Red Flags detectadas: {json.dumps(red_flags, ensure_ascii=False, separators=(',', ':'))}\n"
             f"Contexto sectorial (búsqueda web): {comparables}\n"
             f"{scenario_block}\n"
-            f"ESTRUCTURA REQUERIDA — exactamente 3 secciones, español profesional. "
-            f"LIMITE ESTRICTO: máximo 1.200 tokens de salida (2 páginas A4 máximo).\n\n"
+            f"{fc_block}\n"
+            f"ESTRUCTURA REQUERIDA — exactamente 3 secciones en español corporativo impecable. "
+            f"Las 3 secciones son OBLIGATORIAS; no omitas ninguna bajo ningun concepto.\n\n"
             f"## 1. Resumen Ejecutivo\n"
             f"{sec1_instruction}\n\n"
             f"## 2. Análisis Financiero\n"
@@ -342,34 +506,79 @@ def generate_executive_report(
             f"para la empresa (no solo si está por encima/debajo del benchmark).\n"
             f"- Incluye mínimo 1 indicador por categoría; omite filas con valor N/D solo si "
             f"la categoría tiene al menos otro indicador disponible.\n\n"
-            f"## 3. Insights\n"
-            f"Texto corrido de 4-6 oraciones — sin subsecciones, sin bullets, sin numeración. "
-            f"Estilo corporativo: prosa fluida, voz activa, lenguaje de reporte ejecutivo. "
-            f"No enumeres puntos ni uses conectores lineales como 'primero... segundo... tercero'. "
-            f"El párrafo debe integrar orgánicamente: la valoración de riesgos que emergen de "
-            f"los indicadores y alertas, el posicionamiento competitivo de la empresa frente al "
-            f"sector y la coyuntura declarada en su informe de gestión, y una postura de inversión "
-            f"o gestión (Favorable / Neutral / Precaución) sustentada en los elementos anteriores. "
-            f"Si hay serie histórica, teje la tendencia en la narrativa sin destacarla como punto aparte. "
-            f"No repitas cifras ya presentes en la sección 2.\n\n"
-            f"REGLAS:\n"
-            f"- No inventes valores; si un dato falta, omítelo o indica 'N/D'\n"
+            f"## 3. Insights — Liquidez, Apalancamiento y Oportunidad de Factoring\n"
+            f"ESTA SECCION ES OBLIGATORIA Y DEBE GENERARSE COMPLETA. "
+            f"Narrativa continua sin bullets, sin numeracion, sin subtitulos internos. "
+            f"Prosa corporativa densa, voz activa, gramatica impecable, nivel CEO/CFO/inversor. "
+            f"Usa los datos del CONTEXTO PRECOMPUTADO inyectados arriba. "
+            f"La narrativa debe cubrir organicamente los siguientes tres momentos:\n"
+            f"PRIMERO — Diagnostico de liquidez estructural: analiza DSO, Ciclo de Conversion "
+            f"de Caja y razon corriente. Determina si el prestador esta financiando a las "
+            f"EPS/aseguradoras a expensas de su propia operacion y si la liquidez atrapada en "
+            f"cartera es el principal driver de riesgo operativo.\n"
+            f"SEGUNDO — Diagnostico de apalancamiento: analiza Deuda/EBITDA, Deuda/Patrimonio "
+            f"y deuda neta. Evalua si la estructura de deuda actual deja margen para absorber "
+            f"el costo de un instrumento de factoring adicional, o si el prestador esta en zona "
+            f"de vigilancia (D/EBITDA 3.5-5x) o estres financiero (D/EBITDA mayor de 5x).\n"
+            f"TERCERO — Proyeccion de necesidad de liquidez y calificacion de factoring: "
+            f"usa la brecha proyectada de capital de trabajo y la cartera elegible estimada "
+            f"para cuantificar la oportunidad. Evalua la viabilidad de un esquema de factoring "
+            f"de cartera EPS considerando el margen EBITDA disponible para absorber el costo "
+            f"del instrumento y el vinculo con buenos desenlaces clinicos como condicion de "
+            f"elegibilidad. Si Aging mayor de 120 dias y Glosa Rate no estan disponibles, "
+            f"menciona esta limitacion explicitamente. "
+            f"Concluye con la calificacion explicita en mayusculas: "
+            f"CANDIDATO PRIORITARIO (DSO mayor de 150d, D/EBITDA menor de 3.5x, EBITDA mayor de 8%), "
+            f"CANDIDATO MODERADO (DSO 120-150d o D/EBITDA 3.5-5x con margen positivo), "
+            f"CANDIDATO CON RESTRICCIONES (DSO mayor de 150d pero D/EBITDA mayor de 5x o margen menor de 5%), "
+            f"o NO RECOMENDADO (D/EBITDA mayor de 5x con margen negativo), "
+            f"seguida de 1-2 lineas de justificacion. "
+            f"Cierra con postura integrada: Favorable / Neutral / Precaucion con la condicion "
+            f"especifica que podria modificarla.\n"
+            f"No repitas cifras ya presentes en la seccion 2 salvo las criticas para el argumento.\n\n"
+            f"REGLAS GENERALES:\n"
+            f"- No inventes valores; si un dato falta, omitelo o indica 'N/D'\n"
             f"- Solo guion simple (-), nunca doble guion ni em-dash\n"
-            f"- Español profesional sin anglicismos innecesarios\n"
-            f"- NO generes más de 3 secciones ni subsecciones dentro de la sección 3"
+            f"- Espanol corporativo impecable, gramatica perfecta, sin anglicismos innecesarios\n"
+            f"- Exactamente 3 secciones; ninguna puede omitirse"
         )
 
         msg = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1600,
+            max_tokens=2600,
             system=(
-                "Eres un analista financiero senior de una firma de banca de inversión, "
-                "especializado en el sector salud de Latinoamérica. Produces reportes de due "
-                "diligence y análisis de crédito con prosa corporativa de alto nivel: fluida, "
-                "precisa y orientada a la toma de decisiones. Para empresas privadas sin precio "
-                "de mercado, reemplazas el DCF tradicional con análisis de tendencias históricas "
-                "y benchmarks sectoriales. Nunca inventas datos; cuando un dato falta, lo omites "
-                "o lo señalas explícitamente."
+                "Eres un analista financiero senior especializado en banca de inversion, "
+                "due diligence y estructuracion de instrumentos de credito para el sector salud "
+                "de Colombia y Latinoamerica. Tus reportes son leidos por CEOs, CFOs, "
+                "inversionistas y juntas directivas de IPS privadas; el lenguaje debe ser "
+                "impecablemente corporativo: gramatica perfecta, prosa densa y precisa, sin "
+                "coloquialismos, sin anglicismos innecesarios, sin redundancias. Cada afirmacion "
+                "debe estar sustentada en datos o en contexto sectorial verificable. "
+                "Sigues la metodologia del Financial Analysis Skill con enfasis en liquidez "
+                "estructural y apalancamiento para evaluar la elegibilidad de instrumentos de "
+                "factoring de cartera EPS.\n\n"
+                "BENCHMARKS SECTOR SALUD COLOMBIA — IPS privadas (referencia para tablas):\n"
+                "- EBITDA margin: 10-14% (saludable); <8% (alerta operativa); >18% (excepcional)\n"
+                "- Margen neto: 3-7% (rango normal); <2% (presion de costos severa)\n"
+                "- Razon corriente: >=1.2 (minimo operativo); <1.0 (riesgo inmediato)\n"
+                "- Razon rapida: >=1.0\n"
+                "- Deuda/EBITDA: <3.5x (saludable); 3.5-5x (vigilancia); >5x (estres/zombie)\n"
+                "- DSO: 120-150 dias (estandar EPS/gobierno); <90 dias (excelente); "
+                  ">180 dias (cartera en riesgo critico)\n"
+                "- CCC positivo y creciente: el prestador esta financiando a las EPS a expensas "
+                  "de su propio capital de trabajo — senal critica de necesidad de factoring\n"
+                "- Rotacion de activos: 1.5-2.5x\n"
+                "- Crecimiento de ingresos: 8-15% YoY\n\n"
+                "CRITERIOS DE CALIFICACION FACTORING SALFI:\n"
+                "- CANDIDATO PRIORITARIO: DSO >150d, Deuda/EBITDA <3.5x, EBITDA margin >8%\n"
+                "- CANDIDATO MODERADO: DSO 120-150d con margen positivo, "
+                  "o D/EBITDA 3.5-5x pero con margen EBITDA saludable\n"
+                "- CANDIDATO CON RESTRICCIONES: DSO >150d pero D/EBITDA >5x, "
+                  "o EBITDA margin <5%\n"
+                "- NO RECOMENDADO: D/EBITDA >5x con margen EBITDA negativo o nulo\n\n"
+                "Eres critico y objetivo: identificas fortalezas genuinas pero señalas con igual "
+                "rigor las brechas y riesgos estructurales. "
+                "Nunca inventas datos; cuando un dato falta, lo omites o lo señalas con 'N/D'."
             ),
             messages=[{"role": "user", "content": user_prompt}],
         )
