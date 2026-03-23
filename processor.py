@@ -323,6 +323,39 @@ def _debt_for_leverage(d: pd.DataFrame) -> pd.Series:
     return explicit.fillna(fallback)
 
 
+def _safe_da(d: pd.DataFrame) -> pd.Series:
+    """Return a validated depreciation_amortization series safe for EBITDA calculation.
+
+    Two guards against bad OCR extractions:
+    1. Sign: D&A is always added back to operating income (should be positive).
+       If stored as negative (expense sign), flip to positive.
+    2. Sanity: if abs(D&A) > 20% of revenue, the extraction is likely garbage
+       (e.g. CROC 2024 where OCR pulled a wrong large number). Cap to 0 so
+       ebitda_margin falls back to operating_margin rather than exploding.
+    """
+    da = _col(d, "depreciation_amortization").abs()
+    rev = _col(d, "revenue")
+    ratio = safe_divide(da, rev)
+    return da.where(ratio <= 0.20, other=0.0)
+
+
+def _ebitda_base(d: pd.DataFrame) -> pd.Series:
+    """Return the base for EBITDA calculation.
+
+    Standard:      operating_income + D&A
+    LATAM fallback: gross_profit + D&A  — used when operating_income is absent.
+
+    Many LATAM (especially Colombian) IPS reports do not carry a separate
+    "Utilidad Operacional" line; the P&L jumps from Utilidad Bruta directly to
+    Utilidad Neta.  In those cases gross_profit is the best available proxy for
+    the EBIT base before adding back depreciation and amortization.
+    """
+    oi = _col(d, "operating_income")
+    gp = _col(d, "gross_profit")
+    base = oi.fillna(gp)   # use gross_profit only where operating_income is NaN
+    return base + _safe_da(d)
+
+
 def _cagr_10y(s: pd.Series) -> pd.Series:
     """Compute 10-year CAGR for each year. Falls back to longest available window
     (minimum 2 years) when 10-year history is not present — typical for LATAM
@@ -348,9 +381,7 @@ KPI_REGISTRY: dict = {
     "gross_profit_margin":     lambda d: safe_divide(_col(d, "gross_profit"), _col(d, "revenue")),
     "operating_margin":        lambda d: safe_divide(_col(d, "operating_income"), _col(d, "revenue")),
     "net_profit_margin":       lambda d: safe_divide(_col(d, "net_income"), _col(d, "revenue")),
-    "ebitda_margin":           lambda d: safe_divide(
-                                   _col(d, "operating_income") + _col(d, "depreciation_amortization"),
-                                   _col(d, "revenue")),
+    "ebitda_margin":           lambda d: safe_divide(_ebitda_base(d), _col(d, "revenue")),
     # Returns
     "roe":                     lambda d: safe_divide(_col(d, "net_income"), _col(d, "total_equity")),
     "roa":                     lambda d: safe_divide(_col(d, "net_income"), _col(d, "total_assets")),
@@ -363,9 +394,7 @@ KPI_REGISTRY: dict = {
     "working_capital":         lambda d: _col(d, "current_assets") - _col(d, "current_liabilities"),
     # Leverage
     "debt_to_equity":          lambda d: safe_divide(_col(d, "total_liabilities"), _col(d, "total_equity")),
-    "debt_to_ebitda":          lambda d: safe_divide(
-                                   _debt_for_leverage(d),
-                                   _col(d, "operating_income") + _col(d, "depreciation_amortization")),
+    "debt_to_ebitda":          lambda d: safe_divide(_debt_for_leverage(d), _ebitda_base(d)),
     "interest_coverage":       lambda d: safe_divide(_col(d, "operating_income"), _col(d, "interest_expense")),
     "debt_to_assets":          lambda d: safe_divide(
                                    _debt_for_leverage(d),

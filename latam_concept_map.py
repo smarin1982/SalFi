@@ -57,9 +57,13 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
     "cogs": [
         "costo de ventas",
         "costo de servicios",
+        "costos de servicios",                   # plural CO variant
         "costo de prestacion de servicios",
         "costo de prestación de servicios",
+        "costos de prestacion de servicios",     # plural variant
+        "costos de prestación de servicios",     # plural variant
         "costo de servicios de salud",
+        "costos de servicios de salud",          # plural variant
         "costos y gastos de operacion",
         "costos y gastos de operación",
     ],
@@ -121,11 +125,43 @@ LATAM_CONCEPT_MAP: dict[str, list[str]] = {
         "costos y gastos operacionales",
     ],
     "interest_expense": [
+        # --- Formatos NIIF CO/PE/CL — ordenados de más a menos específico ---
+        # Frases con "obligaciones financieras" (CO Supersalud / PUC)
+        "gastos por intereses sobre obligaciones financieras",
+        "intereses sobre obligaciones financieras",
+        "intereses sobre creditos y obligaciones financieras",
+        "intereses sobre créditos y obligaciones financieras",
+        "intereses sobre obligaciones",
+        # Frases compuestas con "intereses"
+        "intereses y similares pagados",
+        "intereses y similares",
+        "intereses y rendimientos financieros",
+        "intereses y comisiones financieras",
+        "intereses y comisiones",
+        "intereses sobre prestamos",
+        "intereses sobre préstamos",
+        "intereses sobre creditos",
+        "intereses sobre créditos",
+        "intereses sobre deuda",
+        "intereses pagados",
+        "gasto por intereses",      # singular
+        "gastos de intereses",
+        "intereses financieros",
+        "costo de deuda",
+        "costo financiero",         # singular
+        # Frases con "gastos" / "costos financieros" (ya presentes, se reordenan al final)
+        "gastos financieros netos",
+        "costos y gastos financieros",
+        "cargos financieros",
         "gastos financieros",
         "gastos por intereses",
         "intereses a cargo",
         "costo de financiamiento",
         "costos financieros",
+        # Sección "no operacional" — CO IPS a menudo la separa así
+        "gastos no operacionales financieros",
+        "otros gastos financieros",
+        "resultado financiero negativo",
     ],
     "depreciation_amortization": [
         "depreciacion y amortizacion",

@@ -288,6 +288,8 @@ with st.sidebar:
             )
             selected_kpis.extend(group_selected)
 
+    st.session_state["selected_kpis"] = selected_kpis
+
     if len(selected_kpis) == 0:
         st.caption("Selecciona al menos un KPI para ver los datos.")
 
@@ -322,7 +324,7 @@ def build_trend_figure(
         hovermode="x unified",
         height=200,
     )
-    fig.update_xaxes(showgrid=False, tickformat="d", dtick=2)
+    fig.update_xaxes(showgrid=False, tickformat="d", dtick=1)
     fig.update_yaxes(showgrid=True, gridcolor="#f0f0f0", zeroline=False, tickformat=meta["tick_format"])
     return fig
 
@@ -362,7 +364,7 @@ def build_comparativo_figure(
         margin=dict(l=0, r=0, t=50, b=0),
         height=260,
     )
-    fig.update_xaxes(showgrid=False, tickformat="d", dtick=2)
+    fig.update_xaxes(showgrid=False, tickformat="d", dtick=1)
     fig.update_yaxes(showgrid=True, gridcolor="#f0f0f0", zeroline=False, tickformat=meta["tick_format"])
     return fig
 
@@ -580,9 +582,9 @@ def _format_latam_kpi_value(
         return format_kpi(value, fmt)
     display_value = value
     currency_code = meta_info.get("currency_original", "—")
-    # LATAM currencies use "mil M" (miles de millones) instead of "B" (billions)
+    # LATAM currencies use "miles de mill." (miles de millones) instead of "B" (billions)
     _is_latam_currency = currency_code not in ("USD", "EUR")
-    _large_suffix = "mil M" if _is_latam_currency else "B"
+    _large_suffix = "miles de mill." if _is_latam_currency else "B"
     if fmt == "dollar_B":
         return f"{currency_code} {display_value / 1e9:.1f} {_large_suffix}"
     # Fallback for other monetary formats
@@ -604,17 +606,10 @@ def _render_latam_kpi_cards(slug: str, country: str) -> None:
         st.warning("KPIs no disponibles.")
         return
 
-    # For LATAM companies, show all KPIs that have actual data (not NaN).
-    # The sidebar selected_kpis are tuned for S&P 500 (10-year CAGR, EBITDA margin, etc.)
-    # which require multi-year history or fields not always present in LATAM PDFs.
-    _kpi_cols = [c for c in kpis_df.columns if c not in ("ticker", "fiscal_year", "confidence")]
-    _available_kpis = [k for k in _kpi_cols if kpis_df[k].notna().any()]
-
-    # Use sidebar selection only if the user has meaningful coverage (>=2 selected KPIs
-    # with actual data). Otherwise fall back to all available KPIs — the sidebar defaults
-    # are tuned for S&P 500 multi-year data and rarely apply to a first LATAM PDF run.
-    _selected_with_data = [k for k in selected_kpis if k in _available_kpis]
-    display_kpis = _selected_with_data if len(_selected_with_data) >= 2 else _available_kpis[:10]
+    _default_kpis = ["revenue_cagr_10y", "ebitda_margin", "quick_ratio", "debt_to_ebitda", "dso"]
+    selected_kpis = st.session_state.get("selected_kpis") or _default_kpis
+    # Only show KPIs that have at least one non-null value for this company
+    display_kpis = [k for k in selected_kpis if k in kpis_df.columns and kpis_df[k].notna().any()]
 
     n = len(display_kpis)
     if n == 0:
@@ -662,7 +657,7 @@ def _render_latam_kpi_cards(slug: str, country: str) -> None:
                 if page and str(page) != "?":
                     st.caption(f"fuente: pág. {page}")
 
-                if len(df_sorted) > 1 and "fiscal_year" in df_sorted.columns and kpi in df_sorted.columns:
+                if not _kpi_with_year.empty and "fiscal_year" in df_sorted.columns and kpi in df_sorted.columns:
                     yr_min = int(df_sorted["fiscal_year"].min())
                     yr_max = int(df_sorted["fiscal_year"].max())
                     fig = build_trend_figure(df_sorted, kpi, (yr_min, yr_max), slug)
@@ -694,7 +689,8 @@ def _render_latam_financials_table(slug: str, country: str) -> None:
     curr_symbol = meta.get("currency_original", "USD")
     multiplier_series = pd.Series(1.0, index=fin_df.index)
 
-    _table_large_suffix = "mil M" if curr_symbol not in ("USD", "EUR") else "B"
+    _is_latam_currency = curr_symbol not in ("USD", "EUR")
+    _table_large_suffix = "miles de mill." if _is_latam_currency else "B"
     for field, label in _SUMMARY_FIELDS:
         if field in fin_df.columns:
             display_cols[label] = (fin_df[field] * multiplier_series).apply(
@@ -707,11 +703,94 @@ def _render_latam_financials_table(slug: str, country: str) -> None:
             )
 
     st.markdown("#### Estados Financieros")
+    st.caption(f"Valores en miles de millones de {curr_symbol} (moneda original)")
     st.dataframe(
         pd.DataFrame(display_cols).set_index("Año"),
         width="stretch",
         hide_index=False,
     )
+
+
+_CANONICAL_TO_DISPLAY = {
+    "revenue":                   "ingresos",
+    "gross_profit":              "utilidad_bruta",
+    "cogs":                      "cogs",
+    "operating_income":          "ingreso_operacional",
+    "net_income":                "utilidad_neta",
+    "depreciation_amortization": "depreciacion_amortizacion",
+    "total_assets":              "total_activos",
+    "total_liabilities":         "pasivos_totales",
+    "total_equity":              "patrimonio",
+    "current_assets":            "activos_corrientes",
+    "current_liabilities":       "pasivos_corrientes",
+    "long_term_debt":            "deuda_total",
+    "cash":                      "efectivo",
+    "receivables":               "cartera",
+    "inventory":                 "inventarios",
+    "accounts_payable":          "cuentas_por_pagar",
+}
+
+
+def _build_edit_extraction_result(slug: str, country: str, fiscal_year: int) -> dict:
+    """Build a synthetic extraction_result dict from parquet data for re-validation.
+
+    Uses abs() for all values so negative OCR artifacts (e.g. receivables, D&A)
+    are shown as positive — the analyst confirms or corrects the magnitude.
+    All confidence scores set to Alta so the Baja guard never blocks submission.
+    """
+    meta = st.session_state["latam_meta"].get(slug, {})
+    currency = meta.get("currency_original", "COP")
+
+    er: dict = {
+        "fiscal_year": fiscal_year,
+        "currency_code": currency,
+        "extraction_method": "manual_edit",
+        "confidence": "Alta",
+    }
+
+    fin_df = st.session_state["latam_financials"].get(slug, pd.DataFrame())
+    if not fin_df.empty:
+        row = fin_df[fin_df["fiscal_year"] == fiscal_year]
+        if not row.empty:
+            for canonical, display in _CANONICAL_TO_DISPLAY.items():
+                val = row[canonical].iloc[0] if canonical in row.columns else None
+                # abs() handles negative OCR values; 0.0 for NaN (form shows empty)
+                er[display] = abs(float(val)) if (val is not None and pd.notna(val)) else 0.0
+                er[f"confidence_{display}"] = "Alta"
+                er[f"source_page_{display}"] = None
+
+    return er
+
+
+def _render_edit_historical_data(slug: str, country: str) -> None:
+    """Expander with year selector + Edit button to re-validate any confirmed fiscal year."""
+    fin_df = st.session_state["latam_financials"].get(slug, pd.DataFrame())
+    if fin_df.empty:
+        return
+
+    years = sorted(fin_df["fiscal_year"].dropna().astype(int).tolist(), reverse=True)
+    if not years:
+        return
+
+    with st.expander("Corregir datos históricos"):
+        st.caption(
+            "Abre el formulario de validación para un año ya confirmado. "
+            "Útil para corregir valores extraídos incorrectamente por OCR."
+        )
+        col_sel, col_btn = st.columns([2, 1])
+        with col_sel:
+            selected_year = st.selectbox(
+                "Año fiscal",
+                options=years,
+                key="latam_edit_year_select",
+            )
+        with col_btn:
+            st.write("")  # vertical align with selectbox
+            if st.button("Editar año", key="latam_edit_year_btn", type="secondary"):
+                er_dict = _build_edit_extraction_result(slug, country, selected_year)
+                st.session_state["latam_pending_extraction"] = er_dict
+                st.session_state["latam_pending_company"] = {"slug": slug, "country": country}
+                st.rerun()
 
 
 def _render_latam_red_flags(slug: str, country: str) -> None:
@@ -721,61 +800,56 @@ def _render_latam_red_flags(slug: str, country: str) -> None:
 
     _SEVERITY_ICON = {"Alta": "🔴", "Media": "🟡", "Baja": "🟢"}
 
-    _col_info, _col_alerts = st.columns([1, 1])
-
-    # Left col: informational message about Deuda LP
-    with _col_info:
-        _fin_df = st.session_state.get("latam_financials", {}).get(slug, pd.DataFrame())
-        if not _fin_df.empty and _fin_df.get("long_term_debt", pd.Series([None])).isna().all():
-            st.info(
-                "ℹ️ **Deuda LP no identificada en el PDF.** "
-                "KPIs de solvencia calculados usando pasivos no corrientes como estimación.",
-                icon=None,
-            )
-
-    # Right col: alerts + indicadores monitoreados
-    with _col_alerts:
-        # Consolidated alert for years where historical ingestion failed
-        _bf_status = st.session_state.get("latam_backfill_status", {}).get(slug, {})
-        _bad_years = sorted(
-            [str(y) for y, s in _bf_status.items() if s in {"not_found", "error"}], reverse=True
+    # Informational note about Deuda LP when it was not extractable
+    _fin_df = st.session_state.get("latam_financials", {}).get(slug, pd.DataFrame())
+    if not _fin_df.empty and _fin_df.get("long_term_debt", pd.Series([None])).isna().all():
+        st.info(
+            "ℹ️ **Deuda LP no identificada en el PDF.** "
+            "KPIs de solvencia calculados usando pasivos no corrientes como estimación.",
+            icon=None,
         )
-        if _bad_years:
-            st.warning(
-                f"Datos históricos incompletos — sin datos para: {', '.join(_bad_years)}",
-                icon="⚠️",
-            )
 
-        # Triggered flags
-        if red_flags:
-            for flag in red_flags:
-                icon = _SEVERITY_ICON.get(flag.get("severity", "Baja"), "⚪")
-                st.markdown(f"{icon} **{flag.get('name', 'Flag')}** — {flag.get('severity', '')}")
-                st.caption(flag.get("description", ""))
-        else:
-            st.success("Sin alertas activas en los indicadores evaluados.")
+    # Consolidated alert for years where historical ingestion failed
+    _bf_status = st.session_state.get("latam_backfill_status", {}).get(slug, {})
+    _bad_years = sorted(
+        [str(y) for y, s in _bf_status.items() if s in {"not_found", "error"}], reverse=True
+    )
+    if _bad_years:
+        st.warning(
+            f"Datos históricos incompletos — sin datos para: {', '.join(_bad_years)}",
+            icon="⚠️",
+        )
 
-        # Indicadores monitoreados checklist
-        try:
-            cfg_path = Path("config/red_flags.yaml")
-            if cfg_path.exists():
-                cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
-                all_flags = cfg.get("sectors", {}).get("healthcare", {}).get("flags", [])
-                if all_flags:
-                    with st.expander("Ver todos los indicadores monitoreados", expanded=False):
-                        for spec in all_flags:
-                            fid = spec.get("id", "")
-                            fname = spec.get("name", fid)
-                            fdesc = spec.get("description", "")
-                            if fid in triggered_ids:
-                                matched = next((f for f in red_flags if f.get("flag_id") == fid), {})
-                                icon = _SEVERITY_ICON.get(matched.get("severity", "Baja"), "⚪")
-                                st.markdown(f"{icon} **{fname}** — {matched.get('severity', '')}")
-                            else:
-                                st.markdown(f"✅ **{fname}** — OK")
-                            st.caption(fdesc)
-        except Exception:
-            pass
+    # Triggered flags
+    if red_flags:
+        for flag in red_flags:
+            icon = _SEVERITY_ICON.get(flag.get("severity", "Baja"), "⚪")
+            st.markdown(f"{icon} **{flag.get('name', 'Flag')}** — {flag.get('severity', '')}")
+            st.caption(flag.get("description", ""))
+    else:
+        st.success("Sin alertas activas en los indicadores evaluados.")
+
+    # Indicadores monitoreados checklist
+    try:
+        cfg_path = Path("config/red_flags.yaml")
+        if cfg_path.exists():
+            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+            all_flags = cfg.get("sectors", {}).get("healthcare", {}).get("flags", [])
+            if all_flags:
+                with st.expander("Ver todos los indicadores monitoreados", expanded=False):
+                    for spec in all_flags:
+                        fid = spec.get("id", "")
+                        fname = spec.get("name", fid)
+                        fdesc = spec.get("description", "")
+                        if fid in triggered_ids:
+                            matched = next((f for f in red_flags if f.get("flag_id") == fid), {})
+                            icon = _SEVERITY_ICON.get(matched.get("severity", "Baja"), "⚪")
+                            st.markdown(f"{icon} **{fname}** — {matched.get('severity', '')}")
+                        else:
+                            st.markdown(f"✅ **{fname}** — OK")
+                        st.caption(fdesc)
+    except Exception:
+        pass
 
 
 def _get_domain_from_profile(slug: str) -> str:
@@ -812,22 +886,28 @@ def _maybe_queue_backfill(slug: str, country: str, storage_path) -> None:
     target = [current - i for i in range(1, 6)]
     missing = [y for y in target if y not in existing]
 
-    # Also re-queue years that are in parquet but missing key balance fields
-    # (total_assets OR total_equity not yet confirmed)
+    # Re-queue years that are in parquet but missing KPI-critical fields:
+    # balance (total_assets/equity), P&L (operating_income), or working capital (cash, receivables)
+    _KPI_CRITICAL_FIELDS = ["total_assets", "total_equity", "operating_income", "cash", "receivables"]
     incomplete_balance: set[int] = set()
     if parquet_path.exists():
         try:
             import pandas as _pd_bf
-            _df_bf = _pd_bf.read_parquet(
-                parquet_path, columns=["fiscal_year", "total_assets", "total_equity"]
-            )
-            _incomplete_mask = _df_bf["total_assets"].isna() | _df_bf["total_equity"].isna()
-            incomplete_balance = set(
-                _df_bf[_incomplete_mask]["fiscal_year"].dropna().astype(int)
-            )
-            for y in incomplete_balance:
-                if y in target and y not in missing:
-                    missing.append(y)
+            _cols_to_check = ["fiscal_year"] + [
+                c for c in _KPI_CRITICAL_FIELDS
+                if c in _pd_bf.read_parquet(parquet_path, columns=["fiscal_year"]).columns
+                or True  # always try; read_parquet will handle missing cols gracefully
+            ]
+            _df_bf = _pd_bf.read_parquet(parquet_path)
+            _available = [c for c in _KPI_CRITICAL_FIELDS if c in _df_bf.columns]
+            if _available:
+                _incomplete_mask = _df_bf[_available].isna().any(axis=1)
+                incomplete_balance = set(
+                    _df_bf[_incomplete_mask]["fiscal_year"].dropna().astype(int)
+                )
+                for y in incomplete_balance:
+                    if y in target and y not in missing:
+                        missing.append(y)
         except Exception:
             pass
 
@@ -841,7 +921,7 @@ def _maybe_queue_backfill(slug: str, country: str, storage_path) -> None:
             y: "skipped" if (y in existing and y not in incomplete_balance) else "pending"
             for y in target
         }
-        # Track which years need force_reextract (already in parquet but incomplete balance)
+        # Track which years need force_reextract (already in parquet but incomplete)
         if "latam_backfill_force_years" not in st.session_state:
             st.session_state["latam_backfill_force_years"] = {}
         st.session_state["latam_backfill_force_years"][slug] = incomplete_balance
@@ -884,11 +964,51 @@ def _render_backfill_status(slug: str) -> None:
         total = done + len(queue)
         st.progress(done / total if total else 0, text=f"Descargando año {queue[0]}…")
 
-    # Compact retryable list with Re-extraer buttons
+    # Compact retryable list with Re-extraer / Ingresar manualmente buttons
     retryable = sorted([(y, s) for y, s in status_map.items() if s in RETRYABLE | {"not_found"}], reverse=True)
     for year, status in retryable:
         if status == "not_found":
-            st.caption(f"**{year}** — {STATUS_LABELS['not_found']}")
+            _c1, _c2 = st.columns([3, 1])
+            with _c1:
+                st.caption(f"**{year}** — {STATUS_LABELS['not_found']}")
+            with _c2:
+                if st.button("✏", key=f"latam_manual_{slug}_{year}", help=f"Ingresar {year} manualmente"):
+                    _companies = st.session_state.get("latam_companies", [])
+                    _comp = next((c for c in _companies if c["slug"] == slug), {})
+                    _country = _comp.get("country", "CO")
+                    _meta = st.session_state.get("latam_meta", {}).get(slug, {})
+                    _currency = _meta.get("currency_original", "COP")
+                    # Build synthetic ExtractionResult from whatever parquet data exists
+                    _par = Path(f"data/latam/{_country}/{slug}/financials.parquet")
+                    _existing_fields: dict = {}
+                    if _par.exists():
+                        try:
+                            _df_par = pd.read_parquet(_par)
+                            _row = _df_par[_df_par["fiscal_year"] == int(year)]
+                            if not _row.empty:
+                                _existing_fields = {
+                                    c: float(_row[c].iloc[0])
+                                    for c in _df_par.columns
+                                    if c not in ("ticker", "fiscal_year")
+                                    and pd.notna(_row[c].iloc[0])
+                                }
+                        except Exception:
+                            pass
+                    st.session_state["latam_pending_extraction"] = {
+                        "fiscal_year": int(year),
+                        "currency_code": _currency,
+                        "extraction_method": "manual",
+                        "confidence": "Baja",
+                        **{k: v for k, v in _existing_fields.items()},
+                        **{f"confidence_{f}": "Baja" for f in
+                           ["ingresos","utilidad_bruta","cogs","ingreso_operacional",
+                            "utilidad_neta","depreciacion_amortizacion","total_activos",
+                            "pasivos_totales","patrimonio","activos_corrientes",
+                            "pasivos_corrientes","deuda_total","efectivo","cartera",
+                            "inventarios","cuentas_por_pagar"]},
+                    }
+                    st.session_state["latam_pending_company"] = {"slug": slug, "country": _country}
+                    st.rerun()
             continue
         _c1, _c2 = st.columns([3, 1])
         with _c1:
@@ -1455,6 +1575,7 @@ def _render_latam_tab() -> None:
         # (total_liabilities − current_liabilities) como aproximación.
         _render_latam_kpi_cards(active_slug, active_country)
         _render_latam_financials_table(active_slug, active_country)
+        _render_edit_historical_data(active_slug, active_country)
 
     # --- Red Flags ---
     st.markdown("#### Red Flags")

@@ -28,35 +28,56 @@ _BADGE_MARKDOWN = {
     "Baja": ":red-badge[Baja]",
 }
 
-# All validated fields (Spanish display names)
+# All validated fields (Spanish display names) — full set for complete KPI coverage
 _FIELDS = [
-    "ingresos", "utilidad_neta",
+    # Estado de Resultados
+    "ingresos", "utilidad_bruta", "cogs", "ingreso_operacional", "utilidad_neta",
+    "depreciacion_amortizacion",
+    # Balance General
     "total_activos", "pasivos_totales", "patrimonio",
     "activos_corrientes", "pasivos_corrientes", "deuda_total",
+    # Capital de Trabajo
+    "efectivo", "cartera", "inventarios", "cuentas_por_pagar",
 ]
 
 # Human-readable labels for the form
 _FIELD_LABELS = {
-    "ingresos":          "Ingresos",
-    "utilidad_neta":     "Utilidad Neta",
-    "total_activos":     "Total Activos",
-    "pasivos_totales":   "Total Pasivos",
-    "patrimonio":        "Patrimonio",
-    "activos_corrientes": "Activos Corrientes",
-    "pasivos_corrientes": "Pasivos Corrientes",
-    "deuda_total":       "Deuda LP",
+    "ingresos":                  "Ingresos",
+    "utilidad_bruta":            "Utilidad Bruta",
+    "cogs":                      "Costo de Ventas/Servicios",
+    "ingreso_operacional":       "Utilidad Operacional (EBIT)",
+    "utilidad_neta":             "Utilidad Neta",
+    "depreciacion_amortizacion": "Depreciación y Amortización",
+    "total_activos":             "Total Activos",
+    "pasivos_totales":           "Total Pasivos",
+    "patrimonio":                "Patrimonio",
+    "activos_corrientes":        "Activos Corrientes",
+    "pasivos_corrientes":        "Pasivos Corrientes",
+    "deuda_total":               "Deuda LP",
+    "efectivo":                  "Efectivo y Equivalentes",
+    "cartera":                   "Cartera / Cuentas por Cobrar",
+    "inventarios":               "Inventarios",
+    "cuentas_por_pagar":         "Cuentas por Pagar",
 }
 
 # Mapping from Spanish display names → latam_processor canonical English field names
 _DISPLAY_TO_CANONICAL = {
-    "ingresos":          "revenue",
-    "utilidad_neta":     "net_income",
-    "total_activos":     "total_assets",
-    "deuda_total":       "long_term_debt",
-    "pasivos_totales":   "total_liabilities",
-    "patrimonio":        "total_equity",
-    "activos_corrientes": "current_assets",
-    "pasivos_corrientes": "current_liabilities",
+    "ingresos":                  "revenue",
+    "utilidad_bruta":            "gross_profit",
+    "cogs":                      "cogs",
+    "ingreso_operacional":       "operating_income",
+    "utilidad_neta":             "net_income",
+    "depreciacion_amortizacion": "depreciation_amortization",
+    "total_activos":             "total_assets",
+    "pasivos_totales":           "total_liabilities",
+    "patrimonio":                "total_equity",
+    "activos_corrientes":        "current_assets",
+    "pasivos_corrientes":        "current_liabilities",
+    "deuda_total":               "long_term_debt",
+    "efectivo":                  "cash",
+    "cartera":                   "receivables",
+    "inventarios":               "inventory",
+    "cuentas_por_pagar":         "accounts_payable",
 }
 
 # Keys in the session state dict that are metadata, not financial values
@@ -67,9 +88,21 @@ _META_KEYS = (
     | {f"source_page_{f}" for f in _FIELDS}
 )
 
-# Form layout: left column / right column
-_LEFT_FIELDS  = ["ingresos", "utilidad_neta", "total_activos", "pasivos_totales"]
-_RIGHT_FIELDS = ["patrimonio", "activos_corrientes", "pasivos_corrientes", "deuda_total"]
+# Form layout: 3 sections × 2 columns for organised data entry
+_SECTION_FIELDS = {
+    "Estado de Resultados": {
+        "left":  ["ingresos", "ingreso_operacional", "utilidad_neta"],
+        "right": ["utilidad_bruta", "cogs", "depreciacion_amortizacion"],
+    },
+    "Balance General": {
+        "left":  ["total_activos", "pasivos_totales", "patrimonio"],
+        "right": ["activos_corrientes", "pasivos_corrientes", "deuda_total"],
+    },
+    "Capital de Trabajo": {
+        "left":  ["efectivo", "cartera"],
+        "right": ["inventarios", "cuentas_por_pagar"],
+    },
+}
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -165,8 +198,8 @@ def _handle_confirm(
             fiscal_year=int(extraction_result.get("fiscal_year") or 0),
             extraction_method=extraction_result.get("extraction_method", "unknown"),
         )
-        latam_processor.process(slug, er, country)
-        write_meta_json(slug, country, extraction_result, corrected_values, original_mmm)
+        proc_result = latam_processor.process(slug, er, country)
+        write_meta_json(slug, country, extraction_result, corrected_values, original_mmm, proc_result)
         st.cache_data.clear()
 
         # Reload parquet caches into session state so charts refresh immediately.
@@ -200,13 +233,19 @@ def write_meta_json(
     extraction_result: dict,
     corrected_mmm: dict,   # {display_name: float in mmm}
     original_mmm: dict,    # {display_name: float in mmm}
+    processor_result: dict | None = None,
 ) -> None:
-    """Write meta.json with extraction provenance and human-validation audit trail."""
+    """Write meta.json with extraction provenance and human-validation audit trail.
+
+    Merges with existing meta.json so that fields written by LatamAgent (name, url,
+    currency_original, fx_rate_usd, etc.) are preserved. Overwrites only the fields
+    that the validation session knows: confidence, fiscal_year(s), human_validated.
+    """
     storage_path = Path("data") / "latam" / country / company_slug
     storage_path.mkdir(parents=True, exist_ok=True)
     meta_path = storage_path / "meta.json"
 
-    # Preserve currency_original and other fields from existing meta.json
+    # Load existing meta as base — preserves name, url, fx_rate_usd, etc.
     _existing_meta: dict = {}
     try:
         if meta_path.exists():
@@ -224,21 +263,28 @@ def write_meta_json(
         if abs((corrected_mmm.get(field) or 0.0) - (original_mmm.get(field) or 0.0)) > 0.0005
     }
 
-    meta = {
+    _pr = processor_result or {}
+    # Start from existing meta so nothing is lost; then update validation fields
+    meta = dict(_existing_meta)
+    meta.update({
         "company_slug": company_slug,
         "country": country,
         "currency_original": (
             extraction_result.get("currency_code")
             or _existing_meta.get("currency_original")
         ),
-        "extraction_timestamp": extraction_result.get("extracted_at"),
-        "pdf_path": extraction_result.get("pdf_path"),
+        "fiscal_year": _pr.get("fiscal_year") or _existing_meta.get("fiscal_year"),
+        "fiscal_years": _pr.get("fiscal_years") or _existing_meta.get("fiscal_years", []),
+        "confidence": _pr.get("confidence") or extraction_result.get("confidence") or _existing_meta.get("confidence"),
+        "extraction_method": extraction_result.get("extraction_method") or _existing_meta.get("extraction_method"),
+        "extraction_timestamp": extraction_result.get("extracted_at") or _existing_meta.get("extraction_timestamp"),
+        "pdf_path": extraction_result.get("pdf_path") or _existing_meta.get("pdf_path"),
         "confidence_scores": {f: extraction_result.get(f"confidence_{f}") for f in _FIELDS},
         "source_pages": {f: extraction_result.get(f"source_page_{f}") for f in _FIELDS},
         "human_validated": bool(human_validated_fields),
         "human_validated_fields": human_validated_fields,
         "confirmed_at": datetime.now(timezone.utc).isoformat(),
-    }
+    })
 
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -316,34 +362,37 @@ def render_latam_validation_panel(extraction_result, company: dict) -> None:
         )
 
         corrected_values: dict = {}
-        col_left, col_right = st.columns(2)
 
-        for field, col in (
-            [(f, col_left)  for f in _LEFT_FIELDS] +
-            [(f, col_right) for f in _RIGHT_FIELDS]
-        ):
-            with col:
-                val = _default_mmm(field)
-                entered = st.number_input(
-                    label=f"{_FIELD_LABELS[field]} (miles de millones, {currency})",
-                    value=val,
-                    step=0.001,
-                    format="%.3f",
-                    min_value=0.0,
-                    key=f"latam_val_{field}",
-                    help=(
-                        f"Fuente: pag. {extraction_result.get(f'source_page_{field}', '?')} | "
-                        f"Confianza: {extraction_result.get(f'confidence_{field}', 'N/A')}"
-                    ),
-                )
-                corrected_values[field] = entered
-                _render_confidence_badge(extraction_result.get(f"confidence_{field}"))
-                extracted_raw = float(extraction_result.get(field) or 0.0)
-                if extraction_result.get(f"confidence_{field}") == "Baja":
-                    if extracted_raw == 0.0:
-                        st.warning("Sin extracción automática — ingrese el valor.")
-                    else:
-                        st.warning("Confianza Baja — verifique y corrija si es necesario.")
+        for section_name, cols_def in _SECTION_FIELDS.items():
+            st.markdown(f"**{section_name}**")
+            col_left, col_right = st.columns(2)
+            for field, col in (
+                [(f, col_left)  for f in cols_def["left"]] +
+                [(f, col_right) for f in cols_def["right"]]
+            ):
+                with col:
+                    val = _default_mmm(field)
+                    entered = st.number_input(
+                        label=f"{_FIELD_LABELS[field]} (miles de mill., {currency})",
+                        value=val,
+                        step=0.001,
+                        format="%.3f",
+                        min_value=0.0,
+                        key=f"latam_val_{field}",
+                        help=(
+                            f"Fuente: pag. {extraction_result.get(f'source_page_{field}', '?')} | "
+                            f"Confianza: {extraction_result.get(f'confidence_{field}', 'N/A')}"
+                        ),
+                    )
+                    corrected_values[field] = entered
+                    _render_confidence_badge(extraction_result.get(f"confidence_{field}"))
+                    extracted_raw = float(extraction_result.get(field) or 0.0)
+                    if extraction_result.get(f"confidence_{field}") == "Baja":
+                        if extracted_raw == 0.0:
+                            st.warning("Sin extracción automática — ingrese el valor.")
+                        else:
+                            st.warning("Confianza Baja — verifique y corrija si es necesario.")
+            st.divider()
 
         col_confirm, col_discard = st.columns([1, 1])
         with col_confirm:

@@ -73,7 +73,12 @@ def _build_row(extraction_result: ExtractionResult, company_slug: str) -> dict:
         if native_value is np.nan or (isinstance(native_value, float) and np.isnan(native_value)):
             row[canonical] = np.nan
         else:
-            row[canonical] = float(native_value)  # store in local currency
+            v = float(native_value)
+            # D&A is always a positive add-back; OCR sometimes stores it as a negative expense.
+            # Normalise to positive here so financials.parquet is always consistent.
+            if canonical == "depreciation_amortization" and v < 0:
+                v = abs(v)
+            row[canonical] = v  # store in local currency
     return row
 
 
@@ -191,6 +196,34 @@ def process(
                     f"Balance sheet reconstruction FY{fy}: total_liabilities "
                     f"{tl:,.0f} → {corrected:,.0f} (OCR truncation, = assets − equity)"
                 )
+
+    # ------------------------------------------------------------------
+    # Step 4c: Income statement sanity check — gross_profit OCR artifact detection
+    #
+    # OCR artifacts sometimes produce a tiny gross_profit (e.g. COP 10,845) from
+    # a partial number read off the page.  Detection: gross_profit is < 0.1% of
+    # revenue AND operating_income is > 1% of revenue (operating income is plausible
+    # but gross_profit is not).  Under NIIF, operating_income can exceed gross_profit
+    # legitimately, so we avoid a simple gp < oi comparison.
+    # ------------------------------------------------------------------
+    for idx in df_combined.index:
+        gp  = df_combined.at[idx, "gross_profit"]
+        rev = df_combined.at[idx, "revenue"]
+        oi  = df_combined.at[idx, "operating_income"]
+        fy  = df_combined.at[idx, "fiscal_year"]
+        if (
+            pd.notna(gp) and pd.notna(rev) and pd.notna(oi)
+            and rev > 0 and oi > 0
+            and abs(gp) / rev < 0.001          # gross_profit < 0.1% of revenue
+            and abs(oi) / rev > 0.01           # but operating_income is plausible (> 1%)
+        ):
+            logger.debug(
+                f"Sanity check FY{fy}: gross_profit={gp:,.0f} is < 0.1% of revenue "
+                f"but operating_income={oi:,.0f} is plausible — OCR artifact, "
+                f"setting gross_profit/cogs to NaN"
+            )
+            df_combined.at[idx, "gross_profit"] = float("nan")
+            df_combined.at[idx, "cogs"] = float("nan")
 
     # ------------------------------------------------------------------
     # Step 5: Calculate KPIs (unchanged call to processor.calculate_kpis)
