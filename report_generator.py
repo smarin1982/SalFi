@@ -60,21 +60,28 @@ def _strip_markdown(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _extract_t2_narrative(pdf_path: str) -> str:
-    """Extract introduction and conclusions text from a T2 management report PDF.
+    """Extract intro, conclusions, glosas and cartera sections from a T2 management report PDF.
 
     Strategy:
-    1. Classify each page: TOC (dot_ratio > 0.15) vs content
-    2. Intro: first content page whose first lines mention 'introduccion' / 'presentacion'
-       + following content page. Fallback: first 2 content pages.
-    3. Conclusions: first content page whose first lines mention 'conclusion' / 'cierre' /
-       'perspectiva' / 'balance'. Fallback: last 2 content pages.
-    4. Label blocks and truncate to 2400 chars total.
+    1. Classify each page: TOC (dot_ratio > 0.12) vs content
+    2. Search for 4 labelled sections using keyword lists:
+       - Intro/Presentacion  → fallback: first 2 content pages
+       - Conclusiones/Cierre → fallback: last 2 content pages
+       - Glosas/Objeciones   → extracted only when found (no fallback)
+       - Cartera/CxC         → extracted only when found (no fallback)
+    3. Label blocks and cap total at 3600 chars:
+       Intro 1200 | Conclusiones 800 | Glosas 800 | Cartera 800
 
     Never raises — returns "" on any failure.
     """
-    _INTRO_KEYS = ("introduccion", "introducción", "presentacion", "presentación", "carta al lector")
-    _CONCL_KEYS = ("conclusion", "conclusiones", "conclusión", "cierre", "perspectivas",
-                   "balance general", "reflexiones", "resumen ejecutivo")
+    _INTRO_KEYS  = ("introduccion", "introducción", "presentacion", "presentación", "carta al lector")
+    _CONCL_KEYS  = ("conclusion", "conclusiones", "conclusión", "cierre", "perspectivas",
+                    "balance general", "reflexiones", "resumen ejecutivo")
+    _GLOSA_KEYS  = ("glosa", "glosas", "objetada", "objeciones", "cuentas objetadas",
+                    "recobro", "glosado", "glosadas")
+    _CARTERA_KEYS = ("cartera", "cuentas por cobrar", "composicion de cartera",
+                     "cartera por eps", "rotacion de cartera", "aging", "antiguedad de cartera",
+                     "deudores")
 
     try:
         import pdfplumber
@@ -88,7 +95,6 @@ def _extract_t2_narrative(pdf_path: str) -> str:
         if not n:
             return ""
 
-        # Classify pages — TOC pages have high dot density
         def _is_toc(text: str) -> bool:
             return len(text) > 0 and text.count(".") / len(text) > 0.12
 
@@ -99,37 +105,41 @@ def _extract_t2_narrative(pdf_path: str) -> str:
                     return True
             return False
 
+        def _body_mentions(text: str, keys: tuple) -> bool:
+            """Check if any key appears anywhere in the page body."""
+            low = text.lower()
+            return any(k in low for k in keys)
+
         content_pages = [(i, t) for i, t in enumerate(pages_text) if t.strip() and not _is_toc(t)]
 
-        # Find intro
-        intro_idxs: list[int] = []
-        for i, text in content_pages:
-            if _header_matches(text, _INTRO_KEYS):
-                next_content = next((j for j, _ in content_pages if j > i), i)
-                intro_idxs = [i, next_content]
-                break
-        if not intro_idxs:
-            intro_idxs = [idx for idx, _ in content_pages[:2]]
+        def _find_section(keys, fallback_idxs=None, check_body=False):
+            """Return page indices for the first matching section."""
+            for i, text in content_pages:
+                matched = _header_matches(text, keys) or (check_body and _body_mentions(text, keys))
+                if matched:
+                    next_content = next((j for j, _ in content_pages if j > i), i)
+                    return [i, next_content] if next_content != i else [i]
+            return fallback_idxs or []
 
-        # Find conclusions
-        concl_idxs: list[int] = []
-        for i, text in content_pages:
-            if _header_matches(text, _CONCL_KEYS):
-                next_content = next((j for j, _ in content_pages if j > i), i)
-                concl_idxs = [i, next_content]
-                break
-        if not concl_idxs:
-            # Fallback: last 2 content pages
-            concl_idxs = [idx for idx, _ in content_pages[-2:]]
+        intro_idxs = _find_section(_INTRO_KEYS, fallback_idxs=[idx for idx, _ in content_pages[:2]])
+        concl_idxs = _find_section(_CONCL_KEYS, fallback_idxs=[idx for idx, _ in content_pages[-2:]])
+        glosa_idxs = _find_section(_GLOSA_KEYS, check_body=True)
+        cartera_idxs = _find_section(_CARTERA_KEYS, check_body=True)
 
-        intro_text = "\n\n".join(pages_text[i] for i in intro_idxs if i < n).strip()
-        concl_text = "\n\n".join(pages_text[i] for i in concl_idxs if i < n).strip()
+        def _join(idxs, char_limit):
+            text = "\n\n".join(pages_text[i] for i in idxs if i < n).strip()
+            return text[:char_limit]
 
         parts = []
-        if intro_text:
-            parts.append(f"[INTRODUCCION]\n{intro_text[:1200]}")
-        if concl_text and concl_idxs != intro_idxs:
-            parts.append(f"[CONCLUSIONES/CIERRE]\n{concl_text[:1200]}")
+        if intro_idxs:
+            parts.append(f"[INTRODUCCION]\n{_join(intro_idxs, 1200)}")
+        if concl_idxs and concl_idxs != intro_idxs:
+            parts.append(f"[CONCLUSIONES/CIERRE]\n{_join(concl_idxs, 800)}")
+        if glosa_idxs:
+            parts.append(f"[GLOSAS/OBJECIONES]\n{_join(glosa_idxs, 800)}")
+        if cartera_idxs and cartera_idxs not in (intro_idxs, concl_idxs):
+            parts.append(f"[CARTERA/CUENTAS POR COBRAR]\n{_join(cartera_idxs, 800)}")
+
         return "\n\n".join(parts)
 
     except Exception as exc:
@@ -259,10 +269,10 @@ def compute_factoring_context(kpis_df, financials_df) -> dict:
         dso = _v(lk, "dso")
         if dso is not None:
             dso_zone = (
-                "Excelente (menor de 90 dias)" if dso < 90
-                else "Estandar (120-150 dias)" if dso <= 150
-                else "Zona Critica de Liquidez (150-180 dias)" if dso <= 180
-                else "Cartera en Riesgo Critico (mayor de 180 dias)"
+                "Excelente — por debajo del rango LATAM (menor de 90 dias)" if dso < 90
+                else "Bueno — limite inferior del rango LATAM (90-120 dias)" if dso <= 120
+                else "Rango Estandar LATAM — zona objetivo SalFi (120-210 dias)" if dso <= 210
+                else "Cartera en Riesgo Critico — fuera del rango LATAM (mayor de 210 dias)"
             )
         else:
             dso_zone = "N/D"
@@ -557,18 +567,22 @@ def generate_executive_report(
                 "Sigues la metodologia del Financial Analysis Skill con enfasis en liquidez "
                 "estructural y apalancamiento para evaluar la elegibilidad de instrumentos de "
                 "factoring de cartera EPS.\n\n"
-                "BENCHMARKS SECTOR SALUD COLOMBIA — IPS privadas (referencia para tablas):\n"
-                "- EBITDA margin: 10-14% (saludable); <8% (alerta operativa); >18% (excepcional)\n"
-                "- Margen neto: 3-7% (rango normal); <2% (presion de costos severa)\n"
-                "- Razon corriente: >=1.2 (minimo operativo); <1.0 (riesgo inmediato)\n"
-                "- Razon rapida: >=1.0\n"
-                "- Deuda/EBITDA: <3.5x (saludable); 3.5-5x (vigilancia); >5x (estres/zombie)\n"
-                "- DSO: 120-150 dias (estandar EPS/gobierno); <90 dias (excelente); "
-                  ">180 dias (cartera en riesgo critico)\n"
-                "- CCC positivo y creciente: el prestador esta financiando a las EPS a expensas "
-                  "de su propio capital de trabajo — senal critica de necesidad de factoring\n"
-                "- Rotacion de activos: 1.5-2.5x\n"
-                "- Crecimiento de ingresos: 8-15% YoY\n\n"
+                "BENCHMARKS SECTOR SALUD LATAM — IPS privadas (Referencia Gemini):\n"
+                "- CAGR ingresos (5 anos): 8-12% | Crecimiento YoY: 10-15%\n"
+                "- Margen bruto: 35-48% (alto costo de insumos medicos y dispositivos)\n"
+                "- Margen operativo (EBIT): 10-18% (sensible a eficiencia administrativa)\n"
+                "- Margen neto: 4-8% (impactado por costo financiero de la deuda)\n"
+                "- ROE: 12-18% | ROA: 6-10%\n"
+                "- Razon corriente: 1.1-1.4x (inflada por cartera de dificil recaudo)\n"
+                "- Razon rapida: 0.8-1.1x (excluye inventarios; revela dependencia del FCO)\n"
+                "- Capital de trabajo / Ingresos: 15-25%\n"
+                "- Deuda/Patrimonio: 0.8-1.5x (prestadores al limite de capacidad crediticia)\n"
+                "- Deuda/Activos: 45-65%\n"
+                "- Cobertura de intereses (EBIT/Int): 2.5-4.0x (<2.0x = riesgo de default)\n"
+                "- DSO: 120-210 dias (rango estandar LATAM; estandar global <60 dias; "
+                  "pain point SalFi — toda IPS en este rango es candidata a factoring)\n"
+                "- CCC positivo y creciente = prestador financiando EPS a expensas de su "
+                  "propio capital de trabajo — senal critica de necesidad de factoring\n\n"
                 "CRITERIOS DE CALIFICACION FACTORING SALFI:\n"
                 "- CANDIDATO PRIORITARIO: DSO >150d, Deuda/EBITDA <3.5x, EBITDA margin >8%\n"
                 "- CANDIDATO MODERADO: DSO 120-150d con margen positivo, "
