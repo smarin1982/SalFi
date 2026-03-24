@@ -377,7 +377,7 @@ def render_latam_validation_panel(extraction_result, company: dict) -> None:
                         value=val,
                         step=0.001,
                         format="%.3f",
-                        min_value=0.0,
+                        min_value=None,
                         key=f"latam_val_{field}",
                         help=(
                             f"Fuente: pag. {extraction_result.get(f'source_page_{field}', '?')} | "

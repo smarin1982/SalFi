@@ -205,7 +205,9 @@ class LatamAgent:
         from datetime import datetime as _dt
         import re as _re
         _currency = COUNTRY_CURRENCY.get(self.country, "USD")
-        _default_year = _dt.now().year - 1
+        _now = _dt.now()
+        # Before July most companies haven't published N-1 annual report — use N-2
+        _default_year = _now.year - 1 if _now.month >= 7 else _now.year - 2
 
         # Infer fiscal year from the PDF filename — the scraper may have downloaded
         # a prior-year annual report (e.g. 2024) as a fallback when the current-year
@@ -258,7 +260,7 @@ class LatamAgent:
                     collect_listing_pdfs,
                     _years_already_in_parquet,
                 )
-                _target_years = [_dt.now().year - i for i in range(1, 6)]
+                _target_years = [_dt.now().year - i for i in range(2, 7)]
                 _have_years = _years_already_in_parquet(self.storage_path / "financials.parquet")
                 _missing_years = [y for y in _target_years if y not in _have_years]
                 if _missing_years:

@@ -889,6 +889,12 @@ def _save_scraper_profile(
     new_failed = profile_update.get("failed_ddgs_queries", [])
     merged["failed_ddgs_queries"] = list(dict.fromkeys(existing_failed + new_failed))
 
+    # Accumulate historical_pdfs (append-only dict — never delete known URLs)
+    existing_hist = existing.get("historical_pdfs", {})
+    new_hist = profile_update.get("historical_pdfs", {})
+    if existing_hist or new_hist:
+        merged["historical_pdfs"] = {**existing_hist, **new_hist}
+
     profiles[slug] = merged
 
     try:
@@ -1392,7 +1398,9 @@ def search_and_download(
         profiles_path: Path to scraper_profiles.json (injectable for tests)
     """
     from datetime import datetime as _dt
-    year = _dt.now().year - 1  # Target the most recent completed fiscal year
+    _now = _dt.now()
+    # Before July most companies haven't published N-1 annual report yet — use N-2
+    year = _now.year - 1 if _now.month >= 7 else _now.year - 2
 
     logger.info(f"search_and_download: starting for {slug} ({domain}) year={year}")
 
@@ -1490,6 +1498,7 @@ def search_and_download(
                         "strategy": "ddgs",
                         "pdf_url_pattern": url_pattern,
                         "doc_tier": 1,
+                        "historical_pdfs": {str(search_year): result.source_url},
                     }, profiles_path)
                 return result.pdf_path
 
@@ -1537,6 +1546,7 @@ def search_and_download(
                     "strategy": "playwright",
                     "pdf_url_pattern": url_pattern,
                     "doc_tier": tier,
+                    "historical_pdfs": {str(year): result.source_url},
                 }, profiles_path)
             return result.pdf_path
         # Playwright also returned T2 — compare with existing fallback
